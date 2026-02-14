@@ -106,6 +106,9 @@ fn parse_lzxc_control_data(bytes: &[u8]) -> Result<(u32, u32), ChmError> {
     if window_size == 0 || reset_interval == 0 {
         return Err(ChmError::InvalidFormat("invalid LZXC control values"));
     }
+    if !window_size.is_power_of_two() {
+        return Err(ChmError::InvalidFormat("LZX window size must be power-of-two"));
+    }
     let half_window = window_size / 2;
     if half_window == 0 || reset_interval % half_window != 0 {
         return Err(ChmError::InvalidFormat("unsupported reset/window relation"));

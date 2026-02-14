@@ -33,28 +33,16 @@ pub(crate) fn parse_directory_entries(
         let mut pos = 0x14usize;
         let end = block_len - free_space;
         while pos < end {
-            let name_len = match parse_cword(page, &mut pos) {
-                Ok(v) => v as usize,
-                Err(_) => break,
-            };
+            let name_len = parse_cword(page, &mut pos)? as usize;
             if name_len == 0 || pos + name_len > end {
                 break;
             }
             let name = std::str::from_utf8(&page[pos..pos + name_len]).map_err(|_| ChmError::Utf8Path)?;
             pos += name_len;
 
-            let space = match parse_cword(page, &mut pos) {
-                Ok(v) => v,
-                Err(_) => break,
-            };
-            let start = match parse_cword(page, &mut pos) {
-                Ok(v) => v,
-                Err(_) => break,
-            };
-            let length = match parse_cword(page, &mut pos) {
-                Ok(v) => v,
-                Err(_) => break,
-            };
+            let space = parse_cword(page, &mut pos)?;
+            let start = parse_cword(page, &mut pos)?;
+            let length = parse_cword(page, &mut pos)?;
             entries.push(DirectoryEntry {
                 path: name.to_string(),
                 space,

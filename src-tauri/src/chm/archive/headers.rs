@@ -6,7 +6,6 @@ pub(crate) struct ContainerLayout {
     pub(crate) blocks_offset: usize,
     pub(crate) block_len: usize,
     pub(crate) num_blocks: usize,
-    pub(crate) index_head: i32,
 }
 
 pub(crate) fn read_u32_le(buf: &[u8], off: usize) -> Result<u32, ChmError> {
@@ -58,7 +57,9 @@ pub(crate) fn parse_container_layout(data: &[u8]) -> Result<ContainerLayout, Chm
     let block_len = read_u32_le(itsp, 0x10)? as usize;
     let header_len = read_i32_le(itsp, 0x08)? as usize;
     let num_blocks_raw = read_u32_le(itsp, 0x28)?;
-    let index_head = read_i32_le(itsp, 0x20)?;
+    if block_len == 0 {
+        return Err(ChmError::InvalidFormat("invalid directory block info"));
+    }
     let dir_blocks_len = dir_len
         .checked_sub(header_len)
         .ok_or(ChmError::InvalidFormat("invalid ITSP header len"))?;
@@ -67,7 +68,7 @@ pub(crate) fn parse_container_layout(data: &[u8]) -> Result<ContainerLayout, Chm
     } else {
         num_blocks_raw as usize
     };
-    if block_len == 0 || num_blocks == 0 {
+    if num_blocks == 0 {
         return Err(ChmError::InvalidFormat("invalid directory block info"));
     }
 
@@ -76,6 +77,5 @@ pub(crate) fn parse_container_layout(data: &[u8]) -> Result<ContainerLayout, Chm
         blocks_offset: dir_offset + header_len,
         block_len,
         num_blocks,
-        index_head,
     })
 }
