@@ -120,7 +120,7 @@
 
       const [nextContents, nextIndex] = await Promise.all([
         invoke<ContentItem[]>('get_master_contents', { debugRoot }),
-        invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix: '', limit: 120, debugRoot })
+        invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix: '', limit: null, debugRoot })
       ]);
 
       contents = nextContents;
@@ -177,15 +177,16 @@
 
   async function loadIndexByPrefix(prefix: string) {
     if (!masterSummary) return;
+    const trimmed = prefix.trim();
     const requestSeq = ++indexRequestSeq;
     indexLoading = true;
     try {
       const rows = await invoke<DictionaryIndexEntry[]>('get_index_entries', {
-        prefix,
-        limit: 200,
+        prefix: trimmed,
+        limit: trimmed ? 500 : null,
         debugRoot
       });
-      if (requestSeq === indexRequestSeq && indexPrefix === prefix) {
+      if (requestSeq === indexRequestSeq && indexPrefix.trim() === trimmed) {
         indexRows = rows;
       }
     } catch (e) {

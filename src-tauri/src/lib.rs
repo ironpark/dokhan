@@ -115,6 +115,7 @@ struct EntryDetail {
     headword: String,
     aliases: Vec<String>,
     source_path: String,
+    target_local: String,
     definition_text: String,
     definition_html: String,
 }
@@ -171,6 +172,17 @@ struct RuntimeIndex {
     contents: Vec<ContentItem>,
     entries: Vec<EntryDetail>,
     content_pages: BTreeMap<String, ContentPage>,
+    entry_keys: Vec<EntrySearchKey>,
+}
+
+#[derive(Debug, Clone)]
+struct EntrySearchKey {
+    headword: String,
+    headword_loose: String,
+    body: String,
+    body_loose: String,
+    aliases: Vec<String>,
+    aliases_loose: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -558,6 +570,38 @@ fn normalize_search_key(s: &str) -> String {
         .replace("ß", "ss")
 }
 
+fn normalize_search_key_loose(s: &str) -> String {
+    normalize_search_key(s)
+        .replace("ae", "a")
+        .replace("oe", "o")
+        .replace("ue", "u")
+}
+
+fn starts_with_search_key_precomputed(
+    value_key: &str,
+    value_loose: &str,
+    prefix_key: &str,
+    prefix_loose: &str,
+) -> bool {
+    value_key.starts_with(prefix_key) || value_loose.starts_with(prefix_loose)
+}
+
+fn contains_search_key_precomputed(
+    value_key: &str,
+    value_loose: &str,
+    term_key: &str,
+    term_loose: &str,
+) -> bool {
+    value_key.contains(term_key) || value_loose.contains(term_loose)
+}
+
+fn eq_search_key(a: &str, b: &str) -> bool {
+    if normalize_search_key(a) == normalize_search_key(b) {
+        return true;
+    }
+    normalize_search_key_loose(a) == normalize_search_key_loose(b)
+}
+
 fn build_entry_detail(source_path: String, html_text: &str, file_stem: &str) -> Option<EntryDetail> {
     let titles = find_all_tag_values(html_text, "title")
         .into_iter()
@@ -586,6 +630,7 @@ fn build_entry_detail(source_path: String, html_text: &str, file_stem: &str) -> 
         headword,
         aliases,
         source_path,
+        target_local: file_stem.to_string(),
         definition_text: def_text,
         definition_html: def_html,
     })
@@ -757,6 +802,42 @@ fn cache_put(source: &RuntimeSource, runtime: Arc<RuntimeIndex>) -> Result<(), S
     Ok(())
 }
 
+fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearchKey> {
+    entries
+        .iter()
+        .map(|e| {
+            let aliases = e.aliases.iter().map(|a| normalize_search_key(a)).collect::<Vec<_>>();
+            let aliases_loose = e
+                .aliases
+                .iter()
+                .map(|a| normalize_search_key_loose(a))
+                .collect::<Vec<_>>();
+            EntrySearchKey {
+                headword: normalize_search_key(&e.headword),
+                headword_loose: normalize_search_key_loose(&e.headword),
+                body: normalize_search_key(&e.definition_text),
+                body_loose: normalize_search_key_loose(&e.definition_text),
+                aliases,
+                aliases_loose,
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn build_runtime_index(
+    contents: Vec<ContentItem>,
+    entries: Vec<EntryDetail>,
+    content_pages: BTreeMap<String, ContentPage>,
+) -> RuntimeIndex {
+    let entry_keys = build_entry_search_keys(&entries);
+    RuntimeIndex {
+        contents,
+        entries,
+        content_pages,
+        entry_keys,
+    }
+}
+
 fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, String> {
     if let Some(v) = cache_get(source)? {
         return Ok(v);
@@ -765,11 +846,7 @@ fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, String> {
         RuntimeSource::DebugRoot(root) => {
             let contents = parse_master_hhc_from_debug(root)?;
             let entries = parse_entries_from_debug(root)?;
-            Arc::new(RuntimeIndex {
-                contents,
-                entries,
-                content_pages: BTreeMap::new(),
-            })
+            Arc::new(build_runtime_index(contents, entries, BTreeMap::new()))
         }
         RuntimeSource::ZipPath(zip_path) => Arc::new(parse_runtime_from_zip_with_progress(zip_path, None)?),
     };
@@ -872,6 +949,105 @@ fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
         words.insert(base.to_string());
     }
     words.into_iter().collect::<Vec<_>>()
+}
+
+fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<EntryDetail> {
+    let lower = text.to_ascii_lowercase();
+    let mut out = Vec::new();
+    let mut off = 0usize;
+    while let Some(s) = lower[off..].find("<object type=\"text/sitemap\"") {
+        let abs_s = off + s;
+        let Some(e_rel) = lower[abs_s..].find("</object>") else {
+            break;
+        };
+        let abs_e = abs_s + e_rel + "</object>".len();
+        let block = &text[abs_s..abs_e];
+        let mut name = String::new();
+        let mut local = String::new();
+        let block_lower = block.to_ascii_lowercase();
+        let mut p_off = 0usize;
+        while let Some(ps) = block_lower[p_off..].find("<param") {
+            let p_abs = p_off + ps;
+            let Some(pe_rel) = block[p_abs..].find('>') else {
+                break;
+            };
+            let p_end = p_abs + pe_rel + 1;
+            let tag = &block[p_abs..p_end];
+            let tag_lower = tag.to_ascii_lowercase();
+            if tag_lower.contains("name=\"name\"") || tag_lower.contains("name='name'") {
+                if let Some(v) = extract_attr_value(tag, "value") {
+                    name = compact_ws(v.trim());
+                }
+            }
+            if tag_lower.contains("name=\"local\"") || tag_lower.contains("name='local'") {
+                if let Some(v) = extract_attr_value(tag, "value") {
+                    local = compact_ws(v.trim());
+                }
+            }
+            p_off = p_end;
+        }
+
+        if !name.is_empty() {
+            let (source_override, local_path, _) = parse_internal_ref(&local)
+                .unwrap_or((None, local.clone(), false));
+            let source_path = source_override.unwrap_or_else(|| default_source_path.to_ascii_lowercase());
+            let target_local = normalize_path(&local_path);
+            let mut aliases = vec![name.clone()];
+            let target_stem = compact_ws(&path_stem(&target_local));
+            if !target_stem.is_empty() && !aliases.contains(&target_stem) {
+                aliases.push(target_stem);
+            }
+            out.push(EntryDetail {
+                id: 0,
+                headword: name,
+                aliases,
+                source_path,
+                target_local,
+                definition_text: String::new(),
+                definition_html: String::new(),
+            });
+        }
+        off = abs_e;
+    }
+    out
+}
+
+fn extract_index_entries_from_chm_bytes(chm_file_name: &str, chm_bytes: &[u8]) -> Vec<EntryDetail> {
+    let mut out = Vec::<EntryDetail>::new();
+    let Ok(mut chm) = chm::ChmArchive::open(chm_bytes.to_vec()) else {
+        return out;
+    };
+
+    let hhk_paths = chm
+        .entries()
+        .iter()
+        .filter(|e| e.path.to_ascii_lowercase().ends_with(".hhk"))
+        .map(|e| e.path.clone())
+        .collect::<Vec<_>>();
+
+    for hhk_path in hhk_paths {
+        if let Ok(bytes) = chm.read_object(&hhk_path) {
+            let text = decode_euc_kr(&bytes);
+            let mut rows = parse_hhk_entries_from_text(&text, chm_file_name);
+            out.append(&mut rows);
+        }
+    }
+
+    if out.is_empty() {
+        for word in extract_all_headwords_from_chm_bytes(chm_bytes) {
+            out.push(EntryDetail {
+                id: 0,
+                headword: word.clone(),
+                aliases: vec![word],
+                source_path: chm_file_name.to_ascii_lowercase(),
+                target_local: String::new(),
+                definition_text: String::new(),
+                definition_html: String::new(),
+            });
+        }
+    }
+
+    out
 }
 
 fn decode_basic_html_entities(s: &str) -> String {
@@ -1136,7 +1312,13 @@ fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) -> EntryDet
     let Ok(mut chm) = chm::ChmArchive::open(chm_bytes) else {
         return entry;
     };
-    let Some(html_bytes) = read_entry_html_from_chm(&mut chm, &entry.headword) else {
+    let html_bytes = if !entry.target_local.is_empty() {
+        read_chm_binary_object(&mut chm, &entry.target_local)
+            .or_else(|| read_entry_html_from_chm(&mut chm, &entry.headword))
+    } else {
+        read_entry_html_from_chm(&mut chm, &entry.headword)
+    };
+    let Some(html_bytes) = html_bytes else {
         return entry;
     };
 
@@ -1284,16 +1466,7 @@ fn parse_runtime_from_zip_with_progress(
         }
 
         if lower.starts_with("merge") {
-            for word in extract_all_headwords_from_chm_bytes(&bytes) {
-                entries.push(EntryDetail {
-                    id: 0,
-                    headword: word.clone(),
-                    aliases: vec![word],
-                    source_path: name.clone(),
-                    definition_text: String::new(),
-                    definition_html: String::new(),
-                });
-            }
+            entries.extend(extract_index_entries_from_chm_bytes(&name, &bytes));
         }
 
         if let Some(cb) = progress.as_mut() {
@@ -1306,16 +1479,21 @@ fn parse_runtime_from_zip_with_progress(
         }
     }
 
-    entries.sort_by(|a, b| normalize_search_key(&a.headword).cmp(&normalize_search_key(&b.headword)));
-    entries.dedup_by(|a, b| normalize_search_key(&a.headword) == normalize_search_key(&b.headword));
+    entries.sort_by(|a, b| {
+        normalize_search_key(&a.headword)
+            .cmp(&normalize_search_key(&b.headword))
+            .then_with(|| a.source_path.cmp(&b.source_path))
+            .then_with(|| a.target_local.cmp(&b.target_local))
+    });
+    entries.dedup_by(|a, b| {
+        normalize_search_key(&a.headword) == normalize_search_key(&b.headword)
+            && a.source_path == b.source_path
+            && a.target_local == b.target_local
+    });
     for (i, e) in entries.iter_mut().enumerate() {
         e.id = i + 1;
     }
-    Ok(RuntimeIndex {
-        contents,
-        entries,
-        content_pages: BTreeMap::new(),
-    })
+    Ok(build_runtime_index(contents, entries, BTreeMap::new()))
 }
 
 pub(crate) fn analyze_zip_dataset_impl(zip_path: String) -> Result<DatasetSummary, String> {
@@ -1481,11 +1659,7 @@ pub(crate) fn build_master_features_with_progress_impl(
                 let _ = window.emit("master-build-progress", p);
             };
             let entries = parse_entries_from_debug_with_progress(root, Some(&mut emit))?;
-            Arc::new(RuntimeIndex {
-                contents,
-                entries,
-                content_pages: BTreeMap::new(),
-            })
+            Arc::new(build_runtime_index(contents, entries, BTreeMap::new()))
         }
         RuntimeSource::ZipPath(zip_path) => {
             let mut emit = |p: BuildProgress| {
@@ -1609,11 +1783,7 @@ pub(crate) fn start_master_build_impl(debug_root: Option<String>) -> Result<Stri
                         return;
                     }
                 };
-                Arc::new(RuntimeIndex {
-                    contents,
-                    entries,
-                    content_pages: BTreeMap::new(),
-                })
+                Arc::new(build_runtime_index(contents, entries, BTreeMap::new()))
             }
             RuntimeSource::ZipPath(zip_path) => {
                 let mut cb = |p: BuildProgress| {
@@ -1720,12 +1890,20 @@ pub(crate) fn get_index_entries_impl(
 ) -> Result<Vec<DictionaryIndexEntry>, String> {
     let source = resolve_runtime_source(debug_root)?;
     let runtime = get_runtime(&source)?;
-    let p = normalize_search_key(&prefix.unwrap_or_default());
-    let limit = limit.unwrap_or(50).clamp(1, 500);
+    let p = prefix.unwrap_or_default();
+    let p_key = normalize_search_key(&p);
+    let p_loose = normalize_search_key_loose(&p);
+    let limit = if p.is_empty() {
+        limit.unwrap_or(runtime.entries.len()).clamp(1, runtime.entries.len().max(1))
+    } else {
+        limit.unwrap_or(200).clamp(1, 5_000)
+    };
 
     let mut out = Vec::new();
-    for e in &runtime.entries {
-        if p.is_empty() || normalize_search_key(&e.headword).starts_with(&p) {
+    for (e, k) in runtime.entries.iter().zip(runtime.entry_keys.iter()) {
+        if p.is_empty()
+            || starts_with_search_key_precomputed(&k.headword, &k.headword_loose, &p_key, &p_loose)
+        {
             out.push(DictionaryIndexEntry {
                 id: e.id,
                 headword: e.headword.clone(),
@@ -1753,19 +1931,22 @@ pub(crate) fn search_entries_impl(
     let runtime = get_runtime(&source)?;
     let terms = q
         .split_whitespace()
-        .map(normalize_search_key)
+        .map(|x| (normalize_search_key(x), normalize_search_key_loose(x)))
         .collect::<Vec<_>>();
     let limit = limit.unwrap_or(50).clamp(1, 200);
 
     let mut hits = Vec::<SearchHit>::new();
-    for e in &runtime.entries {
-        let head = normalize_search_key(&e.headword);
-        let body = normalize_search_key(&e.definition_text);
+    for (e, k) in runtime.entries.iter().zip(runtime.entry_keys.iter()) {
         let mut score = 0usize;
         let mut ok = true;
-        for t in &terms {
-            let in_head = head.contains(t);
-            let in_body = body.contains(t);
+        for (t_key, t_loose) in &terms {
+            let in_head = contains_search_key_precomputed(&k.headword, &k.headword_loose, t_key, t_loose)
+                || k.aliases
+                    .iter()
+                    .zip(k.aliases_loose.iter())
+                    .any(|(a, al)| contains_search_key_precomputed(a, al, t_key, t_loose));
+            let in_body =
+                contains_search_key_precomputed(&k.body, &k.body_loose, t_key, t_loose);
             if !(in_head || in_body) {
                 ok = false;
                 break;
@@ -2065,8 +2246,7 @@ pub(crate) fn resolve_link_target_impl(
             if item_lower == local_lower {
                 return true;
             }
-            let item_stem_key = normalize_search_key(&path_stem(item_local));
-            item_stem_key == local_stem_key
+            eq_search_key(&path_stem(item_local), &local_stem_key)
         }) {
             return Ok(LinkTarget::Content {
                 local: item.local.clone(),
@@ -2077,23 +2257,23 @@ pub(crate) fn resolve_link_target_impl(
 
     if let Some(entry) = runtime.entries.iter().find(|entry| {
         entry.source_path.to_ascii_lowercase() == source_context
-            && (normalize_search_key(&entry.headword) == local_stem_key
+            && (eq_search_key(&entry.headword, &local_stem_key)
                 || entry
                     .aliases
                     .iter()
-                    .any(|alias| normalize_search_key(alias) == local_stem_key))
+                    .any(|alias| eq_search_key(alias, &local_stem_key)))
     }) {
         return Ok(LinkTarget::Entry { id: entry.id });
     }
 
     if let Some(entry) = runtime.entries.iter().find(|entry| {
-        if normalize_search_key(&entry.headword) == local_stem_key {
+        if eq_search_key(&entry.headword, &local_stem_key) {
             return true;
         }
         entry
             .aliases
             .iter()
-            .any(|alias| normalize_search_key(alias) == local_stem_key)
+            .any(|alias| eq_search_key(alias, &local_stem_key))
     }) {
         return Ok(LinkTarget::Entry { id: entry.id });
     }
