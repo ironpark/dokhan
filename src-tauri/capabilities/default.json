@@ -1,10 +1,26 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
+  "$schema": "../gen/schemas/capabilities.json",
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "clipboard-manager:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-open",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:read-files",
+    "fs:write-files",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPCACHE/*" },
+        { "path": "$APPLOCALDATA/*" },
+        { "path": "$TEMP/*" }
+      ]
+    },
     "opener:default"
   ]
 }

@@ -1,3 +1,6 @@
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { appCacheDir, join } from '@tauri-apps/api/path';
 import {
   analyzeZipDataset,
   getContentPage,
@@ -146,14 +149,67 @@ export class DictionaryStore {
   };
 
   useZipPath = async (path: string) => {
-    if (!path.toLowerCase().endsWith('.zip')) {
-      this.error = 'ZIP 파일만 입력할 수 있습니다.';
+    const nextPath = path.trim();
+    if (!nextPath) {
+      this.error = 'ZIP 경로가 비어 있습니다.';
       return;
     }
-    this.zipPath = path;
-    const ok = await this.#withLoading(() => analyzeZipDataset(path));
+    this.zipPath = nextPath;
+    const ok = await this.#withLoading(() => analyzeZipDataset(nextPath));
     if (!ok) return;
     await this.bootMasterFeatures();
+  };
+
+  pickZipFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        pickerMode: 'document',
+        fileAccessMode: 'copy',
+        filters: [{ name: 'ZIP', extensions: ['zip'] }]
+      });
+      if (!selected || Array.isArray(selected)) return;
+      const resolvedPath = await this.#resolvePickedZipPath(selected);
+      await this.useZipPath(resolvedPath);
+    } catch (e) {
+      this.error = `파일 선택 실패: ${toErrorMessage(e)}`;
+    }
+  };
+
+  useZipFile = async (file: File) => {
+    try {
+      const persisted = await this.#createTempZipPath();
+      await writeFile(persisted, file.stream());
+      await this.useZipPath(persisted);
+    } catch (e) {
+      this.error = `파일 선택 실패: ${toErrorMessage(e)}`;
+    }
+  };
+
+  #resolvePickedZipPath = async (selected: string): Promise<string> => {
+    const raw = selected.trim();
+    if (raw.startsWith('content://')) {
+      const bytes = await readFile(raw);
+      const persisted = await this.#createTempZipPath();
+      await writeFile(persisted, bytes);
+      return persisted;
+    }
+    if (raw.startsWith('file://')) {
+      try {
+        return decodeURIComponent(new URL(raw).pathname);
+      } catch {
+        return raw;
+      }
+    }
+    return raw;
+  };
+
+  #createTempZipPath = async (): Promise<string> => {
+    const cache = await appCacheDir();
+    const suffix = Math.random().toString(36).slice(2, 8);
+    const filename = `picked-${Date.now()}-${suffix}.zip`;
+    return join(cache, filename);
   };
 
   openContent = async (local: string, sourcePath: string | null = null) => {

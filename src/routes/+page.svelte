@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import LoadProgress from '$lib/components/LoadProgress.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
@@ -10,6 +11,8 @@
   import { DictionaryStore } from '$lib/stores/dictionary.svelte';
 
   const vm = new DictionaryStore();
+  let copyMessage = $state('');
+  let zipInput = $state<HTMLInputElement | null>(null);
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -38,11 +41,87 @@
       if (unlisten) unlisten();
     };
   });
+
+  async function copyErrorText() {
+    if (!vm.error) return;
+    const text = vm.error;
+    try {
+      await writeText(text);
+      copyMessage = '복사됨';
+      setTimeout(() => {
+        copyMessage = '';
+      }, 1200);
+      return;
+    } catch {
+      // Fallback to Web Clipboard API.
+    }
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copyMessage = '복사됨';
+        setTimeout(() => {
+          copyMessage = '';
+        }, 1200);
+        return;
+      }
+    } catch {
+      // Fallback to execCommand.
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      copyMessage = ok ? '복사됨' : '복사 실패';
+    } catch {
+      copyMessage = '복사 실패';
+    }
+  }
+
+  async function onPickZipClick() {
+    const isAndroid = /\bAndroid\b/i.test(navigator.userAgent);
+    if (isAndroid && zipInput) {
+      try {
+        if (typeof zipInput.showPicker === 'function') {
+          await zipInput.showPicker();
+        } else {
+          zipInput.click();
+        }
+      } catch {
+        zipInput.click();
+      }
+      return;
+    }
+    await vm.pickZipFile();
+  }
+
+  async function onZipInputChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    await vm.useZipFile(file);
+    input.value = '';
+  }
 </script>
 
 <main class="app-shell">
   {#if vm.error}
-    <p class="error-box">{vm.error}</p>
+    <div class="error-box">
+      <pre>{vm.error}</pre>
+      <button type="button" class="copy-btn" onclick={copyErrorText}>복사</button>
+      {#if copyMessage}
+        <small>{copyMessage}</small>
+      {/if}
+    </div>
   {/if}
 
   <LoadProgress visible={vm.showProgress} progress={vm.progress} />
@@ -54,6 +133,14 @@
     >
       <h1>사전 ZIP 파일을 드롭하세요</h1>
       <p>앱 창 위로 `dictionary_v77.zip` 파일을 끌어 놓으면 로딩을 시작합니다.</p>
+      <button type="button" class="pick-btn" onclick={onPickZipClick}>ZIP 파일 선택</button>
+      <input
+        bind:this={zipInput}
+        class="zip-input"
+        type="file"
+        accept=".zip,application/zip"
+        onchange={onZipInputChange}
+      />
     </div>
   {:else}
     <section class="workspace">
@@ -139,7 +226,37 @@
     background: #fff2f1;
     color: var(--danger);
     padding: 8px 10px;
+    position: relative;
+    padding-right: 68px;
+    max-height: 140px;
+    overflow: auto;
+  }
+
+  .error-box pre {
+    margin: 0;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    border: 1px solid #d9b5b5;
+    background: #fff;
+    color: #6d2222;
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  .error-box small {
+    display: block;
+    margin-top: 6px;
+    color: #7a3a3a;
+    font-size: 12px;
   }
 
   .drop-shell {
@@ -163,6 +280,26 @@
   .drop-shell p {
     margin: 0;
     color: var(--muted);
+  }
+
+  .pick-btn {
+    justify-self: center;
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    background: #f4efe2;
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+
+  .pick-btn:hover {
+    background: #ece5d6;
+  }
+
+  .zip-input {
+    display: none;
   }
 
   .drag-over {

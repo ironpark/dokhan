@@ -14,6 +14,10 @@ export function analyzeZipDataset(zipPath: string): Promise<MasterFeatureSummary
   return invoke<MasterFeatureSummary>('analyze_zip_dataset', { zipPath });
 }
 
+export function persistZipBlob(bytes: Uint8Array): Promise<string> {
+  return invoke<string>('persist_zip_blob', { bytes: Array.from(bytes) });
+}
+
 export function startMasterBuild(zipPath: string): Promise<string> {
   return invoke<string>('start_master_build', { zipPath });
 }
