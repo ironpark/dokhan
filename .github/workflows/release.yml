@@ -1,20 +1,20 @@
-name: Build Targets
+name: Release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 concurrency:
-  group: nightly-build-targets
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   desktop:
-    name: Desktop (${{ matrix.os }})
+    name: Desktop Release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -36,18 +36,18 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      - name: Build desktop app
+      - name: Build desktop bundles
         run: bunx tauri build
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-desktop-${{ matrix.os }}
+          name: release-desktop-${{ matrix.os }}
           path: src-tauri/target/release/bundle/**
           if-no-files-found: error
 
   android:
-    name: Android (APK)
+    name: Android Release (debug APK)
     runs-on: ubuntu-latest
 
     env:
@@ -97,13 +97,12 @@ jobs:
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-android-debug
-          path: |
-            src-tauri/gen/android/app/build/outputs/**/*.apk
+          name: release-android-debug
+          path: src-tauri/gen/android/app/build/outputs/**/*.apk
           if-no-files-found: error
 
   publish:
-    name: Publish Nightly Release
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs: [desktop, android]
 
@@ -111,24 +110,11 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: nightly-artifacts
+          path: release-artifacts
           merge-multiple: true
 
-      - name: Build release metadata
-        id: meta
-        run: |
-          echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
-          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish nightly prerelease
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
-          target_commitish: main
-          name: Nightly Build ${{ steps.meta.outputs.date }}
-          body: |
-            Automated nightly build.
-            Commit: `${{ steps.meta.outputs.sha }}`
-          prerelease: true
-          make_latest: false
-          files: nightly-artifacts/**
+          files: release-artifacts/**
+          generate_release_notes: true
