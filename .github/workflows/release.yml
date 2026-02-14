@@ -91,6 +91,9 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
+      - name: Sanitize Gradle local overrides
+        run: sed -i '/^android\\.aapt2FromMavenOverride=/d' src-tauri/gen/android/gradle.properties
+
       - name: Build Android APK (debug)
         run: bunx tauri android build --apk --debug
 
