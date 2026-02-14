@@ -9,6 +9,7 @@
     "dialog:default",
     "fs:default",
     "fs:allow-open",
+    "fs:allow-copy-file",
     "fs:allow-read-file",
     "fs:allow-write-file",
     "fs:read-files",

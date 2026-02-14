@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { DictionaryIndexEntry } from '$lib/types/dictionary';
+  import type { DictionaryIndexEntry } from "$lib/types/dictionary";
+  import Input from "$lib/components/ui/Input.svelte";
+  import Button from "$lib/components/ui/Button.svelte";
+  import ListItem from "$lib/components/ui/ListItem.svelte";
 
   let {
     query,
@@ -7,7 +10,7 @@
     loading = false,
     selectedId = null,
     onQueryChange,
-    onOpen
+    onOpen,
   }: {
     query: string;
     rows: DictionaryIndexEntry[];
@@ -18,14 +21,16 @@
   } = $props();
 
   const rowHeight = 38;
-  const overscan = 8;
+  const overscan = 6;
 
   let listEl = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
   let viewportHeight = $state(0);
 
   const totalCount = $derived(rows.length);
-  const visibleCount = $derived(Math.ceil(viewportHeight / rowHeight) + overscan * 2);
+  const visibleCount = $derived(
+    Math.ceil(viewportHeight / rowHeight) + overscan * 2,
+  );
   const startIndex = $derived.by(() => {
     const raw = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
     const maxStart = Math.max(0, totalCount - visibleCount);
@@ -48,23 +53,32 @@
 </script>
 
 <section class="panel">
-  <div class="panel-controls">
-    <input value={query} oninput={(e) => onQueryChange((e.currentTarget as HTMLInputElement).value)} placeholder="접두어 (예: ab, angst)" />
-    {#if loading}
-      <small class="loading-hint">검색 중…</small>
-    {/if}
+  <div class="search-line">
+    <Input
+      value={query}
+      oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
+      placeholder="색인 검색 (예: a, ab)"
+    />
   </div>
   <ul class="entry-list" bind:this={listEl} onscroll={handleScroll}>
     {#if topSpacer > 0}
-      <li class="spacer" style={`height:${topSpacer}px`} aria-hidden="true"></li>
+      <li
+        class="spacer"
+        style={`height:${topSpacer}px`}
+        aria-hidden="true"
+      ></li>
     {/if}
     {#each visibleRows as row}
-      <li class="row" class:selected={selectedId === row.id}>
-        <button type="button" onclick={() => onOpen(row.id)}>{row.headword}</button>
-      </li>
+      <ListItem selected={selectedId === row.id} onclick={() => onOpen(row.id)}>
+        {row.headword}
+      </ListItem>
     {/each}
     {#if bottomSpacer > 0}
-      <li class="spacer" style={`height:${bottomSpacer}px`} aria-hidden="true"></li>
+      <li
+        class="spacer"
+        style={`height:${bottomSpacer}px`}
+        aria-hidden="true"
+      ></li>
     {/if}
   </ul>
 </section>
@@ -77,28 +91,13 @@
     grid-template-rows: auto 1fr;
   }
 
-  .panel-controls {
+  .search-line {
     margin: 0;
-    padding: 10px 10px 8px;
+    padding: 10px;
     display: grid;
-    gap: 4px;
+    grid-template-columns: 1fr;
+    gap: 8px;
     align-items: center;
-  }
-
-  input {
-    border: 1px solid var(--line);
-    border-radius: 0;
-    padding: 7px 9px;
-    font-size: 13px;
-    font-family: inherit;
-    height: 32px;
-    box-sizing: border-box;
-  }
-
-  .loading-hint {
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1;
   }
 
   .entry-list {
@@ -112,42 +111,7 @@
     scrollbar-gutter: stable;
   }
 
-  .entry-list li.row {
-    border-bottom: 1px solid var(--line);
-    height: 38px;
-    box-sizing: border-box;
-  }
-
-  .entry-list li.row:hover {
-    background: #f6f2e8;
-  }
-
-  .entry-list li.row.selected {
-    background: #ece5d6;
-  }
-
-  .entry-list li.row button {
-    border: 0;
-    background: transparent;
-    color: var(--text);
-    width: 100%;
-    display: block;
-    padding: 9px 2px;
-    text-align: left;
-    font-weight: 600;
-    cursor: pointer;
-    transition: color 100ms ease;
-  }
-
-  .entry-list li.row:hover button {
-    color: #15120d;
-  }
-
-  .entry-list li.row.selected button {
-    color: #0d4f40;
-  }
-
-  .entry-list li.spacer {
+  .spacer {
     border: 0;
     padding: 0;
     margin: 0;

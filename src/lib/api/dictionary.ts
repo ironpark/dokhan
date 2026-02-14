@@ -18,6 +18,10 @@ export function persistZipBlob(bytes: Uint8Array): Promise<string> {
   return invoke<string>('persist_zip_blob', { bytes: Array.from(bytes) });
 }
 
+export function prepareZipSource(path: string): Promise<string> {
+  return invoke<string>('prepare_zip_source', { path });
+}
+
 export function startMasterBuild(zipPath: string): Promise<string> {
   return invoke<string>('start_master_build', { zipPath });
 }

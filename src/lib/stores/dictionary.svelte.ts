@@ -1,6 +1,4 @@
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { open as openFile, writeFile } from '@tauri-apps/plugin-fs';
-import { appCacheDir, join } from '@tauri-apps/api/path';
 import {
   analyzeZipDataset,
   getContentPage,
@@ -8,6 +6,7 @@ import {
   getIndexEntries,
   getMasterBuildStatus,
   getMasterContents,
+  prepareZipSource,
   resolveLinkTarget,
   resolveMediaDataUrl,
   searchEntries,
@@ -63,14 +62,14 @@ export class DictionaryStore {
   #indexRequestSeq = 0;
   #detailRequestSeq = 0;
 
-  dispose = () => {
+  dispose() {
     if (this.#indexDebounceTimer) {
       clearTimeout(this.#indexDebounceTimer);
       this.#indexDebounceTimer = null;
     }
-  };
+  }
 
-  tryAutoBootDefaultZip = async () => {
+  async tryAutoBootDefaultZip() {
     if (this.masterSummary || this.loading) return;
     try {
       await analyzeZipDataset(this.zipPath);
@@ -78,9 +77,9 @@ export class DictionaryStore {
     } catch {
       // Keep drop-zone UI when default zip is not available.
     }
-  };
+  }
 
-  #withLoading = async <T>(task: () => Promise<T>): Promise<T | undefined> => {
+  async #withLoading<T>(task: () => Promise<T>): Promise<T | undefined> {
     this.loading = true;
     this.error = '';
     try {
@@ -91,17 +90,17 @@ export class DictionaryStore {
     } finally {
       this.loading = false;
     }
-  };
+  }
 
-  #clearSelection = () => {
+  #clearSelection() {
     this.selectedEntry = null;
     this.selectedEntryId = null;
     this.selectedContent = null;
     this.selectedContentLocal = '';
     this.detailMode = 'none';
-  };
+  }
 
-  bootMasterFeatures = async () => {
+  async bootMasterFeatures() {
     this.loading = true;
     this.error = '';
     this.showProgress = true;
@@ -146,9 +145,9 @@ export class DictionaryStore {
       this.showProgress = false;
       this.loading = false;
     }
-  };
+  }
 
-  useZipPath = async (path: string) => {
+  async useZipPath(path: string) {
     const nextPath = path.trim();
     if (!nextPath) {
       this.error = 'ZIP 경로가 비어 있습니다.';
@@ -158,9 +157,9 @@ export class DictionaryStore {
     const ok = await this.#withLoading(() => analyzeZipDataset(nextPath));
     if (!ok) return;
     await this.bootMasterFeatures();
-  };
+  }
 
-  pickZipFile = async () => {
+  async pickZipFile() {
     try {
       const selected = await openDialog({
         multiple: false,
@@ -170,53 +169,41 @@ export class DictionaryStore {
         filters: [{ name: 'ZIP', extensions: ['zip'] }]
       });
       if (!selected || Array.isArray(selected)) return;
+      this.#beginSourcePrepare();
       const resolvedPath = await this.#resolvePickedZipPath(selected);
       await this.useZipPath(resolvedPath);
     } catch (e) {
       this.error = `파일 선택 실패: ${toErrorMessage(e)}`;
-    }
-  };
-
-  #resolvePickedZipPath = async (selected: string): Promise<string> => {
-    const raw = selected.trim();
-    if (raw.startsWith('content://')) {
-      const persisted = await this.#createTempZipPath();
-      await this.#copyContentUriToPath(raw, persisted);
-      return persisted;
-    }
-    if (raw.startsWith('file://')) {
-      try {
-        return decodeURIComponent(new URL(raw).pathname);
-      } catch {
-        return raw;
-      }
-    }
-    return raw;
-  };
-
-  #createTempZipPath = async (): Promise<string> => {
-    const cache = await appCacheDir();
-    const suffix = Math.random().toString(36).slice(2, 8);
-    const filename = `picked-${Date.now()}-${suffix}.zip`;
-    return join(cache, filename);
-  };
-
-  #copyContentUriToPath = async (sourceUri: string, destinationPath: string): Promise<void> => {
-    const src = await openFile(sourceUri, { read: true });
-    const dst = await openFile(destinationPath, { write: true, create: true, truncate: true });
-    const buffer = new Uint8Array(256 * 1024);
-    try {
-      while (true) {
-        const read = await src.read(buffer);
-        if (read === null || read === 0) break;
-        await dst.write(buffer.subarray(0, read));
-      }
     } finally {
-      await Promise.allSettled([src.close(), dst.close()]);
+      this.#endSourcePrepare();
     }
-  };
+  }
 
-  openContent = async (local: string, sourcePath: string | null = null) => {
+  async #resolvePickedZipPath(selected: string): Promise<string> {
+    return prepareZipSource(selected);
+  }
+
+  #beginSourcePrepare() {
+    this.loading = true;
+    this.error = '';
+    this.showProgress = true;
+    this.progress = {
+      phase: 'source-prepare',
+      current: 0,
+      total: 1,
+      message: 'ZIP 파일 준비 중'
+    };
+  }
+
+  #endSourcePrepare() {
+    if (this.progress?.phase === 'source-prepare') {
+      this.showProgress = false;
+      this.progress = null;
+      this.loading = false;
+    }
+  }
+
+  async openContent(local: string, sourcePath: string | null = null) {
     const reqSeq = ++this.#detailRequestSeq;
     const page = await this.#withLoading(() => getContentPage(this.zipPath, local, sourcePath));
     if (!page || reqSeq !== this.#detailRequestSeq) return;
@@ -225,9 +212,9 @@ export class DictionaryStore {
     this.selectedEntry = null;
     this.selectedEntryId = null;
     this.detailMode = 'content';
-  };
+  }
 
-  openEntry = async (id: number) => {
+  async openEntry(id: number) {
     const reqSeq = ++this.#detailRequestSeq;
     this.selectedEntryId = id;
     this.selectedContentLocal = '';
@@ -236,9 +223,9 @@ export class DictionaryStore {
     this.selectedEntry = entry;
     this.selectedContent = null;
     this.detailMode = 'entry';
-  };
+  }
 
-  #loadIndexByPrefix = async (prefix: string) => {
+  async #loadIndexByPrefix(prefix: string) {
     if (!this.masterSummary) return;
     const trimmed = prefix.trim();
     const requestSeq = ++this.#indexRequestSeq;
@@ -253,17 +240,17 @@ export class DictionaryStore {
     } finally {
       if (requestSeq === this.#indexRequestSeq) this.indexLoading = false;
     }
-  };
+  }
 
-  handleIndexQueryChange = (value: string) => {
+  handleIndexQueryChange(value: string) {
     this.indexPrefix = value;
     if (this.#indexDebounceTimer) clearTimeout(this.#indexDebounceTimer);
     this.#indexDebounceTimer = setTimeout(() => {
       void this.#loadIndexByPrefix(value);
     }, INDEX_DEBOUNCE_MS);
-  };
+  }
 
-  doSearch = async (event: Event) => {
+  async doSearch(event: Event) {
     event.preventDefault();
     if (!this.searchQuery.trim()) {
       this.searchRows = [];
@@ -273,13 +260,13 @@ export class DictionaryStore {
     this.committedSearchQuery = this.searchQuery.trim();
     const rows = await this.#withLoading(() => searchEntries(this.zipPath, this.searchQuery, 200));
     if (rows) this.searchRows = rows;
-  };
+  }
 
-  openInlineHref = async (
+  async openInlineHref(
     href: string,
     currentSourcePath: string | null,
     currentLocal: string | null
-  ) => {
+  ) {
     const target = await this.#withLoading(() =>
       resolveLinkTarget(this.zipPath, href, currentSourcePath, currentLocal)
     );
@@ -289,17 +276,17 @@ export class DictionaryStore {
       return;
     }
     await this.openEntry(target.id);
-  };
+  }
 
-  resolveInlineImageHref = async (
+  async resolveInlineImageHref(
     href: string,
     currentSourcePath: string | null,
     currentLocal: string | null
-  ): Promise<string | null> => {
+  ): Promise<string | null> {
     try {
       return await resolveMediaDataUrl(this.zipPath, href, currentSourcePath, currentLocal);
     } catch {
       return null;
     }
-  };
+  }
 }

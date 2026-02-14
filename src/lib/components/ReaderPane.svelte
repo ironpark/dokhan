@@ -1,23 +1,31 @@
 <script lang="ts">
-  import type { ContentPage, DetailMode, EntryDetail } from '$lib/types/dictionary';
+  import type {
+    ContentPage,
+    DetailMode,
+    EntryDetail,
+  } from "$lib/types/dictionary";
 
   let {
     mode,
     selectedContent,
     selectedEntry,
-    highlightQuery = '',
+    highlightQuery = "",
     onOpenHref,
-    onResolveImageHref
+    onResolveImageHref,
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
     selectedEntry: EntryDetail | null;
     highlightQuery?: string;
-    onOpenHref: (href: string, currentSourcePath: string | null, currentLocal: string | null) => void;
+    onOpenHref: (
+      href: string,
+      currentSourcePath: string | null,
+      currentLocal: string | null,
+    ) => void;
     onResolveImageHref: (
       href: string,
       currentSourcePath: string | null,
-      currentLocal: string | null
+      currentLocal: string | null,
     ) => Promise<string | null>;
   } = $props();
 
@@ -29,15 +37,18 @@
   };
 
   function escapeRegex(text: string): string {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function clearHighlights(node: HTMLElement) {
-    const marks = node.querySelectorAll('mark.search-hit');
+    const marks = node.querySelectorAll("mark.search-hit");
     for (const mark of marks) {
       const parent = mark.parentNode;
       if (!parent) continue;
-      parent.replaceChild(document.createTextNode(mark.textContent ?? ''), mark);
+      parent.replaceChild(
+        document.createTextNode(mark.textContent ?? ""),
+        mark,
+      );
       parent.normalize();
     }
   }
@@ -49,12 +60,12 @@
         query
           .split(/\s+/)
           .map((term) => term.trim())
-          .filter((term) => term.length > 0)
-      )
+          .filter((term) => term.length > 0),
+      ),
     );
     if (!terms.length) return;
     terms.sort((a, b) => b.length - a.length);
-    const pattern = new RegExp(`(${terms.map(escapeRegex).join('|')})`, 'gi');
+    const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
 
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     const textNodes: Text[] = [];
@@ -64,7 +75,7 @@
       const parent = textNode.parentElement;
       if (
         parent &&
-        !['SCRIPT', 'STYLE', 'MARK'].includes(parent.tagName) &&
+        !["SCRIPT", "STYLE", "MARK"].includes(parent.tagName) &&
         textNode.nodeValue &&
         pattern.test(textNode.nodeValue)
       ) {
@@ -75,7 +86,7 @@
     }
 
     for (const textNode of textNodes) {
-      const text = textNode.nodeValue ?? '';
+      const text = textNode.nodeValue ?? "";
       pattern.lastIndex = 0;
       if (!pattern.test(text)) continue;
       pattern.lastIndex = 0;
@@ -88,8 +99,8 @@
         if (idx > last) {
           frag.appendChild(document.createTextNode(text.slice(last, idx)));
         }
-        const mark = document.createElement('mark');
-        mark.className = 'search-hit';
+        const mark = document.createElement("mark");
+        mark.className = "search-hit";
         mark.textContent = match[0];
         frag.appendChild(mark);
         last = idx + match[0].length;
@@ -104,36 +115,53 @@
     }
   }
 
-  function interceptLinksAndResolveImages(node: HTMLElement, initial: RenderContext) {
+  function interceptLinksAndResolveImages(
+    node: HTMLElement,
+    initial: RenderContext,
+  ) {
     let context = initial;
     let revision = 0;
 
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      const anchor = target?.closest('a') as HTMLAnchorElement | null;
+      const anchor = target?.closest("a") as HTMLAnchorElement | null;
       if (!anchor) return;
-      const href = anchor.getAttribute('href')?.trim();
+      const href = anchor.getAttribute("href")?.trim();
       if (!href) return;
       event.preventDefault();
       onOpenHref(href, context.sourcePath, context.local);
     };
 
-    async function hydrateImages(currentRevision: number, snapshot: RenderContext) {
-      const images = Array.from(node.querySelectorAll('img[src]')) as HTMLImageElement[];
+    async function hydrateImages(
+      currentRevision: number,
+      snapshot: RenderContext,
+    ) {
+      const images = Array.from(
+        node.querySelectorAll("img[src]"),
+      ) as HTMLImageElement[];
       for (const image of images) {
         if (currentRevision !== revision || !node.isConnected) {
           return;
         }
-        const src = image.getAttribute('src')?.trim();
-        if (!src || src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) {
+        const src = image.getAttribute("src")?.trim();
+        if (
+          !src ||
+          src.startsWith("data:") ||
+          src.startsWith("http://") ||
+          src.startsWith("https://")
+        ) {
           continue;
         }
-        const resolved = await onResolveImageHref(src, snapshot.sourcePath, snapshot.local);
+        const resolved = await onResolveImageHref(
+          src,
+          snapshot.sourcePath,
+          snapshot.local,
+        );
         if (currentRevision !== revision || !node.isConnected) {
           return;
         }
         if (resolved) {
-          image.setAttribute('src', resolved);
+          image.setAttribute("src", resolved);
         }
       }
     }
@@ -157,7 +185,7 @@
       });
     }
 
-    node.addEventListener('click', onClick);
+    node.addEventListener("click", onClick);
     scheduleDecorations();
     return {
       update(next: RenderContext) {
@@ -166,15 +194,15 @@
       },
       destroy() {
         revision += 1;
-        node.removeEventListener('click', onClick);
+        node.removeEventListener("click", onClick);
         clearHighlights(node);
-      }
+      },
     };
   }
 </script>
 
 <section class="reader">
-  {#if mode === 'content' && selectedContent}
+  {#if mode === "content" && selectedContent}
     <article class="body-content">
       {#if selectedContent.bodyHtml}
         {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}`}
@@ -184,7 +212,7 @@
               sourcePath: selectedContent.sourcePath,
               local: selectedContent.local,
               html: selectedContent.bodyHtml,
-              highlightQuery
+              highlightQuery,
             }}
           >
             {@html selectedContent.bodyHtml}
@@ -194,10 +222,10 @@
         <p>{selectedContent.bodyText}</p>
       {/if}
     </article>
-  {:else if mode === 'entry' && selectedEntry}
+  {:else if mode === "entry" && selectedEntry}
     <article class="body-content">
       <h2>{selectedEntry.headword}</h2>
-      <p class="alias-line">{selectedEntry.aliases.join(' · ')}</p>
+      <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
       {#if selectedEntry.definitionHtml}
         {#key `${selectedEntry.id}::${highlightQuery}`}
           <div
@@ -206,7 +234,7 @@
               sourcePath: selectedEntry.sourcePath,
               local: null,
               html: selectedEntry.definitionHtml,
-              highlightQuery
+              highlightQuery,
             }}
           >
             {@html selectedEntry.definitionHtml}
@@ -225,43 +253,25 @@
 </section>
 
 <style>
-.reader {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding: 10px 12px;
-  background:
-    linear-gradient(90deg, rgba(231, 224, 208, 0.35) 1px, transparent 1px) 0 0/22px 22px,
-    var(--surface);
-}
-
-.body-content {
-  max-width: 920px;
-}
-
-  .html-rendered {
-    font-size: 15px;
-    line-height: 1.58;
-    color: var(--text);
+  .reader {
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-5) var(--space-8);
+    background: var(--color-surface);
+    color: var(--color-text);
   }
 
-  .html-rendered :global(p) {
-    margin: 0 0 0.72em;
-  }
-
-  .html-rendered :global(a) {
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .html-rendered :global(a:hover) {
-    text-decoration: underline;
-  }
+  /* .body-content styles removed as they were empty */
 
   .html-rendered :global(ul),
   .html-rendered :global(ol) {
-    margin: 0.3em 0 0.8em;
-    padding-left: 1.2em;
+    margin: 0 0 0.72em;
+    padding-left: 1.8em;
+  }
+
+  .html-rendered :global(li) {
+    margin-bottom: 0.3em;
   }
 
   .html-rendered :global(img) {
@@ -284,7 +294,7 @@
   .alias-line {
     margin: 6px 0 10px;
     color: #4f483c;
-    font-family: 'Alegreya Sans SC', 'IBM Plex Sans', sans-serif;
+    font-family: "Alegreya Sans SC", "IBM Plex Sans", sans-serif;
   }
 
   .placeholder {

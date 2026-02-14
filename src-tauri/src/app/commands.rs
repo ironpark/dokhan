@@ -13,6 +13,10 @@ use crate::runtime::state::{
     get_content_page_impl, get_entry_detail_impl, get_master_build_status_impl,
     get_master_contents_impl, start_master_build_impl,
 };
+#[cfg(target_os = "android")]
+use std::io;
+#[cfg(target_os = "android")]
+use tauri_plugin_fs::FsExt;
 
 /// Analyze a ZIP file and return dataset-level statistics.
 ///
@@ -47,6 +51,66 @@ fn persist_zip_blob(bytes: Vec<u8>) -> Result<String, String> {
     out.push(file_name);
     fs::write(&out, bytes).map_err(|e| format!("failed to write temp zip: {e}"))?;
     Ok(out.to_string_lossy().to_string())
+}
+
+/// Normalize selected ZIP path/URI to a local file-system path.
+///
+/// On Android, `content://` URIs are copied to app temp dir via `app.fs().open(...)`.
+///
+/// # Errors
+///
+/// Returns an error when source URI cannot be opened or temp file write fails.
+#[tauri::command]
+fn prepare_zip_source(path: String, app: tauri::AppHandle) -> Result<String, String> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("zip path is empty".to_string());
+    }
+
+    if raw.starts_with("content://") {
+        #[cfg(target_os = "android")]
+        {
+            let mut dir = std::env::temp_dir();
+            dir.push("german-kr-zips");
+            fs::create_dir_all(&dir).map_err(|e| format!("failed to create temp zip dir: {e}"))?;
+
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| format!("failed to read system time: {e}"))?
+                .as_millis();
+            let file_name = format!("picked-{stamp}-{}.zip", std::process::id());
+            let mut out = PathBuf::from(&dir);
+            out.push(file_name);
+
+            let uri = url::Url::parse(raw).map_err(|e| format!("invalid content uri: {e}"))?;
+            let mut open_opts = tauri_plugin_fs::OpenOptions::new();
+            open_opts.read(true);
+            let mut src = app
+                .fs()
+                .open(tauri_plugin_fs::FilePath::Url(uri), open_opts)
+                .map_err(|e| format!("failed to open content uri: {e}"))?;
+            let mut dst =
+                fs::File::create(&out).map_err(|e| format!("failed to create temp zip: {e}"))?;
+            io::copy(&mut src, &mut dst)
+                .map_err(|e| format!("failed to copy content uri to temp zip: {e}"))?;
+            return Ok(out.to_string_lossy().to_string());
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = app;
+            return Err("content uri is only supported on Android".to_string());
+        }
+    }
+
+    if raw.starts_with("file://") {
+        let url = url::Url::parse(raw).map_err(|e| format!("invalid file url: {e}"))?;
+        let path = url
+            .to_file_path()
+            .map_err(|_| "file url is not a valid path".to_string())?;
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    Ok(raw.to_string())
 }
 
 /// Start asynchronous runtime build for a ZIP dataset.
@@ -192,6 +256,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             analyze_zip_dataset,
             persist_zip_blob,
+            prepare_zip_source,
             start_master_build,
             get_master_build_status,
             get_master_contents,
