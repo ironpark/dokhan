@@ -1,3 +1,4 @@
+//! Runtime cache/state management and async build lifecycle.
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -14,6 +15,7 @@ use crate::runtime::zip::{
 static RUNTIME_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<RuntimeIndex>>>> = OnceLock::new();
 static BUILD_STATUS: OnceLock<Mutex<BTreeMap<String, BuildStatus>>> = OnceLock::new();
 
+/// Build a stable cache key for a runtime source.
 fn cache_key(source: &RuntimeSource) -> String {
     match source {
         RuntimeSource::ZipPath(path) => format!(
@@ -25,16 +27,23 @@ fn cache_key(source: &RuntimeSource) -> String {
     }
 }
 
+/// Human-readable source label exposed in API summaries.
 fn source_label(source: &RuntimeSource) -> String {
     match source {
         RuntimeSource::ZipPath(path) => path.to_string_lossy().to_string(),
     }
 }
 
+/// Build status map key for a runtime source.
 fn status_key(source: &RuntimeSource) -> String {
     cache_key(source)
 }
 
+/// Insert or replace build status entry.
+///
+/// # Errors
+///
+/// Returns an error when the build status mutex is poisoned.
 fn set_build_status(key: &str, status: BuildStatus) -> Result<(), String> {
     let map = BUILD_STATUS.get_or_init(|| Mutex::new(BTreeMap::new()));
     let mut guard = map.lock().map_err(|_| "build status lock poisoned".to_string())?;
@@ -42,6 +51,11 @@ fn set_build_status(key: &str, status: BuildStatus) -> Result<(), String> {
     Ok(())
 }
 
+/// Update an existing build status entry in place.
+///
+/// # Errors
+///
+/// Returns an error when the build status mutex is poisoned.
 fn update_build_status<F>(key: &str, updater: F) -> Result<(), String>
 where
     F: FnOnce(&mut BuildStatus),
@@ -54,12 +68,22 @@ where
     Ok(())
 }
 
+/// Read build status if present.
+///
+/// # Errors
+///
+/// Returns an error when the build status mutex is poisoned.
 fn get_build_status_internal(key: &str) -> Result<Option<BuildStatus>, String> {
     let map = BUILD_STATUS.get_or_init(|| Mutex::new(BTreeMap::new()));
     let guard = map.lock().map_err(|_| "build status lock poisoned".to_string())?;
     Ok(guard.get(key).cloned())
 }
 
+/// Read runtime cache entry if present.
+///
+/// # Errors
+///
+/// Returns an error when the runtime cache mutex is poisoned.
 fn cache_get(source: &RuntimeSource) -> Result<Option<Arc<RuntimeIndex>>, String> {
     let key = cache_key(source);
     let cache = RUNTIME_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
@@ -67,6 +91,11 @@ fn cache_get(source: &RuntimeSource) -> Result<Option<Arc<RuntimeIndex>>, String
     Ok(guard.get(&key).cloned())
 }
 
+/// Insert runtime into cache.
+///
+/// # Errors
+///
+/// Returns an error when the runtime cache mutex is poisoned.
 fn cache_put(source: &RuntimeSource, runtime: Arc<RuntimeIndex>) -> Result<(), String> {
     let key = cache_key(source);
     let cache = RUNTIME_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
@@ -75,6 +104,7 @@ fn cache_put(source: &RuntimeSource, runtime: Arc<RuntimeIndex>) -> Result<(), S
     Ok(())
 }
 
+/// Convert runtime snapshot to API summary payload.
 fn summary_from_runtime(source: &RuntimeSource, runtime: &RuntimeIndex) -> MasterFeatureSummary {
     MasterFeatureSummary {
         zip_path: source_label(source),
@@ -83,6 +113,11 @@ fn summary_from_runtime(source: &RuntimeSource, runtime: &RuntimeIndex) -> Maste
     }
 }
 
+/// Store successful terminal build status.
+///
+/// # Errors
+///
+/// Returns an error when status storage is unavailable.
 fn set_build_done_status(
     key: &str,
     summary: MasterFeatureSummary,
@@ -103,6 +138,11 @@ fn set_build_done_status(
     )
 }
 
+/// Store failed terminal build status.
+///
+/// # Errors
+///
+/// Returns an error when status storage is unavailable.
 fn set_build_error_status(key: &str, message: &str, error: String) -> Result<(), String> {
     set_build_status(
         key,
@@ -119,6 +159,11 @@ fn set_build_error_status(key: &str, message: &str, error: String) -> Result<(),
     )
 }
 
+/// Build runtime for a source while streaming progress updates.
+///
+/// # Errors
+///
+/// Returns an error when CHM/ZIP parsing fails or status updates cannot be persisted.
 fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<RuntimeIndex>, String> {
     match source {
         RuntimeSource::ZipPath(zip_path) => {
@@ -135,6 +180,7 @@ fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<Run
     }
 }
 
+/// Spawn detached worker that builds runtime and updates status.
 fn spawn_build_worker(source: RuntimeSource, key: String) {
     std::thread::spawn(move || {
         let runtime = match build_runtime_for_source(&source, &key) {
@@ -154,6 +200,7 @@ fn spawn_build_worker(source: RuntimeSource, key: String) {
     });
 }
 
+/// Build immutable runtime index with precomputed search keys.
 pub(crate) fn build_runtime_index(
     contents: Vec<ContentItem>,
     entries: Vec<EntryDetail>,
@@ -168,6 +215,11 @@ pub(crate) fn build_runtime_index(
     }
 }
 
+/// Return cached runtime or build it synchronously.
+///
+/// # Errors
+///
+/// Returns an error when parsing fails or cache/status storage is unavailable.
 pub(crate) fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, String> {
     if let Some(v) = cache_get(source)? {
         return Ok(v);
@@ -179,6 +231,13 @@ pub(crate) fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, S
     Ok(runtime)
 }
 
+/// Start async build and return status polling key.
+///
+/// If a build is already running for the same source, this function returns the existing key.
+///
+/// # Errors
+///
+/// Returns an error when source resolution fails or status/cache storage is unavailable.
 pub(crate) fn start_master_build_impl(zip_path: Option<String>) -> Result<String, String> {
     let source = resolve_runtime_source(zip_path)?;
     let key = status_key(&source);
@@ -214,6 +273,11 @@ pub(crate) fn start_master_build_impl(zip_path: Option<String>) -> Result<String
     Ok(key)
 }
 
+/// Get current build status, returning idle if not started.
+///
+/// # Errors
+///
+/// Returns an error when source resolution fails or status storage is unavailable.
 pub(crate) fn get_master_build_status_impl(
     zip_path: Option<String>,
 ) -> Result<BuildStatus, String> {
@@ -234,11 +298,21 @@ pub(crate) fn get_master_build_status_impl(
     })
 }
 
+/// Return parsed content tree for the selected ZIP runtime.
+///
+/// # Errors
+///
+/// Returns an error when source resolution or runtime loading fails.
 pub(crate) fn get_master_contents_impl(zip_path: Option<String>) -> Result<Vec<ContentItem>, String> {
     let source = resolve_runtime_source(zip_path)?;
     Ok(get_runtime(&source)?.contents.clone())
 }
 
+/// Return entry detail and hydrate body text/html when needed.
+///
+/// # Errors
+///
+/// Returns an error when source resolution/runtime loading fails or the entry id does not exist.
 pub(crate) fn get_entry_detail_impl(id: usize, zip_path: Option<String>) -> Result<EntryDetail, String> {
     let source = resolve_runtime_source(zip_path)?;
     let runtime = get_runtime(&source)?;
@@ -254,6 +328,11 @@ pub(crate) fn get_entry_detail_impl(id: usize, zip_path: Option<String>) -> Resu
     }
 }
 
+/// Return content page HTML/text from runtime cache or CHM object.
+///
+/// # Errors
+///
+/// Returns an error when source resolution/runtime loading fails or the content page is missing.
 pub(crate) fn get_content_page_impl(
     local: &str,
     source_path: Option<&str>,

@@ -1,3 +1,4 @@
+//! CHM index/content parsing helpers (`.hhk`, `.hhc`, and filename fallbacks).
 use std::collections::BTreeSet;
 
 use crate::chm;
@@ -5,6 +6,7 @@ use crate::app::model::{ContentItem, EntryDetail};
 use crate::parsing::text::{compact_ws, decode_euc_kr, extract_attr_value, path_stem};
 use crate::runtime::link_media::{normalize_path, parse_internal_ref};
 
+/// Extract printable ASCII runs from CHM bytes for heuristic path scan.
 fn extract_ascii_runs(bytes: &[u8], min_len: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut start: Option<usize> = None;
@@ -29,6 +31,7 @@ fn extract_ascii_runs(bytes: &[u8], min_len: usize) -> Vec<String> {
     out
 }
 
+/// Trim non-path noise around extracted path-like tokens.
 fn trim_path_noise(s: &str) -> String {
     s.trim_matches(|c: char| {
         c.is_control()
@@ -38,6 +41,7 @@ fn trim_path_noise(s: &str) -> String {
     .to_string()
 }
 
+/// Heuristically extract html/hhk/hhc path samples from CHM bytes.
 pub(crate) fn extract_chm_paths(
     chm_bytes: &[u8],
     sample_limit: usize,
@@ -71,6 +75,7 @@ pub(crate) fn extract_chm_paths(
     (html_count, sample_html_paths, hhk_files, hhc_files)
 }
 
+/// Parse `master.hhc` sitemap entries into content list.
 pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
     let lower = text.to_ascii_lowercase();
     let mut out = Vec::new();
@@ -118,6 +123,7 @@ pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
     out
 }
 
+/// Fallback headword extraction from HTML filenames when HHK is missing.
 fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
     let html_paths = if let Ok(chm) = chm::ChmArchive::open(chm_bytes.to_vec()) {
         chm.entries()
@@ -150,6 +156,7 @@ fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
     words.into_iter().collect::<Vec<_>>()
 }
 
+/// Parse HHK sitemap block into entry rows.
 fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<EntryDetail> {
     let lower = text.to_ascii_lowercase();
     let mut out = Vec::new();
@@ -213,6 +220,7 @@ fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<Ent
     out
 }
 
+/// Extract index entries from CHM (HHK first, filename fallback).
 pub(crate) fn extract_index_entries_from_chm_bytes(
     chm_file_name: &str,
     chm_bytes: &[u8],
@@ -252,6 +260,7 @@ pub(crate) fn extract_index_entries_from_chm_bytes(
     out
 }
 
+/// Test helper: parse HHK-style `<param name=\"Name\">` headwords.
 #[cfg(test)]
 pub(crate) fn extract_headwords_from_hhk_bytes(
     chm_bytes: &[u8],

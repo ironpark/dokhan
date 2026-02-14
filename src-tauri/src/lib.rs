@@ -1,3 +1,4 @@
+//! Tauri backend crate entry for dictionary runtime/parsing layers.
 mod chm;
 mod app;
 mod parsing;
@@ -6,6 +7,11 @@ mod runtime;
 pub use app::commands::run;
 use crate::app::model::RuntimeSource;
 
+/// Resolve runtime source from optional ZIP path argument.
+///
+/// # Errors
+///
+/// Returns an error when `zip_path` is missing or does not resolve to an existing ZIP file.
 fn resolve_runtime_source(input: Option<String>) -> Result<RuntimeSource, String> {
     match input {
         Some(raw) => Ok(RuntimeSource::ZipPath(parsing::dataset::resolve_zip_path(&raw)?)),
@@ -13,6 +19,11 @@ fn resolve_runtime_source(input: Option<String>) -> Result<RuntimeSource, String
     }
 }
 
+/// Analyze ZIP dataset and return summary information for UI.
+///
+/// # Errors
+///
+/// Returns an error when the input path cannot be resolved or the ZIP is unreadable.
 pub(crate) fn analyze_zip_dataset_impl(zip_path: &str) -> Result<app::model::DatasetSummary, String> {
     let resolved = parsing::dataset::resolve_zip_path(zip_path)?;
     parsing::dataset::summarize_zip(&resolved)

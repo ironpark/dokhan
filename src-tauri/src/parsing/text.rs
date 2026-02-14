@@ -1,10 +1,13 @@
+//! Text/HTML utility helpers used by CHM parsing and runtime decoding.
 use encoding_rs::EUC_KR;
 
+/// Decode EUC-KR bytes used by this dictionary dataset.
 pub(crate) fn decode_euc_kr(bytes: &[u8]) -> String {
     let (s, _, _) = EUC_KR.decode(bytes);
     s.into_owned()
 }
 
+/// Decode a minimal set of HTML entities used in legacy pages.
 pub(crate) fn decode_basic_html_entities(s: &str) -> String {
     s.replace("&amp;", "&")
         .replace("&lt;", "<")
@@ -13,6 +16,7 @@ pub(crate) fn decode_basic_html_entities(s: &str) -> String {
         .replace("&#39;", "'")
 }
 
+/// Strip HTML tags and keep only visible text.
 pub(crate) fn strip_html_tags(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut in_tag = false;
@@ -34,10 +38,12 @@ pub(crate) fn strip_html_tags(input: &str) -> String {
         .replace("&middot;", "·")
 }
 
+/// Collapse consecutive whitespace to single spaces.
 pub(crate) fn compact_ws(input: &str) -> String {
     input.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Extract filename stem from path-like string.
 pub(crate) fn path_stem(path: &str) -> String {
     let base = path.rsplit('/').next().unwrap_or(path);
     base.rsplit_once('.')
@@ -46,6 +52,7 @@ pub(crate) fn path_stem(path: &str) -> String {
         .to_string()
 }
 
+/// Extract all raw values inside simple `<tag>...</tag>` pairs.
 pub(crate) fn find_all_tag_values(text: &str, tag: &str) -> Vec<String> {
     let lower = text.to_ascii_lowercase();
     let open = format!("<{tag}>");
@@ -66,6 +73,7 @@ pub(crate) fn find_all_tag_values(text: &str, tag: &str) -> Vec<String> {
     out
 }
 
+/// Return first paragraph inner HTML if present.
 pub(crate) fn first_paragraph_html(text: &str) -> Option<String> {
     let lower = text.to_ascii_lowercase();
     let p_start = lower.find("<p")?;
@@ -74,6 +82,7 @@ pub(crate) fn first_paragraph_html(text: &str) -> Option<String> {
     Some(text[tag_end + 1..p_end].to_string())
 }
 
+/// Return body inner HTML if present.
 pub(crate) fn body_html(text: &str) -> Option<String> {
     let lower = text.to_ascii_lowercase();
     let b_start = lower.find("<body")?;
@@ -82,6 +91,7 @@ pub(crate) fn body_html(text: &str) -> Option<String> {
     Some(text[tag_end + 1..b_end].to_string())
 }
 
+/// Extract first `<b>` text from first paragraph.
 pub(crate) fn extract_first_bold_text(text: &str) -> Option<String> {
     let p_html = first_paragraph_html(text)?;
     let p_lower = p_html.to_ascii_lowercase();
@@ -91,6 +101,7 @@ pub(crate) fn extract_first_bold_text(text: &str) -> Option<String> {
     Some(compact_ws(&strip_html_tags(&p_html[tag_end + 1..b_end])))
 }
 
+/// Extract quoted attribute value from a tag snippet.
 pub(crate) fn extract_attr_value(tag: &str, attr_name: &str) -> Option<String> {
     let lower = tag.to_ascii_lowercase();
     let key = format!("{attr_name}=");

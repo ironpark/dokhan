@@ -1,3 +1,4 @@
+//! Internal hyperlink and media path resolution for CHM-rendered HTML.
 use base64::Engine as _;
 
 use crate::chm;
@@ -8,6 +9,7 @@ use crate::runtime::state::get_runtime;
 use crate::runtime::zip::read_named_chm_from_zip;
 use crate::resolve_runtime_source;
 
+/// Extract CHM filename from an `mk:@MSITStore`-like prefix.
 fn extract_chm_name(prefix: &str) -> Option<String> {
     let lower = prefix.to_ascii_lowercase();
     let end = lower.find(".chm")? + 4;
@@ -23,6 +25,7 @@ fn extract_chm_name(prefix: &str) -> Option<String> {
     Some(name.to_ascii_lowercase())
 }
 
+/// Parse internal CHM href into `(source_override, local, is_absolute)`.
 pub(crate) fn parse_internal_ref(raw_ref: &str) -> Option<(Option<String>, String, bool)> {
     let raw = raw_ref.trim();
     if raw.is_empty() {
@@ -65,6 +68,7 @@ pub(crate) fn parse_internal_ref(raw_ref: &str) -> Option<(Option<String>, Strin
     Some((source_override, value.to_string(), is_absolute))
 }
 
+/// Normalize slash-separated path and resolve `.` / `..` segments.
 pub(crate) fn normalize_path(input: &str) -> String {
     let mut out = Vec::<&str>::new();
     for seg in input.split('/') {
@@ -80,6 +84,7 @@ pub(crate) fn normalize_path(input: &str) -> String {
     out.join("/")
 }
 
+/// Resolve relative local path against current page path.
 fn resolve_relative_local(local: &str, current_local: Option<&str>, is_absolute: bool) -> String {
     if is_absolute {
         return normalize_path(local);
@@ -92,6 +97,7 @@ fn resolve_relative_local(local: &str, current_local: Option<&str>, is_absolute:
     normalize_path(local)
 }
 
+/// Infer MIME type from media path extension.
 fn mime_from_path(path: &str) -> &'static str {
     let lower = path.to_ascii_lowercase();
     if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
@@ -118,6 +124,7 @@ fn mime_from_path(path: &str) -> &'static str {
     "application/octet-stream"
 }
 
+/// Read binary object from CHM with path and basename fallbacks.
 pub(crate) fn read_chm_binary_object(chm: &mut chm::ChmArchive, local: &str) -> Option<Vec<u8>> {
     let path = local.trim().trim_start_matches('/');
     if path.is_empty() {
@@ -155,6 +162,11 @@ pub(crate) fn read_chm_binary_object(chm: &mut chm::ChmArchive, local: &str) -> 
     None
 }
 
+/// Core implementation for media href -> data URL resolution.
+///
+/// # Errors
+///
+/// Returns an error for unsupported hrefs, invalid runtime source, or missing media objects.
 fn resolve_media_data_url_inner(
     href: &str,
     current_source_path: Option<&str>,
@@ -182,6 +194,11 @@ fn resolve_media_data_url_inner(
     Ok(format!("data:{mime};base64,{encoded}"))
 }
 
+/// Resolve media href to base64 data URL.
+///
+/// # Errors
+///
+/// Returns an error for unsupported hrefs, invalid runtime source, or missing media objects.
 pub(crate) fn resolve_media_data_url_impl(
     href: &str,
     current_source_path: Option<&str>,
@@ -191,6 +208,11 @@ pub(crate) fn resolve_media_data_url_impl(
     resolve_media_data_url_inner(href, current_source_path, current_local, zip_path)
 }
 
+/// Resolve link href to content page or dictionary entry target.
+///
+/// # Errors
+///
+/// Returns an error for unsupported hrefs or when runtime/source resolution fails.
 pub(crate) fn resolve_link_target_impl(
     href: &str,
     current_source_path: Option<&str>,

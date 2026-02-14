@@ -1,3 +1,4 @@
+//! Serializable API models and runtime data structures shared across modules.
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;

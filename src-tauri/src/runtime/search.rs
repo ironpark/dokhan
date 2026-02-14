@@ -1,8 +1,10 @@
+//! In-memory index and full-text search utilities.
 use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit};
 use crate::parsing::text::compact_ws;
 use crate::runtime::state::get_runtime;
 use crate::resolve_runtime_source;
 
+/// Normalize headword/search text with German orthography folding.
 pub(crate) fn normalize_search_key(s: &str) -> String {
     s.to_ascii_lowercase()
         .replace("ä", "ae")
@@ -11,6 +13,7 @@ pub(crate) fn normalize_search_key(s: &str) -> String {
         .replace("ß", "ss")
 }
 
+/// Looser normalization for prefix/contains tolerance (ae->a etc.).
 pub(crate) fn normalize_search_key_loose(s: &str) -> String {
     normalize_search_key(s)
         .replace("ae", "a")
@@ -18,6 +21,7 @@ pub(crate) fn normalize_search_key_loose(s: &str) -> String {
         .replace("ue", "u")
 }
 
+/// Check prefix match against strict+loose normalized variants.
 fn starts_with_search_key_precomputed(
     value_key: &str,
     value_loose: &str,
@@ -27,6 +31,7 @@ fn starts_with_search_key_precomputed(
     value_key.starts_with(prefix_key) || value_loose.starts_with(prefix_loose)
 }
 
+/// Check contains match against strict+loose normalized variants.
 fn contains_search_key_precomputed(
     value_key: &str,
     value_loose: &str,
@@ -36,6 +41,7 @@ fn contains_search_key_precomputed(
     value_key.contains(term_key) || value_loose.contains(term_loose)
 }
 
+/// Compare two terms under strict and loose normalization.
 pub(crate) fn eq_search_key(a: &str, b: &str) -> bool {
     if normalize_search_key(a) == normalize_search_key(b) {
         return true;
@@ -43,6 +49,7 @@ pub(crate) fn eq_search_key(a: &str, b: &str) -> bool {
     normalize_search_key_loose(a) == normalize_search_key_loose(b)
 }
 
+/// Precompute normalized search fields to speed lookups.
 pub(crate) fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearchKey> {
     entries
         .iter()
@@ -65,6 +72,7 @@ pub(crate) fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearc
         .collect::<Vec<_>>()
 }
 
+/// Return index rows, optionally filtered by prefix.
 pub(crate) fn get_index_entries_impl(
     prefix: Option<String>,
     limit: Option<usize>,
@@ -100,6 +108,7 @@ pub(crate) fn get_index_entries_impl(
     Ok(out)
 }
 
+/// Execute weighted in-memory search over headword/aliases/body.
 pub(crate) fn search_entries_impl(
     query: &str,
     limit: Option<usize>,

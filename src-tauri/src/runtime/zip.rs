@@ -1,3 +1,4 @@
+//! ZIP-backed CHM reading and runtime index construction.
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -13,6 +14,7 @@ use crate::runtime::link_media::read_chm_binary_object;
 use crate::runtime::search::normalize_search_key;
 use crate::runtime::state::build_runtime_index;
 
+/// Decode CHM page bytes into normalized content payload.
 fn decode_content_page(local: String, source_path: String, bytes: &[u8]) -> ContentPage {
     let text = decode_euc_kr(bytes);
     let title = find_all_tag_values(&text, "title")
@@ -31,6 +33,7 @@ fn decode_content_page(local: String, source_path: String, bytes: &[u8]) -> Cont
     }
 }
 
+/// Build candidate local paths for CHM object resolution.
 fn resolve_local_candidates(local: &str) -> Vec<String> {
     let raw = local.trim().trim_start_matches('/').to_string();
     let mut out = Vec::new();
@@ -51,6 +54,7 @@ fn resolve_local_candidates(local: &str) -> Vec<String> {
     out
 }
 
+/// Read CHM object with filename and basename fallback candidates.
 fn read_chm_object_with_candidates(chm: &mut chm::ChmArchive, local: &str) -> Option<Vec<u8>> {
     let candidates = resolve_local_candidates(local);
     for c in &candidates {
@@ -87,6 +91,11 @@ fn read_chm_object_with_candidates(chm: &mut chm::ChmArchive, local: &str) -> Op
     None
 }
 
+/// Read raw CHM file bytes from dataset ZIP by filename.
+///
+/// # Errors
+///
+/// Returns an error when the ZIP cannot be opened/read or the named CHM does not exist.
 pub(crate) fn read_named_chm_from_zip(zip_path: &Path, chm_name: &str) -> Result<Vec<u8>, String> {
     let mut archive = open_zip_archive(zip_path)?;
     let target = chm_name.to_ascii_lowercase();
@@ -108,6 +117,7 @@ pub(crate) fn read_named_chm_from_zip(zip_path: &Path, chm_name: &str) -> Result
     Err(format!("chm not found in zip: {chm_name}"))
 }
 
+/// Resolve entry HTML bytes using target local or headword fallback.
 fn read_entry_html_from_chm(chm: &mut chm::ChmArchive, headword: &str) -> Option<Vec<u8>> {
     for candidate in resolve_local_candidates(headword) {
         if let Ok(v) = chm.read_object(&candidate) {
@@ -149,6 +159,7 @@ fn read_entry_html_from_chm(chm: &mut chm::ChmArchive, headword: &str) -> Option
     None
 }
 
+/// Fill empty entry body fields by reading original CHM HTML.
 pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) -> EntryDetail {
     if !entry.definition_text.is_empty() {
         return entry;
@@ -204,6 +215,11 @@ pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) 
     entry
 }
 
+/// Read and decode content page from ZIP-contained CHM.
+///
+/// # Errors
+///
+/// Returns an error when the CHM cannot be loaded/opened or the target page cannot be resolved.
 pub(crate) fn read_content_page_from_zip(
     zip_path: &Path,
     source_path: &str,
@@ -219,6 +235,13 @@ pub(crate) fn read_content_page_from_zip(
     ))
 }
 
+/// Parse full runtime index from ZIP and emit progress events.
+///
+/// The callback receives best-effort progress snapshots during CHM iteration.
+///
+/// # Errors
+///
+/// Returns an error when ZIP/CHM reading fails during runtime construction.
 pub(crate) fn parse_runtime_from_zip_with_progress(
     zip_path: &Path,
     mut progress: Option<&mut dyn FnMut(BuildProgress)>,

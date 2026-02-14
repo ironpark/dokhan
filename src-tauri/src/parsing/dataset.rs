@@ -1,3 +1,4 @@
+//! ZIP dataset path resolution and summary/statistics extraction.
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -6,11 +7,17 @@ use zip::ZipArchive;
 
 use crate::app::model::{DatasetSummary, FileTypeCount, MainVolumeCoverage};
 
+/// Open ZIP archive from path with user-facing error mapping.
+///
+/// # Errors
+///
+/// Returns an error when the ZIP file cannot be opened or parsed.
 pub(crate) fn open_zip_archive(path: &Path) -> Result<ZipArchive<File>, String> {
     let file = File::open(path).map_err(|e| format!("failed to open zip: {e}"))?;
     ZipArchive::new(file).map_err(|e| format!("invalid zip archive: {e}"))
 }
 
+/// Compute coverage for merge01..merge36 including split volumes.
 pub(crate) fn build_main_volume_coverage(names: &[String]) -> Vec<MainVolumeCoverage> {
     let name_set: BTreeSet<_> = names.iter().cloned().collect();
     (1..=36)
@@ -32,6 +39,11 @@ pub(crate) fn build_main_volume_coverage(names: &[String]) -> Vec<MainVolumeCove
         .collect::<Vec<_>>()
 }
 
+/// Summarize dataset ZIP structure and extension statistics.
+///
+/// # Errors
+///
+/// Returns an error when ZIP iteration fails.
 pub(crate) fn summarize_zip(zip_path: &Path) -> Result<DatasetSummary, String> {
     let mut archive = open_zip_archive(zip_path)?;
 
@@ -123,6 +135,11 @@ pub(crate) fn summarize_zip(zip_path: &Path) -> Result<DatasetSummary, String> {
     })
 }
 
+/// Resolve input ZIP path across cwd and ancestor directories.
+///
+/// # Errors
+///
+/// Returns an error when the path cannot be found from cwd/ancestor candidates.
 pub(crate) fn resolve_zip_path(input: &str) -> Result<PathBuf, String> {
     let raw = PathBuf::from(input);
     if raw.is_absolute() && raw.exists() {
