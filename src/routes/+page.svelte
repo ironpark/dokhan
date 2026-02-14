@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+  import { platform } from '@tauri-apps/plugin-os';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import LoadProgress from '$lib/components/LoadProgress.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
@@ -12,7 +13,8 @@
 
   const vm = new DictionaryStore();
   let copyMessage = $state('');
-  let zipInput = $state<HTMLInputElement | null>(null);
+  let isMobileUi = $state(false);
+  let mobilePane = $state<'list' | 'reader'>('list');
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -34,6 +36,12 @@
       });
 
       await vm.tryAutoBootDefaultZip();
+      try {
+        const currentPlatform = await platform();
+        isMobileUi = currentPlatform === 'android' || currentPlatform === 'ios';
+      } catch {
+        isMobileUi = window.matchMedia('(max-width: 980px)').matches;
+      }
     })();
 
     return () => {
@@ -88,32 +96,21 @@
   }
 
   async function onPickZipClick() {
-    const isAndroid = /\bAndroid\b/i.test(navigator.userAgent);
-    if (isAndroid && zipInput) {
-      try {
-        if (typeof zipInput.showPicker === 'function') {
-          await zipInput.showPicker();
-        } else {
-          zipInput.click();
-        }
-      } catch {
-        zipInput.click();
-      }
-      return;
-    }
     await vm.pickZipFile();
   }
 
-  async function onZipInputChange(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    await vm.useZipFile(file);
-    input.value = '';
+  async function openContentMobileAware(local: string, sourcePath: string | null = null) {
+    await vm.openContent(local, sourcePath);
+    if (isMobileUi) mobilePane = 'reader';
+  }
+
+  async function openEntryMobileAware(id: number) {
+    await vm.openEntry(id);
+    if (isMobileUi) mobilePane = 'reader';
   }
 </script>
 
-<main class="app-shell">
+<main class="app-shell" class:mobile-ui={isMobileUi}>
   {#if vm.error}
     <div class="error-box">
       <pre>{vm.error}</pre>
@@ -134,21 +131,27 @@
       <h1>사전 ZIP 파일을 드롭하세요</h1>
       <p>앱 창 위로 `dictionary_v77.zip` 파일을 끌어 놓으면 로딩을 시작합니다.</p>
       <button type="button" class="pick-btn" onclick={onPickZipClick}>ZIP 파일 선택</button>
-      <input
-        bind:this={zipInput}
-        class="zip-input"
-        type="file"
-        accept=".zip,application/zip"
-        onchange={onZipInputChange}
-      />
     </div>
   {:else}
-    <section class="workspace">
-      <aside class="navigator">
-        <TabBar activeTab={vm.activeTab} onChange={(tab) => (vm.activeTab = tab)} />
+    <section class="workspace" class:mobile-stack={isMobileUi}>
+      {#if isMobileUi}
+        <div class="mobile-switch">
+          <button type="button" class:active={mobilePane === 'list'} onclick={() => (mobilePane = 'list')}>목록</button>
+          <button type="button" class:active={mobilePane === 'reader'} onclick={() => (mobilePane = 'reader')}>본문</button>
+        </div>
+      {/if}
+
+      <aside class="navigator" class:hidden-mobile={isMobileUi && mobilePane === 'reader'}>
+        <TabBar
+          activeTab={vm.activeTab}
+          onChange={(tab) => {
+            vm.activeTab = tab;
+            if (isMobileUi) mobilePane = 'list';
+          }}
+        />
 
         {#if vm.activeTab === 'content'}
-          <ContentPanel items={vm.contents} selectedLocal={vm.selectedContentLocal} onOpen={vm.openContent} />
+          <ContentPanel items={vm.contents} selectedLocal={vm.selectedContentLocal} onOpen={openContentMobileAware} />
         {:else if vm.activeTab === 'index'}
           <IndexPanel
             query={vm.indexPrefix}
@@ -156,7 +159,7 @@
             loading={vm.indexLoading}
             selectedId={vm.selectedEntryId}
             onQueryChange={vm.handleIndexQueryChange}
-            onOpen={vm.openEntry}
+            onOpen={openEntryMobileAware}
           />
         {:else}
           <SearchPanel
@@ -166,19 +169,21 @@
             selectedId={vm.selectedEntryId}
             onQueryChange={(value) => (vm.searchQuery = value)}
             onSubmit={vm.doSearch}
-            onOpen={vm.openEntry}
+            onOpen={openEntryMobileAware}
           />
         {/if}
       </aside>
 
-      <ReaderPane
-        mode={vm.detailMode}
-        selectedContent={vm.selectedContent}
-        selectedEntry={vm.selectedEntry}
-        highlightQuery={vm.committedSearchQuery}
-        onOpenHref={vm.openInlineHref}
-        onResolveImageHref={vm.resolveInlineImageHref}
-      />
+      <div class="reader-slot" class:hidden-mobile={isMobileUi && mobilePane === 'list'}>
+        <ReaderPane
+          mode={vm.detailMode}
+          selectedContent={vm.selectedContent}
+          selectedEntry={vm.selectedEntry}
+          highlightQuery={vm.committedSearchQuery}
+          onOpenHref={vm.openInlineHref}
+          onResolveImageHref={vm.resolveInlineImageHref}
+        />
+      </div>
     </section>
   {/if}
 </main>
@@ -298,10 +303,6 @@
     background: #ece5d6;
   }
 
-  .zip-input {
-    display: none;
-  }
-
   .drag-over {
     border-color: var(--accent);
     background: #f5fbf8;
@@ -321,6 +322,19 @@
     min-height: 0;
     display: grid;
     grid-template-rows: auto 1fr;
+  }
+
+  .reader-slot {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .mobile-switch {
+    display: none;
+  }
+
+  .hidden-mobile {
+    display: none;
   }
 
   @media (max-width: 980px) {
@@ -343,5 +357,41 @@
     .app-shell {
       padding: 10px;
     }
+  }
+
+  .mobile-ui .workspace.mobile-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+    min-height: 70vh;
+  }
+
+  .mobile-ui .mobile-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--line);
+    background: #f6f0e4;
+  }
+
+  .mobile-ui .mobile-switch button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-weight: 700;
+    padding: 10px 8px;
+    cursor: pointer;
+  }
+
+  .mobile-ui .mobile-switch button.active {
+    color: var(--text);
+    background: #fff9ee;
+  }
+
+  .mobile-ui .navigator {
+    border-right: 0;
+    border-bottom: 0;
+    min-height: 0;
   }
 </style>

@@ -1,5 +1,5 @@
-import { open } from '@tauri-apps/plugin-dialog';
-import { readFile, writeFile } from '@tauri-apps/plugin-fs';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openFile, writeFile } from '@tauri-apps/plugin-fs';
 import { appCacheDir, join } from '@tauri-apps/api/path';
 import {
   analyzeZipDataset,
@@ -162,7 +162,7 @@ export class DictionaryStore {
 
   pickZipFile = async () => {
     try {
-      const selected = await open({
+      const selected = await openDialog({
         multiple: false,
         directory: false,
         pickerMode: 'document',
@@ -177,22 +177,11 @@ export class DictionaryStore {
     }
   };
 
-  useZipFile = async (file: File) => {
-    try {
-      const persisted = await this.#createTempZipPath();
-      await writeFile(persisted, file.stream());
-      await this.useZipPath(persisted);
-    } catch (e) {
-      this.error = `파일 선택 실패: ${toErrorMessage(e)}`;
-    }
-  };
-
   #resolvePickedZipPath = async (selected: string): Promise<string> => {
     const raw = selected.trim();
     if (raw.startsWith('content://')) {
-      const bytes = await readFile(raw);
       const persisted = await this.#createTempZipPath();
-      await writeFile(persisted, bytes);
+      await this.#copyContentUriToPath(raw, persisted);
       return persisted;
     }
     if (raw.startsWith('file://')) {
@@ -210,6 +199,21 @@ export class DictionaryStore {
     const suffix = Math.random().toString(36).slice(2, 8);
     const filename = `picked-${Date.now()}-${suffix}.zip`;
     return join(cache, filename);
+  };
+
+  #copyContentUriToPath = async (sourceUri: string, destinationPath: string): Promise<void> => {
+    const src = await openFile(sourceUri, { read: true });
+    const dst = await openFile(destinationPath, { write: true, create: true, truncate: true });
+    const buffer = new Uint8Array(256 * 1024);
+    try {
+      while (true) {
+        const read = await src.read(buffer);
+        if (read === null || read === 0) break;
+        await dst.write(buffer.subarray(0, read));
+      }
+    } finally {
+      await Promise.allSettled([src.close(), dst.close()]);
+    }
   };
 
   openContent = async (local: string, sourcePath: string | null = null) => {

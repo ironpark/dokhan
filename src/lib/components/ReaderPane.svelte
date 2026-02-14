@@ -226,6 +226,7 @@
 
 <style>
 .reader {
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding: 10px 12px;

@@ -21,6 +21,7 @@
         { "path": "$TEMP/*" }
       ]
     },
+    "os:default",
     "opener:default"
   ]
 }
