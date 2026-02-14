@@ -6,7 +6,7 @@ use crate::resolve_runtime_source;
 
 /// Normalize headword/search text with German orthography folding.
 pub(crate) fn normalize_search_key(s: &str) -> String {
-    s.to_ascii_lowercase()
+    s.to_lowercase()
         .replace("ä", "ae")
         .replace("ö", "oe")
         .replace("ü", "ue")
@@ -163,4 +163,16 @@ pub(crate) fn search_entries_impl(
     hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.headword.cmp(&b.headword)));
     hits.truncate(limit);
     Ok(hits)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_search_key;
+
+    #[test]
+    fn normalize_search_key_handles_upper_umlaut() {
+        assert_eq!(normalize_search_key("Äpfel"), "aepfel");
+        assert_eq!(normalize_search_key("Öl"), "oel");
+        assert_eq!(normalize_search_key("Übung"), "uebung");
+    }
 }

@@ -106,7 +106,13 @@ pub(crate) fn read_named_chm_from_zip(zip_path: &Path, chm_name: &str) -> Result
         if entry.is_dir() {
             continue;
         }
-        if entry.name().to_ascii_lowercase() != target {
+        let entry_base = entry
+            .name()
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(entry.name())
+            .to_ascii_lowercase();
+        if entry_base != target {
             continue;
         }
         let mut bytes = Vec::new();

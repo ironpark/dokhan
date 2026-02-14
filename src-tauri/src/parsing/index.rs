@@ -75,20 +75,43 @@ pub(crate) fn extract_chm_paths(
     (html_count, sample_html_paths, hhk_files, hhc_files)
 }
 
-/// Parse `master.hhc` sitemap entries into content list.
-pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
+/// Iterate `<object ...>...</object>` blocks where object `type` is `text/sitemap`.
+fn for_each_sitemap_object(text: &str, mut f: impl FnMut(&str)) {
     let lower = text.to_ascii_lowercase();
-    let mut out = Vec::new();
     let mut offset = 0usize;
-
-    while let Some(start_rel) = lower[offset..].find("<object type=\"text/sitemap\"") {
-        let block_start = offset + start_rel;
-        let Some(end_rel) = lower[block_start..].find("</object>") else {
+    while let Some(start_rel) = lower[offset..].find("<object") {
+        let start = offset + start_rel;
+        let Some(open_end_rel) = lower[start..].find('>') else {
             break;
         };
-        let block_end = block_start + end_rel + "</object>".len();
-        let block = &text[block_start..block_end];
+        let open_end = start + open_end_rel + 1;
+        let open_tag = &text[start..open_end];
+        let is_sitemap = extract_attr_value(open_tag, "type")
+            .map(|v| v.eq_ignore_ascii_case("text/sitemap"))
+            .unwrap_or_else(|| open_tag.to_ascii_lowercase().contains("text/sitemap"));
+        if !is_sitemap {
+            offset = open_end;
+            continue;
+        }
+        let Some(close_rel) = lower[open_end..].find("</object>") else {
+            break;
+        };
+        let close = open_end + close_rel + "</object>".len();
+        f(&text[start..close]);
+        offset = close;
+    }
+}
 
+fn parse_sitemap_param(tag: &str) -> Option<(String, String)> {
+    let name = extract_attr_value(tag, "name")?;
+    let value = extract_attr_value(tag, "value").unwrap_or_default();
+    Some((name, compact_ws(value.trim())))
+}
+
+/// Parse `master.hhc` sitemap entries into content list.
+pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
+    let mut out = Vec::new();
+    for_each_sitemap_object(text, |block| {
         let mut name = String::new();
         let mut local = String::new();
         let block_lower = block.to_ascii_lowercase();
@@ -100,16 +123,12 @@ pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
             };
             let param_end = param_start + param_end_rel + 1;
             let tag = &block[param_start..param_end];
-            let tag_lower = tag.to_ascii_lowercase();
 
-            if tag_lower.contains("name=\"name\"") || tag_lower.contains("name='name'") {
-                if let Some(value) = extract_attr_value(tag, "value") {
-                    name = compact_ws(value.trim());
-                }
-            }
-            if tag_lower.contains("name=\"local\"") || tag_lower.contains("name='local'") {
-                if let Some(value) = extract_attr_value(tag, "value") {
-                    local = compact_ws(value.trim());
+            if let Some((param_name, value)) = parse_sitemap_param(tag) {
+                if param_name.eq_ignore_ascii_case("name") {
+                    name = value;
+                } else if param_name.eq_ignore_ascii_case("local") {
+                    local = value;
                 }
             }
             param_offset = param_end;
@@ -118,8 +137,7 @@ pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
         if !name.is_empty() && !local.is_empty() {
             out.push(ContentItem { title: name, local });
         }
-        offset = block_end;
-    }
+    });
     out
 }
 
@@ -158,18 +176,8 @@ fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
 
 /// Parse HHK sitemap block into entry rows.
 fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<EntryDetail> {
-    let lower = text.to_ascii_lowercase();
     let mut out = Vec::new();
-    let mut offset = 0usize;
-
-    while let Some(start_rel) = lower[offset..].find("<object type=\"text/sitemap\"") {
-        let block_start = offset + start_rel;
-        let Some(end_rel) = lower[block_start..].find("</object>") else {
-            break;
-        };
-        let block_end = block_start + end_rel + "</object>".len();
-        let block = &text[block_start..block_end];
-
+    for_each_sitemap_object(text, |block| {
         let mut name = String::new();
         let mut local = String::new();
         let block_lower = block.to_ascii_lowercase();
@@ -181,15 +189,11 @@ fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<Ent
             };
             let param_end = param_start + param_end_rel + 1;
             let tag = &block[param_start..param_end];
-            let tag_lower = tag.to_ascii_lowercase();
-            if tag_lower.contains("name=\"name\"") || tag_lower.contains("name='name'") {
-                if let Some(value) = extract_attr_value(tag, "value") {
-                    name = compact_ws(value.trim());
-                }
-            }
-            if tag_lower.contains("name=\"local\"") || tag_lower.contains("name='local'") {
-                if let Some(value) = extract_attr_value(tag, "value") {
-                    local = compact_ws(value.trim());
+            if let Some((param_name, value)) = parse_sitemap_param(tag) {
+                if param_name.eq_ignore_ascii_case("name") {
+                    name = value;
+                } else if param_name.eq_ignore_ascii_case("local") {
+                    local = value;
                 }
             }
             param_offset = param_end;
@@ -215,8 +219,7 @@ fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<Ent
                 definition_html: String::new(),
             });
         }
-        offset = block_end;
-    }
+    });
     out
 }
 
@@ -308,7 +311,11 @@ pub(crate) fn extract_headwords_from_hhk_bytes(
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_ascii_runs, extract_chm_paths, extract_headwords_from_hhk_bytes};
+    use super::{
+        extract_ascii_runs, extract_chm_paths, extract_headwords_from_hhk_bytes,
+        parse_master_hhc_text,
+    };
+    use crate::parsing::text::extract_attr_value;
 
     #[test]
     fn extract_ascii_runs_works() {
@@ -346,5 +353,32 @@ mod tests {
         assert_eq!(count, 2);
         assert!(words.contains(&"Aal".to_string()));
         assert!(words.contains(&"abbrechen".to_string()));
+    }
+
+    #[test]
+    fn parse_master_hhc_handles_object_attr_variants() {
+        let sample = r#"
+            <OBJECT classid="x" type='text/sitemap'>
+              <param VALUE='머리말' NAME='Name'>
+              <param value="master.html" name="Local">
+            </OBJECT>
+        "#;
+        let rows = parse_master_hhc_text(sample);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "머리말");
+        assert_eq!(rows[0].local, "master.html");
+    }
+
+    #[test]
+    fn extract_attr_value_accepts_spaces_around_equals() {
+        let tag = r#"<param NAME = "Local" VALUE = 'st_verben1.html'>"#;
+        assert_eq!(
+            extract_attr_value(tag, "name").as_deref(),
+            Some("Local")
+        );
+        assert_eq!(
+            extract_attr_value(tag, "value").as_deref(),
+            Some("st_verben1.html")
+        );
     }
 }

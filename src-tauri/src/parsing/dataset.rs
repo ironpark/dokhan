@@ -7,6 +7,13 @@ use zip::ZipArchive;
 
 use crate::app::model::{DatasetSummary, FileTypeCount, MainVolumeCoverage};
 
+fn basename_lower(name: &str) -> String {
+    name.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(name)
+        .to_ascii_lowercase()
+}
+
 /// Open ZIP archive from path with user-facing error mapping.
 ///
 /// # Errors
@@ -19,15 +26,16 @@ pub(crate) fn open_zip_archive(path: &Path) -> Result<ZipArchive<File>, String> 
 
 /// Compute coverage for merge01..merge36 including split volumes.
 pub(crate) fn build_main_volume_coverage(names: &[String]) -> Vec<MainVolumeCoverage> {
-    let name_set: BTreeSet<_> = names.iter().cloned().collect();
+    let base_names = names.iter().map(|name| basename_lower(name)).collect::<Vec<_>>();
+    let name_set: BTreeSet<_> = base_names.iter().cloned().collect();
     (1..=36)
         .map(|n| {
             let main_file = format!("merge{n:02}.chm");
             let split_prefix = format!("merge{n:02}-");
             let has_main_file = name_set.contains(&main_file);
-            let split_file_count = names
+            let split_file_count = base_names
                 .iter()
-                .filter(|name| name.to_ascii_lowercase().ends_with(".chm") && name.starts_with(&split_prefix))
+                .filter(|name| name.ends_with(".chm") && name.starts_with(&split_prefix))
                 .count();
             MainVolumeCoverage {
                 volume: n as u8,
@@ -76,7 +84,8 @@ pub(crate) fn summarize_zip(zip_path: &Path) -> Result<DatasetSummary, String> {
         names.push(name);
     }
 
-    let name_set: BTreeSet<_> = names.iter().cloned().collect();
+    let base_names = names.iter().map(|name| basename_lower(name)).collect::<Vec<_>>();
+    let name_set: BTreeSet<_> = base_names.iter().cloned().collect();
     let missing_main_files_only = (1..=36)
         .map(|n| format!("merge{n:02}.chm"))
         .filter(|name| !name_set.contains(name))
@@ -164,4 +173,22 @@ pub(crate) fn resolve_zip_path(input: &str) -> Result<PathBuf, String> {
         cwd.display(),
         attempts.join(", ")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_main_volume_coverage;
+
+    #[test]
+    fn split_coverage_handles_prefixed_zip_paths() {
+        let names = vec![
+            "dictionary_v77/merge01.chm".to_string(),
+            "dictionary_v77/merge03-01.chm".to_string(),
+        ];
+        let coverage = build_main_volume_coverage(&names);
+        let vol1 = coverage.iter().find(|x| x.volume == 1).expect("v1");
+        let vol3 = coverage.iter().find(|x| x.volume == 3).expect("v3");
+        assert!(vol1.covered && vol1.has_main_file);
+        assert!(vol3.covered && !vol3.has_main_file && vol3.split_file_count == 1);
+    }
 }

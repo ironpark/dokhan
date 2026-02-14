@@ -103,22 +103,52 @@ pub(crate) fn extract_first_bold_text(text: &str) -> Option<String> {
 
 /// Extract quoted attribute value from a tag snippet.
 pub(crate) fn extract_attr_value(tag: &str, attr_name: &str) -> Option<String> {
-    let lower = tag.to_ascii_lowercase();
-    let key = format!("{attr_name}=");
-    let pos = lower.find(&key)?;
-    let rest = &tag[pos + key.len()..];
-    let mut chars = rest.chars();
-    let quote = chars.next()?;
-    if quote != '"' && quote != '\'' {
-        return None;
-    }
-
-    let mut value = String::new();
-    for c in chars {
-        if c == quote {
+    let bytes = tag.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let key_start = i;
+        while i < bytes.len()
+            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'-')
+        {
+            i += 1;
+        }
+        if key_start == i {
+            i += 1;
+            continue;
+        }
+        let key = &tag[key_start..i];
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'=' {
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() {
             break;
         }
-        value.push(c);
+        let quote = bytes[i];
+        if quote != b'"' && quote != b'\'' {
+            continue;
+        }
+        i += 1;
+        let val_start = i;
+        while i < bytes.len() && bytes[i] != quote {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+        if key.eq_ignore_ascii_case(attr_name) {
+            return Some(tag[val_start..i].to_string());
+        }
+        i += 1;
     }
-    Some(value)
+    None
 }
