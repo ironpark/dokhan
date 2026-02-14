@@ -6,6 +6,7 @@ use crate::app::model::{ContentItem, EntryDetail};
 use crate::parsing::text::{compact_ws, decode_euc_kr, extract_attr_value, path_stem};
 use crate::runtime::link_media::{normalize_path, parse_internal_ref};
 
+#[cfg(test)]
 /// Extract printable ASCII runs from CHM bytes for heuristic path scan.
 fn extract_ascii_runs(bytes: &[u8], min_len: usize) -> Vec<String> {
     let mut out = Vec::new();
@@ -31,6 +32,7 @@ fn extract_ascii_runs(bytes: &[u8], min_len: usize) -> Vec<String> {
     out
 }
 
+#[cfg(test)]
 /// Trim non-path noise around extracted path-like tokens.
 fn trim_path_noise(s: &str) -> String {
     s.trim_matches(|c: char| {
@@ -41,6 +43,7 @@ fn trim_path_noise(s: &str) -> String {
     .to_string()
 }
 
+#[cfg(test)]
 /// Heuristically extract html/hhk/hhc path samples from CHM bytes.
 pub(crate) fn extract_chm_paths(
     chm_bytes: &[u8],
@@ -141,19 +144,7 @@ pub(crate) fn parse_master_hhc_text(text: &str) -> Vec<ContentItem> {
     out
 }
 
-/// Fallback headword extraction from HTML filenames when HHK is missing.
-fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
-    let html_paths = if let Ok(chm) = chm::ChmArchive::open(chm_bytes.to_vec()) {
-        chm.entries()
-            .iter()
-            .filter(|entry| entry.path.to_ascii_lowercase().ends_with(".htm"))
-            .map(|entry| entry.path.clone())
-            .collect::<Vec<_>>()
-    } else {
-        let (_, html_paths, _, _) = extract_chm_paths(chm_bytes, usize::MAX);
-        html_paths
-    };
-
+fn extract_all_headwords_from_paths(html_paths: Vec<String>) -> Vec<String> {
     let mut words = BTreeSet::new();
     for path in html_paths {
         let normalized = path.trim_start_matches('/');
@@ -172,6 +163,19 @@ fn extract_all_headwords_from_chm_bytes(chm_bytes: &[u8]) -> Vec<String> {
         words.insert(base.to_string());
     }
     words.into_iter().collect::<Vec<_>>()
+}
+
+fn extract_all_headwords_from_open_chm(chm: &chm::ChmArchive) -> Vec<String> {
+    let html_paths = chm
+        .entries()
+        .iter()
+        .filter(|entry| {
+            let p = entry.path.to_ascii_lowercase();
+            p.ends_with(".htm") || p.ends_with(".html")
+        })
+        .map(|entry| entry.path.clone())
+        .collect::<Vec<_>>();
+    extract_all_headwords_from_paths(html_paths)
 }
 
 /// Parse HHK sitemap block into entry rows.
@@ -224,14 +228,11 @@ fn parse_hhk_entries_from_text(text: &str, default_source_path: &str) -> Vec<Ent
 }
 
 /// Extract index entries from CHM (HHK first, filename fallback).
-pub(crate) fn extract_index_entries_from_chm_bytes(
+pub(crate) fn extract_index_entries_from_open_chm(
     chm_file_name: &str,
-    chm_bytes: &[u8],
+    chm: &mut chm::ChmArchive,
 ) -> Vec<EntryDetail> {
     let mut out = Vec::new();
-    let Ok(mut chm) = chm::ChmArchive::open(chm_bytes.to_vec()) else {
-        return out;
-    };
 
     let hhk_paths = chm
         .entries()
@@ -248,7 +249,7 @@ pub(crate) fn extract_index_entries_from_chm_bytes(
     }
 
     if out.is_empty() {
-        for word in extract_all_headwords_from_chm_bytes(chm_bytes) {
+        for word in extract_all_headwords_from_open_chm(chm) {
             out.push(EntryDetail {
                 id: 0,
                 headword: word.clone(),
@@ -260,6 +261,7 @@ pub(crate) fn extract_index_entries_from_chm_bytes(
             });
         }
     }
+
     out
 }
 

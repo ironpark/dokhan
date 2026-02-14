@@ -1,6 +1,13 @@
 //! Text/HTML utility helpers used by CHM parsing and runtime decoding.
 use encoding_rs::EUC_KR;
 
+/// Key HTML fragments extracted in one pass-friendly flow.
+pub(crate) struct HtmlFragments {
+    pub(crate) title: Option<String>,
+    pub(crate) body_html: Option<String>,
+    pub(crate) first_paragraph_html: Option<String>,
+}
+
 /// Decode EUC-KR bytes used by this dictionary dataset.
 pub(crate) fn decode_euc_kr(bytes: &[u8]) -> String {
     let (s, _, _) = EUC_KR.decode(bytes);
@@ -52,43 +59,51 @@ pub(crate) fn path_stem(path: &str) -> String {
         .to_string()
 }
 
-/// Extract all raw values inside simple `<tag>...</tag>` pairs.
-pub(crate) fn find_all_tag_values(text: &str, tag: &str) -> Vec<String> {
-    let lower = text.to_ascii_lowercase();
-    let open = format!("<{tag}>");
+fn first_tag_inner_from(lower: &str, text: &str, tag: &str, start: usize, end: usize) -> Option<String> {
+    let open = format!("<{tag}");
     let close = format!("</{tag}>");
-    let mut out = Vec::new();
-    let mut offset = 0usize;
+    let region = &lower[start..end];
+    let start_rel = region.find(&open)?;
+    let tag_start = start + start_rel;
+    let open_end = lower[tag_start..end].find('>')? + tag_start;
+    let close_rel = lower[open_end + 1..end].find(&close)?;
+    let close_start = open_end + 1 + close_rel;
+    Some(text[open_end + 1..close_start].to_string())
+}
 
-    while let Some(start_rel) = lower[offset..].find(&open) {
-        let value_start = offset + start_rel + open.len();
-        if let Some(end_rel) = lower[value_start..].find(&close) {
-            let value_end = value_start + end_rel;
-            out.push(text[value_start..value_end].trim().to_string());
-            offset = value_end + close.len();
+/// Extract title/body/first-paragraph HTML with shared lowercase scan.
+pub(crate) fn extract_html_fragments(text: &str) -> HtmlFragments {
+    let lower = text.to_ascii_lowercase();
+    let title = first_tag_inner_from(&lower, text, "title", 0, lower.len());
+
+    let body_html = if let Some(body_start_rel) = lower.find("<body") {
+        if let Some(tag_end_rel) = lower[body_start_rel..].find('>') {
+            let body_open_end = body_start_rel + tag_end_rel;
+            if let Some(close_rel) = lower[body_open_end + 1..].find("</body>") {
+                let body_close = body_open_end + 1 + close_rel;
+                Some(text[body_open_end + 1..body_close].to_string())
+            } else {
+                None
+            }
         } else {
-            break;
+            None
         }
+    } else {
+        None
+    };
+
+    let first_paragraph_html = if let Some(ref body) = body_html {
+        let body_lower = body.to_ascii_lowercase();
+        first_tag_inner_from(&body_lower, body, "p", 0, body_lower.len())
+    } else {
+        first_tag_inner_from(&lower, text, "p", 0, lower.len())
+    };
+
+    HtmlFragments {
+        title,
+        body_html,
+        first_paragraph_html,
     }
-    out
-}
-
-/// Return first paragraph inner HTML if present.
-pub(crate) fn first_paragraph_html(text: &str) -> Option<String> {
-    let lower = text.to_ascii_lowercase();
-    let p_start = lower.find("<p")?;
-    let tag_end = lower[p_start..].find('>')? + p_start;
-    let p_end = lower[tag_end + 1..].find("</p>")? + tag_end + 1;
-    Some(text[tag_end + 1..p_end].to_string())
-}
-
-/// Return body inner HTML if present.
-pub(crate) fn body_html(text: &str) -> Option<String> {
-    let lower = text.to_ascii_lowercase();
-    let b_start = lower.find("<body")?;
-    let tag_end = lower[b_start..].find('>')? + b_start;
-    let b_end = lower[tag_end + 1..].find("</body>")? + tag_end + 1;
-    Some(text[tag_end + 1..b_end].to_string())
 }
 
 /// Sanitize HTML fragment to prevent script/event-handler execution in webview.
@@ -98,7 +113,7 @@ pub(crate) fn sanitize_html_fragment(fragment: &str) -> String {
 
 /// Extract first `<b>` text from first paragraph.
 pub(crate) fn extract_first_bold_text(text: &str) -> Option<String> {
-    let p_html = first_paragraph_html(text)?;
+    let p_html = extract_html_fragments(text).first_paragraph_html?;
     let p_lower = p_html.to_ascii_lowercase();
     let b_start = p_lower.find("<b")?;
     let tag_end = p_lower[b_start..].find('>')? + b_start;

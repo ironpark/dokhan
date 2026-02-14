@@ -1,9 +1,13 @@
 //! ZIP dataset path resolution and summary/statistics extraction.
 #[cfg(test)]
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
 use std::fs::File;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 
+#[cfg(test)]
 use zip::ZipArchive;
 
 #[cfg(test)]
@@ -22,6 +26,7 @@ fn basename_lower(name: &str) -> String {
 /// # Errors
 ///
 /// Returns an error when the ZIP file cannot be opened or parsed.
+#[cfg(test)]
 pub(crate) fn open_zip_archive(path: &Path) -> Result<ZipArchive<File>, String> {
     let file = File::open(path).map_err(|e| format!("failed to open zip: {e}"))?;
     ZipArchive::new(file).map_err(|e| format!("invalid zip archive: {e}"))

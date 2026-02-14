@@ -1456,6 +1456,7 @@ dependencies = [
  "ammonia",
  "base64 0.22.1",
  "encoding_rs",
+ "rayon",
  "serde",
  "serde_json",
  "tantivy",

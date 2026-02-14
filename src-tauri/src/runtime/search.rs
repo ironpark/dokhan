@@ -15,6 +15,9 @@ use crate::runtime::state::get_runtime;
 use crate::resolve_runtime_source;
 
 static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<TantivySearchIndex>>>> = OnceLock::new();
+static NORMALIZE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static NORMALIZE_LOOSE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+const NORMALIZE_CACHE_MAX: usize = 65_536;
 
 #[derive(Clone)]
 struct TantivySearchIndex {
@@ -118,6 +121,25 @@ pub(crate) fn warm_search_index(
 
 /// Normalize headword/search text with German orthography folding.
 pub(crate) fn normalize_search_key(s: &str) -> String {
+    if let Ok(mut cache) = NORMALIZE_CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        if let Some(found) = cache.get(s) {
+            return found.clone();
+        }
+        let normalized = s
+            .to_lowercase()
+            .replace("ä", "ae")
+            .replace("ö", "oe")
+            .replace("ü", "ue")
+            .replace("ß", "ss");
+        if cache.len() >= NORMALIZE_CACHE_MAX {
+            cache.clear();
+        }
+        cache.insert(s.to_string(), normalized.clone());
+        return normalized;
+    }
     s.to_lowercase()
         .replace("ä", "ae")
         .replace("ö", "oe")
@@ -127,6 +149,23 @@ pub(crate) fn normalize_search_key(s: &str) -> String {
 
 /// Looser normalization for prefix/contains tolerance (ae->a etc.).
 pub(crate) fn normalize_search_key_loose(s: &str) -> String {
+    if let Ok(mut cache) = NORMALIZE_LOOSE_CACHE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        if let Some(found) = cache.get(s) {
+            return found.clone();
+        }
+        let normalized = normalize_search_key(s)
+            .replace("ae", "a")
+            .replace("oe", "o")
+            .replace("ue", "u");
+        if cache.len() >= NORMALIZE_CACHE_MAX {
+            cache.clear();
+        }
+        cache.insert(s.to_string(), normalized.clone());
+        return normalized;
+    }
     normalize_search_key(s)
         .replace("ae", "a")
         .replace("oe", "o")

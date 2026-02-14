@@ -6,7 +6,7 @@ use crate::app::model::{LinkTarget, RuntimeSource};
 use crate::parsing::text::path_stem;
 use crate::runtime::search::{eq_search_key, normalize_search_key};
 use crate::runtime::state::get_runtime;
-use crate::runtime::zip::read_named_chm_from_zip;
+use crate::runtime::zip::open_named_chm_from_zip;
 use crate::resolve_runtime_source;
 
 /// Extract CHM filename from an `mk:@MSITStore`-like prefix.
@@ -182,9 +182,7 @@ fn resolve_media_data_url_inner(
         .unwrap_or_else(|| "master.chm".to_string());
     let bytes = match resolve_runtime_source(zip_path)? {
         RuntimeSource::ZipPath(zip_path) => {
-            let chm_bytes = read_named_chm_from_zip(&zip_path, &source_path)?;
-            let mut chm = chm::ChmArchive::open(chm_bytes)
-                .map_err(|e| format!("failed to open {source_path}: {e}"))?;
+            let mut chm = open_named_chm_from_zip(&zip_path, &source_path)?;
             read_chm_binary_object(&mut chm, &resolved_local)
                 .ok_or_else(|| format!("asset not found in {source_path}: {resolved_local}"))?
         }

@@ -1,5 +1,6 @@
 use super::lzx;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 mod compression;
 mod directory;
@@ -18,12 +19,12 @@ pub struct DirectoryEntry {
 
 #[derive(Debug, Clone)]
 pub struct ChmArchive {
-    data: Vec<u8>,
+    data: Arc<[u8]>,
     data_offset: u64,
     entries: Vec<DirectoryEntry>,
     by_path: BTreeMap<String, usize>,
     compression: Option<CompressionContext>,
-    block_cache: BTreeMap<u64, Vec<u8>>,
+    block_cache: BTreeMap<u64, Arc<[u8]>>,
     native_streams: BTreeMap<u64, NativeStream>,
 }
 
@@ -57,7 +58,8 @@ impl std::fmt::Display for ChmError {
 impl std::error::Error for ChmError {}
 
 impl ChmArchive {
-    pub fn open(data: Vec<u8>) -> Result<Self, ChmError> {
+    pub fn open(data: impl Into<Arc<[u8]>>) -> Result<Self, ChmError> {
+        let data = data.into();
         let layout = parse_container_layout(&data)?;
         let entries = directory::parse_directory_entries(
             &data,
@@ -140,18 +142,18 @@ impl ChmArchive {
         Ok(out)
     }
 
-    fn decompress_block(&mut self, ctx: &CompressionContext, block: u64) -> Result<Vec<u8>, ChmError> {
+    fn decompress_block(&mut self, ctx: &CompressionContext, block: u64) -> Result<Arc<[u8]>, ChmError> {
         if let Some(v) = self.block_cache.get(&block) {
-            return Ok(v.clone());
+            return Ok(Arc::clone(v));
         }
 
         let out = self.decompress_block_native(ctx, block)?;
 
-        self.block_cache.insert(block, out.clone());
+        self.block_cache.insert(block, Arc::clone(&out));
         Ok(out)
     }
 
-    fn decompress_block_native(&mut self, ctx: &CompressionContext, block: u64) -> Result<Vec<u8>, ChmError> {
+    fn decompress_block_native(&mut self, ctx: &CompressionContext, block: u64) -> Result<Arc<[u8]>, ChmError> {
         let window_size = ctx.lzx_params.window_size;
         let window_bits = (32 - window_size.leading_zeros()) as u8 - 1;
         let reset_blkcount = std::cmp::max(ctx.lzx_params.reset_blkcount as u64, 1);
@@ -169,7 +171,7 @@ impl ChmArchive {
             };
         }
 
-        let mut target = Vec::new();
+        let mut target = None::<Arc<[u8]>>;
         let mut failed = None;
         for b in stream.next_block..=block {
             let cmp = self.read_compressed_block_bytes(ctx, b)?;
@@ -177,9 +179,10 @@ impl ChmArchive {
             let padded_cmp = pad_for_lzx(cmp);
             match lzx::decompress_block(&mut stream.state, &padded_cmp, out_len) {
                 Ok(out) => {
-                    self.block_cache.insert(b, out.clone());
+                    let out: Arc<[u8]> = Arc::from(out.into_boxed_slice());
+                    self.block_cache.insert(b, Arc::clone(&out));
                     if b == block {
-                        target = out;
+                        target = Some(out);
                     }
                 }
                 Err(e) => {
@@ -212,7 +215,7 @@ impl ChmArchive {
 
         stream.next_block = block.saturating_add(1);
         self.native_streams.insert(reset_base, stream);
-        Ok(target)
+        Ok(target.unwrap_or_else(|| Arc::<[u8]>::from(&[][..])))
     }
 
     fn decompress_block_native_fresh(
@@ -220,11 +223,11 @@ impl ChmArchive {
         ctx: &CompressionContext,
         block: u64,
         bits: u8,
-    ) -> Result<(Vec<u8>, lzx::LzxState), String> {
+    ) -> Result<(Arc<[u8]>, lzx::LzxState), String> {
         let reset_blkcount = std::cmp::max(ctx.lzx_params.reset_blkcount as u64, 1);
         let reset_base = block - (block % reset_blkcount);
         let mut state = lzx::LzxState::new(bits)?;
-        let mut target = Vec::new();
+        let mut target = None::<Arc<[u8]>>;
         for b in reset_base..=block {
             let cmp = self
                 .read_compressed_block_bytes(ctx, b)
@@ -233,12 +236,13 @@ impl ChmArchive {
             let padded_cmp = pad_for_lzx(cmp);
             let out = lzx::decompress_block(&mut state, &padded_cmp, out_len)
                 .map_err(|e| format!("fresh decode failed at block {b}: {e}"))?;
-            self.block_cache.insert(b, out.clone());
+            let out: Arc<[u8]> = Arc::from(out.into_boxed_slice());
+            self.block_cache.insert(b, Arc::clone(&out));
             if b == block {
-                target = out;
+                target = Some(out);
             }
         }
-        Ok((target, state))
+        Ok((target.unwrap_or_else(|| Arc::<[u8]>::from(&[][..])), state))
     }
 
     fn read_compressed_block_bytes<'a>(&'a self, ctx: &CompressionContext, block: u64) -> Result<&'a [u8], ChmError> {
