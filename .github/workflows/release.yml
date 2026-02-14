@@ -47,7 +47,7 @@ jobs:
           if-no-files-found: error
 
   android:
-    name: Android Release (debug APK)
+    name: Android Release (APK)
     runs-on: ubuntu-latest
 
     env:
@@ -94,13 +94,13 @@ jobs:
       - name: Sanitize Gradle local overrides
         run: sed -i '/^android\\.aapt2FromMavenOverride=/d' src-tauri/gen/android/gradle.properties
 
-      - name: Build Android APK (debug)
-        run: bunx tauri android build --apk --debug
+      - name: Build Android APK (release)
+        run: bunx tauri android build --apk
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-android-debug
+          name: release-android
           path: src-tauri/gen/android/app/build/outputs/**/*.apk
           if-no-files-found: error
 

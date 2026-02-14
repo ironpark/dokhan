@@ -47,7 +47,7 @@ jobs:
           if-no-files-found: error
 
   android:
-    name: Android (APK)
+    name: Android (Release APK)
     runs-on: ubuntu-latest
 
     env:
@@ -94,13 +94,13 @@ jobs:
       - name: Sanitize Gradle local overrides
         run: sed -i '/^android\\.aapt2FromMavenOverride=/d' src-tauri/gen/android/gradle.properties
 
-      - name: Build Android APK (debug)
-        run: bunx tauri android build --apk --debug
+      - name: Build Android APK (release)
+        run: bunx tauri android build --apk
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-android-debug
+          name: nightly-android-release
           path: |
             src-tauri/gen/android/app/build/outputs/**/*.apk
           if-no-files-found: error
@@ -137,6 +137,33 @@ jobs:
             -name "*.zip" \
           \) -exec cp -f {} nightly-release-assets/ \;
           ls -al nightly-release-assets
+
+      - name: Cleanup existing nightly assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = "nightly";
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag
+              });
+              for (const asset of release.assets) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id
+                });
+              }
+              core.info(`Deleted ${release.assets.length} existing nightly assets`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.info("Nightly release not found yet; skipping asset cleanup");
+              } else {
+                throw error;
+              }
+            }
 
       - name: Publish nightly prerelease
         uses: softprops/action-gh-release@v2
