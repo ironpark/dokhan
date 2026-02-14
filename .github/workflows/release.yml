@@ -116,8 +116,23 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Collect release assets
+        run: |
+          mkdir -p release-upload-assets
+          find release-artifacts -type f \( \
+            -name "*.apk" -o \
+            -name "*.dmg" -o \
+            -name "*.msi" -o \
+            -name "*-setup.exe" -o \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" -o \
+            -name "*.zip" \
+          \) -exec cp -f {} release-upload-assets/ \;
+          ls -al release-upload-assets
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-artifacts/**
+          files: release-upload-assets/**
           generate_release_notes: true

@@ -123,6 +123,21 @@ jobs:
           echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
           echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
+      - name: Collect release assets
+        run: |
+          mkdir -p nightly-release-assets
+          find nightly-artifacts -type f \( \
+            -name "*.apk" -o \
+            -name "*.dmg" -o \
+            -name "*.msi" -o \
+            -name "*-setup.exe" -o \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" -o \
+            -name "*.zip" \
+          \) -exec cp -f {} nightly-release-assets/ \;
+          ls -al nightly-release-assets
+
       - name: Publish nightly prerelease
         uses: softprops/action-gh-release@v2
         with:
@@ -134,4 +149,4 @@ jobs:
             Commit: `${{ steps.meta.outputs.sha }}`
           prerelease: true
           make_latest: false
-          files: nightly-artifacts/**
+          files: nightly-release-assets/**
