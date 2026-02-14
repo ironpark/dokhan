@@ -1,5 +1,5 @@
 export type MasterFeatureSummary = {
-  debugRoot: string;
+  zipPath: string;
   contentCount: number;
   indexCount: number;
 };

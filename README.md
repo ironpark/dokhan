@@ -134,15 +134,15 @@ CHM 문자열 검사 기준으로 다음 구조가 반복적으로 보인다.
 ## 10) 현재 구현된 Tauri 명령
 
 - `analyze_zip_dataset(zipPath)`: 지정 ZIP 통계 분석
-- `start_master_build(debugRoot?)`: 런타임 인덱스 비동기 빌드 시작
-- `get_master_build_status(debugRoot?)`: 빌드 진행/완료 상태 조회
-- `get_master_contents(debugRoot?)`: 내용 탭 데이터(목차)
-- `get_index_entries(prefix?, limit?, debugRoot?)`: 색인 탭 데이터(접두어 조회)
-- `search_entries(query, limit?, debugRoot?)`: 검색 탭 데이터(본문 검색)
-- `get_entry_detail(id, debugRoot?)`: 본문 상세 조회
-- `get_content_page(local, sourcePath?, debugRoot?)`: 목차/링크 기반 본문 페이지 조회
-- `resolve_link_target(href, currentSourcePath?, currentLocal?, debugRoot?)`: 내부 링크 대상 해석
-- `resolve_media_data_url(href, currentSourcePath?, currentLocal?, debugRoot?)`: 이미지 등 미디어를 data URL로 변환
+- `start_master_build(zipPath?)`: 런타임 인덱스 비동기 빌드 시작
+- `get_master_build_status(zipPath?)`: 빌드 진행/완료 상태 조회
+- `get_master_contents(zipPath?)`: 내용 탭 데이터(목차)
+- `get_index_entries(prefix?, limit?, zipPath?)`: 색인 탭 데이터(접두어 조회)
+- `search_entries(query, limit?, zipPath?)`: 검색 탭 데이터(본문 검색)
+- `get_entry_detail(id, zipPath?)`: 본문 상세 조회
+- `get_content_page(local, sourcePath?, zipPath?)`: 목차/링크 기반 본문 페이지 조회
+- `resolve_link_target(href, currentSourcePath?, currentLocal?, zipPath?)`: 내부 링크 대상 해석
+- `resolve_media_data_url(href, currentSourcePath?, currentLocal?, zipPath?)`: 이미지 등 미디어를 data URL로 변환
 
 ## 11) 참고 경로
 - `asset/dictionary_v77.zip`

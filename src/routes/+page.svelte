@@ -24,7 +24,6 @@
 
   let loading = $state(false);
   let error = $state('');
-  let debugRoot = $state('');
   let zipPath = $state('asset/dictionary_v77.zip');
   let activeTab = $state<Tab>('content');
 
@@ -98,9 +97,9 @@
     showProgress = true;
     progress = { phase: 'start', current: 0, total: 1, message: '초기화 중' };
     try {
-      await invoke<string>('start_master_build', { debugRoot });
+      await invoke<string>('start_master_build', { zipPath });
       while (true) {
-        const status = await invoke<BuildStatus>('get_master_build_status', { debugRoot });
+        const status = await invoke<BuildStatus>('get_master_build_status', { zipPath });
         progress = {
           phase: status.phase,
           current: status.current,
@@ -119,8 +118,8 @@
       }
 
       const [nextContents, nextIndex] = await Promise.all([
-        invoke<ContentItem[]>('get_master_contents', { debugRoot }),
-        invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix: '', limit: null, debugRoot })
+        invoke<ContentItem[]>('get_master_contents', { zipPath }),
+        invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix: '', limit: null, zipPath })
       ]);
 
       contents = nextContents;
@@ -147,7 +146,6 @@
       return;
     }
     zipPath = path;
-    debugRoot = path;
     const ok = await withLoading(() => invoke<MasterFeatureSummary>('analyze_zip_dataset', { zipPath: path }));
     if (!ok) return;
     await bootMasterFeatures();
@@ -155,7 +153,7 @@
 
   async function openContent(local: string, sourcePath: string | null = null) {
     const page = await withLoading(() =>
-      invoke<ContentPage>('get_content_page', { local, sourcePath, debugRoot })
+      invoke<ContentPage>('get_content_page', { local, sourcePath, zipPath })
     );
     if (!page) return;
     selectedContent = page;
@@ -168,7 +166,7 @@
   async function openEntry(id: number) {
     selectedEntryId = id;
     selectedContentLocal = '';
-    const entry = await withLoading(() => invoke<EntryDetail>('get_entry_detail', { id, debugRoot }));
+    const entry = await withLoading(() => invoke<EntryDetail>('get_entry_detail', { id, zipPath }));
     if (!entry) return;
     selectedEntry = entry;
     selectedContent = null;
@@ -184,7 +182,7 @@
       const rows = await invoke<DictionaryIndexEntry[]>('get_index_entries', {
         prefix: trimmed,
         limit: trimmed ? 500 : null,
-        debugRoot
+        zipPath
       });
       if (requestSeq === indexRequestSeq && indexPrefix.trim() === trimmed) {
         indexRows = rows;
@@ -214,7 +212,7 @@
       invoke<SearchHit[]>('search_entries', {
         query: searchQuery,
         limit: 200,
-        debugRoot
+        zipPath
       })
     );
     if (rows) searchRows = rows;
@@ -226,7 +224,7 @@
         href,
         currentSourcePath,
         currentLocal,
-        debugRoot
+        zipPath
       })
     );
     if (!target) return;
@@ -247,7 +245,7 @@
         href,
         currentSourcePath,
         currentLocal,
-        debugRoot
+        zipPath
       });
     } catch {
       return null;
