@@ -16,6 +16,7 @@
     DetailMode,
     DictionaryIndexEntry,
     EntryDetail,
+    DictionaryLinkTarget,
     MasterFeatureSummary,
     SearchHit,
     Tab
@@ -34,10 +35,16 @@
 
   let indexPrefix = $state('');
   let searchQuery = $state('');
+  let indexLoading = $state(false);
+
+  let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let indexRequestSeq = 0;
 
   let selectedContent = $state<ContentPage | null>(null);
   let selectedEntry = $state<EntryDetail | null>(null);
   let detailMode = $state<DetailMode>('none');
+  let selectedContentLocal = $state('');
+  let selectedEntryId = $state<number | null>(null);
 
   let progress = $state<BuildProgress | null>(null);
   let showProgress = $state(false);
@@ -64,6 +71,10 @@
     })();
 
     return () => {
+      if (indexDebounceTimer) {
+        clearTimeout(indexDebounceTimer);
+        indexDebounceTimer = null;
+      }
       if (unlisten) unlisten();
     };
   });
@@ -116,6 +127,7 @@
       indexRows = nextIndex;
       searchRows = [];
       selectedEntry = null;
+      selectedEntryId = null;
       detailMode = 'none';
 
       if (contents.length) {
@@ -141,15 +153,21 @@
     await bootMasterFeatures();
   }
 
-  async function openContent(local: string) {
-    const page = await withLoading(() => invoke<ContentPage>('get_content_page', { local, debugRoot }));
+  async function openContent(local: string, sourcePath: string | null = null) {
+    const page = await withLoading(() =>
+      invoke<ContentPage>('get_content_page', { local, sourcePath, debugRoot })
+    );
     if (!page) return;
     selectedContent = page;
+    selectedContentLocal = local;
     selectedEntry = null;
+    selectedEntryId = null;
     detailMode = 'content';
   }
 
   async function openEntry(id: number) {
+    selectedEntryId = id;
+    selectedContentLocal = '';
     const entry = await withLoading(() => invoke<EntryDetail>('get_entry_detail', { id, debugRoot }));
     if (!entry) return;
     selectedEntry = entry;
@@ -157,16 +175,32 @@
     detailMode = 'entry';
   }
 
-  async function loadIndexByPrefix(event: Event) {
-    event.preventDefault();
-    const rows = await withLoading(() =>
-      invoke<DictionaryIndexEntry[]>('get_index_entries', {
-        prefix: indexPrefix,
+  async function loadIndexByPrefix(prefix: string) {
+    if (!masterSummary) return;
+    const requestSeq = ++indexRequestSeq;
+    indexLoading = true;
+    try {
+      const rows = await invoke<DictionaryIndexEntry[]>('get_index_entries', {
+        prefix,
         limit: 200,
         debugRoot
-      })
-    );
-    if (rows) indexRows = rows;
+      });
+      if (requestSeq === indexRequestSeq && indexPrefix === prefix) {
+        indexRows = rows;
+      }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      if (requestSeq === indexRequestSeq) indexLoading = false;
+    }
+  }
+
+  function handleIndexQueryChange(value: string) {
+    indexPrefix = value;
+    if (indexDebounceTimer) clearTimeout(indexDebounceTimer);
+    indexDebounceTimer = setTimeout(() => {
+      void loadIndexByPrefix(value);
+    }, 120);
   }
 
   async function doSearch(event: Event) {
@@ -183,6 +217,40 @@
       })
     );
     if (rows) searchRows = rows;
+  }
+
+  async function openInlineHref(href: string, currentSourcePath: string | null, currentLocal: string | null) {
+    const target = await withLoading(() =>
+      invoke<DictionaryLinkTarget>('resolve_link_target', {
+        href,
+        currentSourcePath,
+        currentLocal,
+        debugRoot
+      })
+    );
+    if (!target) return;
+    if (target.kind === 'content') {
+      await openContent(target.local, target.sourcePath);
+      return;
+    }
+    await openEntry(target.id);
+  }
+
+  async function resolveInlineImageHref(
+    href: string,
+    currentSourcePath: string | null,
+    currentLocal: string | null
+  ): Promise<string | null> {
+    try {
+      return await invoke<string>('resolve_media_data_url', {
+        href,
+        currentSourcePath,
+        currentLocal,
+        debugRoot
+      });
+    } catch {
+      return null;
+    }
   }
 </script>
 
@@ -207,14 +275,14 @@
         <TabBar {activeTab} onChange={(tab) => (activeTab = tab)} />
 
         {#if activeTab === 'content'}
-          <ContentPanel items={contents} onOpen={openContent} />
+          <ContentPanel items={contents} selectedLocal={selectedContentLocal} onOpen={openContent} />
         {:else if activeTab === 'index'}
           <IndexPanel
             query={indexPrefix}
             rows={indexRows}
-            {loading}
-            onQueryChange={(value) => (indexPrefix = value)}
-            onSubmit={loadIndexByPrefix}
+            loading={indexLoading}
+            selectedId={selectedEntryId}
+            onQueryChange={handleIndexQueryChange}
             onOpen={openEntry}
           />
         {:else}
@@ -222,6 +290,7 @@
             query={searchQuery}
             rows={searchRows}
             {loading}
+            selectedId={selectedEntryId}
             onQueryChange={(value) => (searchQuery = value)}
             onSubmit={doSearch}
             onOpen={openEntry}
@@ -229,7 +298,13 @@
         {/if}
       </aside>
 
-      <ReaderPane mode={detailMode} {selectedContent} {selectedEntry} />
+      <ReaderPane
+        mode={detailMode}
+        {selectedContent}
+        {selectedEntry}
+        onOpenHref={openInlineHref}
+        onResolveImageHref={resolveInlineImageHref}
+      />
     </section>
   {/if}
 </main>
@@ -243,16 +318,24 @@
     --muted: #6f6759;
     --accent: #0f6c58;
     --danger: #992f2f;
-    --r-sm: 7px;
-    --r-md: 10px;
-    --r-lg: 12px;
     font-family: 'Alegreya Sans', 'IBM Plex Sans', 'Pretendard', 'Noto Sans KR', sans-serif;
+  }
+
+  :global(html, body) {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+    overscroll-behavior-x: none;
   }
 
   .app-shell {
     height: 100vh;
     margin: 0;
-    padding: 18px;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
     color: var(--text);
     background:
       radial-gradient(1000px 420px at 0% 0%, #dcebe4 0%, transparent 60%),
@@ -266,7 +349,6 @@
   .error-box {
     margin: 0;
     border: 1px solid #e7c4c4;
-    border-radius: var(--r-md);
     background: #fff2f1;
     color: var(--danger);
     padding: 8px 10px;
@@ -275,7 +357,6 @@
 
   .drop-shell {
     border: 1px solid var(--line);
-    border-radius: var(--r-lg);
     background: var(--surface);
     min-height: 70vh;
     display: grid;
@@ -304,7 +385,6 @@
 
   .workspace {
     border: 1px solid var(--line);
-    border-radius: var(--r-lg);
     background: var(--surface);
     overflow: hidden;
     min-height: 66vh;

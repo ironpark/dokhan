@@ -3,9 +3,11 @@
 
   let {
     items,
+    selectedLocal = '',
     onOpen
   }: {
     items: ContentItem[];
+    selectedLocal?: string;
     onOpen: (local: string) => void;
   } = $props();
 </script>
@@ -14,9 +16,8 @@
   <div class="panel-top" aria-hidden="true"></div>
   <ul class="entry-list">
     {#each items as item}
-      <li>
+      <li class:selected={selectedLocal === item.local}>
         <button type="button" onclick={() => onOpen(item.local)}>{item.title}</button>
-        <small>{item.local}</small>
       </li>
     {/each}
   </ul>
@@ -40,36 +41,41 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    display: grid;
-    gap: 6px;
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    align-content: start;
   }
 
   .entry-list li {
-    border: 1px solid var(--line);
-    border-radius: var(--r-sm);
-    background: #fff;
-    padding: 7px 8px;
-    display: grid;
-    gap: 3px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .entry-list li:hover {
+    background: #f6f2e8;
+  }
+
+  .entry-list li.selected {
+    background: #ece5d6;
   }
 
   .entry-list li button {
     border: 0;
     background: transparent;
     color: var(--text);
-    padding: 0;
+    width: 100%;
+    display: block;
+    padding: 9px 2px;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
+    transition: color 100ms ease;
   }
 
-  .entry-list li small {
-    color: var(--muted);
-    font-size: 12px;
-    word-break: break-word;
+  .entry-list li:hover button {
+    color: #15120d;
+  }
+
+  .entry-list li.selected button {
+    color: #0d4f40;
   }
 </style>

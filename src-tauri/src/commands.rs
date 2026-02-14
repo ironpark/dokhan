@@ -104,9 +104,30 @@ fn get_entry_detail(
 #[tauri::command]
 fn get_content_page(
     local: String,
+    source_path: Option<String>,
     debug_root: Option<String>,
 ) -> Result<super::ContentPage, String> {
-    super::get_content_page_impl(local, debug_root)
+    super::get_content_page_impl(local, source_path, debug_root)
+}
+
+#[tauri::command]
+fn resolve_link_target(
+    href: String,
+    current_source_path: Option<String>,
+    current_local: Option<String>,
+    debug_root: Option<String>,
+) -> Result<super::LinkTarget, String> {
+    super::resolve_link_target_impl(href, current_source_path, current_local, debug_root)
+}
+
+#[tauri::command]
+fn resolve_media_data_url(
+    href: String,
+    current_source_path: Option<String>,
+    current_local: Option<String>,
+    debug_root: Option<String>,
+) -> Result<String, String> {
+    super::resolve_media_data_url_impl(href, current_source_path, current_local, debug_root)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -128,7 +149,9 @@ pub fn run() {
             get_index_entries,
             search_entries,
             get_entry_detail,
-            get_content_page
+            get_content_page,
+            resolve_link_target,
+            resolve_media_data_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -11,6 +11,7 @@ export type ContentItem = {
 
 export type ContentPage = {
   local: string;
+  sourcePath: string;
   title: string;
   bodyText: string;
   bodyHtml: string;
@@ -39,6 +40,10 @@ export type EntryDetail = {
   definitionText: string;
   definitionHtml: string;
 };
+
+export type DictionaryLinkTarget =
+  | { kind: 'content'; local: string; sourcePath: string }
+  | { kind: 'entry'; id: number };
 
 export type BuildProgress = {
   phase: string;

@@ -5,6 +5,7 @@
     query,
     rows,
     loading = false,
+    selectedId = null,
     onQueryChange,
     onSubmit,
     onOpen
@@ -12,6 +13,7 @@
     query: string;
     rows: SearchHit[];
     loading?: boolean;
+    selectedId?: number | null;
     onQueryChange: (value: string) => void;
     onSubmit: (event: Event) => void;
     onOpen: (id: number) => void;
@@ -27,7 +29,7 @@
   </div>
   <ul class="entry-list">
     {#each rows as row}
-      <li>
+      <li class:selected={selectedId === row.id}>
         <button type="button" onclick={() => onOpen(row.id)}>{row.headword}</button>
         <small>score {row.score} · {row.snippet}</small>
       </li>
@@ -62,7 +64,7 @@
   input,
   button {
     border: 1px solid var(--line);
-    border-radius: var(--r-sm);
+    border-radius: 0;
     padding: 7px 9px;
     font-size: 13px;
     font-family: inherit;
@@ -86,21 +88,24 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    display: grid;
-    gap: 6px;
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    align-content: start;
   }
 
   .entry-list li {
-    border: 1px solid var(--line);
-    border-radius: var(--r-sm);
-    background: #fff;
-    padding: 7px 8px;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 2px;
     display: grid;
     gap: 3px;
+  }
+
+  .entry-list li:hover {
+    background: #f6f2e8;
+  }
+
+  .entry-list li.selected {
+    background: #ece5d6;
   }
 
   .entry-list li button {
@@ -109,8 +114,17 @@
     color: var(--text);
     padding: 0;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
+    transition: color 100ms ease;
+  }
+
+  .entry-list li:hover button {
+    color: #15120d;
+  }
+
+  .entry-list li.selected button {
+    color: #0d4f40;
   }
 
   .entry-list li small {

@@ -5,29 +5,31 @@
     query,
     rows,
     loading = false,
+    selectedId = null,
     onQueryChange,
-    onSubmit,
     onOpen
   }: {
     query: string;
     rows: DictionaryIndexEntry[];
     loading?: boolean;
+    selectedId?: number | null;
     onQueryChange: (value: string) => void;
-    onSubmit: (event: Event) => void;
     onOpen: (id: number) => void;
   } = $props();
 </script>
 
 <section class="nav-panel">
   <div class="panel-top">
-    <form class="search-line" onsubmit={onSubmit}>
+    <div class="search-line">
       <input value={query} oninput={(e) => onQueryChange((e.currentTarget as HTMLInputElement).value)} placeholder="접두어 (예: ab, angst)" />
-      <button type="submit" disabled={loading}>조회</button>
-    </form>
+      {#if loading}
+        <small class="loading-hint">검색 중…</small>
+      {/if}
+    </div>
   </div>
   <ul class="entry-list">
     {#each rows as row}
-      <li>
+      <li class:selected={selectedId === row.id}>
         <button type="button" onclick={() => onOpen(row.id)}>{row.headword}</button>
       </li>
     {/each}
@@ -53,15 +55,13 @@
   .search-line {
     margin: 0;
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
+    gap: 4px;
     align-items: center;
   }
 
-  input,
-  button {
+  input {
     border: 1px solid var(--line);
-    border-radius: var(--r-sm);
+    border-radius: 0;
     padding: 7px 9px;
     font-size: 13px;
     font-family: inherit;
@@ -69,50 +69,52 @@
     box-sizing: border-box;
   }
 
-  button {
-    cursor: pointer;
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
+  .loading-hint {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1;
   }
 
   .entry-list {
     margin: 0;
     padding: 0;
     list-style: none;
-    display: grid;
-    gap: 6px;
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    align-content: start;
   }
 
   .entry-list li {
-    border: 1px solid var(--line);
-    border-radius: var(--r-sm);
-    background: #fff;
-    padding: 7px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .entry-list li:hover {
+    background: #f6f2e8;
+  }
+
+  .entry-list li.selected {
+    background: #ece5d6;
   }
 
   .entry-list li button {
     border: 0;
     background: transparent;
     color: var(--text);
-    padding: 0;
+    width: 100%;
+    display: block;
+    padding: 9px 2px;
     text-align: left;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
+    transition: color 100ms ease;
   }
 
-  @media (max-width: 640px) {
-    .search-line {
-      grid-template-columns: 1fr;
-    }
+  .entry-list li:hover button {
+    color: #15120d;
   }
+
+  .entry-list li.selected button {
+    color: #0d4f40;
+  }
+
 </style>

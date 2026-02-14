@@ -30,7 +30,6 @@
   .progress-panel {
     border: 1px solid var(--line);
     background: var(--surface);
-    border-radius: var(--r-md);
     padding: 8px 10px;
     display: grid;
     gap: 6px;
@@ -47,7 +46,6 @@
   .meter {
     height: 10px;
     background: #e6dfd1;
-    border-radius: 999px;
     overflow: hidden;
   }
 
