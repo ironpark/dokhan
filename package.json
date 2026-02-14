@@ -1,5 +1,5 @@
 {
-  "name": "german-kr",
+  "name": "dokhan",
   "version": "0.1.0",
   "description": "",
   "type": "module",
@@ -11,7 +11,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
-  "license": "MIT",
+  "license": "MPL-2.0",
   "dependencies": {
     "@tanstack/svelte-virtual": "^3.13.18",
     "@tauri-apps/api": "^2",

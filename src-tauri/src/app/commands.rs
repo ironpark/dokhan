@@ -39,7 +39,7 @@ fn prepare_zip_source(path: String, app: tauri::AppHandle) -> Result<String, Str
         #[cfg(target_os = "android")]
         {
             let mut dir = std::env::temp_dir();
-            dir.push("german-kr-zips");
+            dir.push("dokhan-zips");
             fs::create_dir_all(&dir).map_err(|e| format!("failed to create temp zip dir: {e}"))?;
 
             let stamp = SystemTime::now()

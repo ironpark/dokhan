@@ -1,4 +1,4 @@
-package com.ironpark.german_kr
+package io.github.ironpark.dokhan
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
