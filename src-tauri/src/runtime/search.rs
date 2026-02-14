@@ -1,8 +1,120 @@
 //! In-memory index and full-text search utilities.
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use tantivy::collector::TopDocs;
+use tantivy::doc;
+use tantivy::query::QueryParser;
+use tantivy::schema::{Field, Schema, TantivyDocument, Value, INDEXED, STORED, TEXT};
+use tantivy::{Index, IndexReader, ReloadPolicy};
+
 use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit};
 use crate::parsing::text::compact_ws;
+use crate::app::model::RuntimeSource;
 use crate::runtime::state::get_runtime;
 use crate::resolve_runtime_source;
+
+static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<TantivySearchIndex>>>> = OnceLock::new();
+
+#[derive(Clone)]
+struct TantivySearchIndex {
+    index: Index,
+    reader: IndexReader,
+    id_field: Field,
+    headword_field: Field,
+    aliases_field: Field,
+    body_field: Field,
+}
+
+fn source_key(source: &RuntimeSource) -> String {
+    match source {
+        RuntimeSource::ZipPath(path) => format!(
+            "zip:{}",
+            path.canonicalize()
+                .unwrap_or_else(|_| path.to_path_buf())
+                .to_string_lossy()
+        ),
+    }
+}
+
+fn build_tantivy_index(entries: &[EntryDetail]) -> Result<TantivySearchIndex, String> {
+    let mut schema_builder = Schema::builder();
+    let id_field = schema_builder.add_u64_field("id", INDEXED | STORED);
+    let headword_field = schema_builder.add_text_field("headword", TEXT);
+    let aliases_field = schema_builder.add_text_field("aliases", TEXT);
+    let body_field = schema_builder.add_text_field("body", TEXT);
+    let schema = schema_builder.build();
+
+    let index = Index::create_in_ram(schema);
+    let mut writer = index
+        .writer(50_000_000)
+        .map_err(|e| format!("tantivy writer init failed: {e}"))?;
+    for entry in entries {
+        let aliases = entry.aliases.join(" ");
+        writer.add_document(doc!(
+            id_field => entry.id as u64,
+            headword_field => entry.headword.clone(),
+            aliases_field => aliases,
+            body_field => entry.definition_text.clone()
+        )).map_err(|e| format!("tantivy add doc failed: {e}"))?;
+    }
+    writer
+        .commit()
+        .map_err(|e| format!("tantivy commit failed: {e}"))?;
+    let reader = index
+        .reader_builder()
+        .reload_policy(ReloadPolicy::Manual)
+        .try_into()
+        .map_err(|e| format!("tantivy reader init failed: {e}"))?;
+    reader
+        .reload()
+        .map_err(|e| format!("tantivy reader reload failed: {e}"))?;
+
+    Ok(TantivySearchIndex {
+        index,
+        reader,
+        id_field,
+        headword_field,
+        aliases_field,
+        body_field,
+    })
+}
+
+fn get_or_build_tantivy_index(
+    source: &RuntimeSource,
+    entries: &[EntryDetail],
+) -> Result<Arc<TantivySearchIndex>, String> {
+    let key = source_key(source);
+    let cache = SEARCH_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    {
+        let guard = cache
+            .lock()
+            .map_err(|_| "search cache lock poisoned".to_string())?;
+        if let Some(found) = guard.get(&key) {
+            return Ok(found.clone());
+        }
+    }
+
+    let built = Arc::new(build_tantivy_index(entries)?);
+    let mut guard = cache
+        .lock()
+        .map_err(|_| "search cache lock poisoned".to_string())?;
+    guard.insert(key, built.clone());
+    Ok(built)
+}
+
+/// Build and cache Tantivy index for a runtime source eagerly.
+///
+/// # Errors
+///
+/// Returns an error when Tantivy index creation fails.
+pub(crate) fn warm_search_index(
+    source: &RuntimeSource,
+    entries: &[EntryDetail],
+) -> Result<(), String> {
+    let _ = get_or_build_tantivy_index(source, entries)?;
+    Ok(())
+}
 
 /// Normalize headword/search text with German orthography folding.
 pub(crate) fn normalize_search_key(s: &str) -> String {
@@ -108,26 +220,14 @@ pub(crate) fn get_index_entries_impl(
     Ok(out)
 }
 
-/// Execute weighted in-memory search over headword/aliases/body.
-pub(crate) fn search_entries_impl(
-    query: &str,
-    limit: Option<usize>,
-    zip_path: Option<String>,
-) -> Result<Vec<SearchHit>, String> {
-    let q = compact_ws(query);
-    if q.is_empty() {
-        return Ok(Vec::new());
-    }
-    let source = resolve_runtime_source(zip_path)?;
-    let runtime = get_runtime(&source)?;
-    let terms = q
+fn search_entries_linear(query: &str, limit: usize, entries: &[EntryDetail], keys: &[EntrySearchKey]) -> Vec<SearchHit> {
+    let terms = query
         .split_whitespace()
         .map(|x| (normalize_search_key(x), normalize_search_key_loose(x)))
         .collect::<Vec<_>>();
-    let limit = limit.unwrap_or(50).clamp(1, 200);
 
     let mut hits = Vec::<SearchHit>::new();
-    for (e, k) in runtime.entries.iter().zip(runtime.entry_keys.iter()) {
+    for (e, k) in entries.iter().zip(keys.iter()) {
         let mut score = 0usize;
         let mut ok = true;
         for (t_key, t_loose) in &terms {
@@ -162,7 +262,82 @@ pub(crate) fn search_entries_impl(
     }
     hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.headword.cmp(&b.headword)));
     hits.truncate(limit);
-    Ok(hits)
+    hits
+}
+
+fn search_entries_tantivy(
+    source: &RuntimeSource,
+    query: &str,
+    limit: usize,
+    entries: &[EntryDetail],
+) -> Result<Vec<SearchHit>, String> {
+    let idx = get_or_build_tantivy_index(source, entries)?;
+    let mut parser = QueryParser::for_index(
+        &idx.index,
+        vec![idx.headword_field, idx.aliases_field, idx.body_field],
+    );
+    parser.set_conjunction_by_default();
+    let parsed = parser
+        .parse_query(query)
+        .map_err(|e| format!("tantivy query parse failed: {e}"))?;
+
+    let searcher = idx.reader.searcher();
+    let top_docs = searcher
+        .search(&parsed, &TopDocs::with_limit(limit))
+        .map_err(|e| format!("tantivy search failed: {e}"))?;
+    let by_id = entries
+        .iter()
+        .map(|e| (e.id, e))
+        .collect::<HashMap<usize, &EntryDetail>>();
+
+    let mut out = Vec::<SearchHit>::new();
+    for (score, addr) in top_docs {
+        let doc: TantivyDocument = searcher
+            .doc(addr)
+            .map_err(|e| format!("tantivy doc read failed: {e}"))?;
+        let Some(id) = doc
+            .get_first(idx.id_field)
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+        else {
+            continue;
+        };
+        let Some(entry) = by_id.get(&id) else {
+            continue;
+        };
+        out.push(SearchHit {
+            id: entry.id,
+            headword: entry.headword.clone(),
+            source_path: entry.source_path.clone(),
+            score: score.max(0.0).round() as usize,
+            snippet: entry.definition_text.chars().take(180).collect::<String>(),
+        });
+    }
+    Ok(out)
+}
+
+/// Execute weighted in-memory search over headword/aliases/body.
+pub(crate) fn search_entries_impl(
+    query: &str,
+    limit: Option<usize>,
+    zip_path: Option<String>,
+) -> Result<Vec<SearchHit>, String> {
+    let q = compact_ws(query);
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let source = resolve_runtime_source(zip_path)?;
+    let runtime = get_runtime(&source)?;
+    let limit = limit.unwrap_or(50).clamp(1, 200);
+    match search_entries_tantivy(&source, &q, limit, &runtime.entries) {
+        Ok(v) => Ok(v),
+        Err(_) => Ok(search_entries_linear(
+            &q,
+            limit,
+            &runtime.entries,
+            &runtime.entry_keys,
+        )),
+    }
 }
 
 #[cfg(test)]

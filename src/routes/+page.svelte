@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import LoadProgress from '$lib/components/LoadProgress.svelte';
   import TabBar from '$lib/components/TabBar.svelte';
@@ -8,46 +7,9 @@
   import IndexPanel from '$lib/components/IndexPanel.svelte';
   import SearchPanel from '$lib/components/SearchPanel.svelte';
   import ReaderPane from '$lib/components/ReaderPane.svelte';
-  import type {
-    BuildProgress,
-    BuildStatus,
-    ContentItem,
-    ContentPage,
-    DetailMode,
-    DictionaryIndexEntry,
-    EntryDetail,
-    DictionaryLinkTarget,
-    MasterFeatureSummary,
-    SearchHit,
-    Tab
-  } from '$lib/types/dictionary';
+  import { DictionaryStore } from '$lib/stores/dictionary.svelte';
 
-  let loading = $state(false);
-  let error = $state('');
-  let zipPath = $state('asset/dictionary_v77.zip');
-  let activeTab = $state<Tab>('content');
-
-  let masterSummary = $state<MasterFeatureSummary | null>(null);
-  let contents = $state<ContentItem[]>([]);
-  let indexRows = $state<DictionaryIndexEntry[]>([]);
-  let searchRows = $state<SearchHit[]>([]);
-
-  let indexPrefix = $state('');
-  let searchQuery = $state('');
-  let indexLoading = $state(false);
-
-  let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let indexRequestSeq = 0;
-
-  let selectedContent = $state<ContentPage | null>(null);
-  let selectedEntry = $state<EntryDetail | null>(null);
-  let detailMode = $state<DetailMode>('none');
-  let selectedContentLocal = $state('');
-  let selectedEntryId = $state<number | null>(null);
-
-  let progress = $state<BuildProgress | null>(null);
-  let showProgress = $state(false);
-  let dragOver = $state(false);
+  const vm = new DictionaryStore();
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -56,213 +18,38 @@
       unlisten = await getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;
         if (payload.type === 'over') {
-          dragOver = true;
+          vm.dragOver = true;
           return;
         }
         if (payload.type === 'drop') {
-          dragOver = false;
+          vm.dragOver = false;
           const first = payload.paths?.[0];
-          if (first) void useZipPath(first);
+          if (first) void vm.useZipPath(first);
           return;
         }
-        dragOver = false;
+        vm.dragOver = false;
       });
+
+      await vm.tryAutoBootDefaultZip();
     })();
 
     return () => {
-      if (indexDebounceTimer) {
-        clearTimeout(indexDebounceTimer);
-        indexDebounceTimer = null;
-      }
+      vm.dispose();
       if (unlisten) unlisten();
     };
   });
-
-  async function withLoading<T>(task: () => Promise<T>): Promise<T | undefined> {
-    loading = true;
-    error = '';
-    try {
-      return await task();
-    } catch (e) {
-      error = String(e);
-      return undefined;
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function bootMasterFeatures() {
-    loading = true;
-    error = '';
-    showProgress = true;
-    progress = { phase: 'start', current: 0, total: 1, message: '초기화 중' };
-    try {
-      await invoke<string>('start_master_build', { zipPath });
-      while (true) {
-        const status = await invoke<BuildStatus>('get_master_build_status', { zipPath });
-        progress = {
-          phase: status.phase,
-          current: status.current,
-          total: status.total,
-          message: status.message
-        };
-
-        if (status.done) {
-          if (!status.success) {
-            throw new Error(status.error ?? '빌드 실패');
-          }
-          masterSummary = status.summary;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 80));
-      }
-
-      const [nextContents, nextIndex] = await Promise.all([
-        invoke<ContentItem[]>('get_master_contents', { zipPath }),
-        invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix: '', limit: null, zipPath })
-      ]);
-
-      contents = nextContents;
-      indexRows = nextIndex;
-      searchRows = [];
-      selectedEntry = null;
-      selectedEntryId = null;
-      detailMode = 'none';
-
-      if (contents.length) {
-        await openContent(contents[0].local);
-      }
-    } catch (e) {
-      error = String(e);
-    } finally {
-      showProgress = false;
-      loading = false;
-    }
-  }
-
-  async function useZipPath(path: string) {
-    if (!path.toLowerCase().endsWith('.zip')) {
-      error = 'ZIP 파일만 입력할 수 있습니다.';
-      return;
-    }
-    zipPath = path;
-    const ok = await withLoading(() => invoke<MasterFeatureSummary>('analyze_zip_dataset', { zipPath: path }));
-    if (!ok) return;
-    await bootMasterFeatures();
-  }
-
-  async function openContent(local: string, sourcePath: string | null = null) {
-    const page = await withLoading(() =>
-      invoke<ContentPage>('get_content_page', { local, sourcePath, zipPath })
-    );
-    if (!page) return;
-    selectedContent = page;
-    selectedContentLocal = local;
-    selectedEntry = null;
-    selectedEntryId = null;
-    detailMode = 'content';
-  }
-
-  async function openEntry(id: number) {
-    selectedEntryId = id;
-    selectedContentLocal = '';
-    const entry = await withLoading(() => invoke<EntryDetail>('get_entry_detail', { id, zipPath }));
-    if (!entry) return;
-    selectedEntry = entry;
-    selectedContent = null;
-    detailMode = 'entry';
-  }
-
-  async function loadIndexByPrefix(prefix: string) {
-    if (!masterSummary) return;
-    const trimmed = prefix.trim();
-    const requestSeq = ++indexRequestSeq;
-    indexLoading = true;
-    try {
-      const rows = await invoke<DictionaryIndexEntry[]>('get_index_entries', {
-        prefix: trimmed,
-        limit: trimmed ? 500 : null,
-        zipPath
-      });
-      if (requestSeq === indexRequestSeq && indexPrefix.trim() === trimmed) {
-        indexRows = rows;
-      }
-    } catch (e) {
-      error = String(e);
-    } finally {
-      if (requestSeq === indexRequestSeq) indexLoading = false;
-    }
-  }
-
-  function handleIndexQueryChange(value: string) {
-    indexPrefix = value;
-    if (indexDebounceTimer) clearTimeout(indexDebounceTimer);
-    indexDebounceTimer = setTimeout(() => {
-      void loadIndexByPrefix(value);
-    }, 120);
-  }
-
-  async function doSearch(event: Event) {
-    event.preventDefault();
-    if (!searchQuery.trim()) {
-      searchRows = [];
-      return;
-    }
-    const rows = await withLoading(() =>
-      invoke<SearchHit[]>('search_entries', {
-        query: searchQuery,
-        limit: 200,
-        zipPath
-      })
-    );
-    if (rows) searchRows = rows;
-  }
-
-  async function openInlineHref(href: string, currentSourcePath: string | null, currentLocal: string | null) {
-    const target = await withLoading(() =>
-      invoke<DictionaryLinkTarget>('resolve_link_target', {
-        href,
-        currentSourcePath,
-        currentLocal,
-        zipPath
-      })
-    );
-    if (!target) return;
-    if (target.kind === 'content') {
-      await openContent(target.local, target.sourcePath);
-      return;
-    }
-    await openEntry(target.id);
-  }
-
-  async function resolveInlineImageHref(
-    href: string,
-    currentSourcePath: string | null,
-    currentLocal: string | null
-  ): Promise<string | null> {
-    try {
-      return await invoke<string>('resolve_media_data_url', {
-        href,
-        currentSourcePath,
-        currentLocal,
-        zipPath
-      });
-    } catch {
-      return null;
-    }
-  }
 </script>
 
 <main class="app-shell">
-  {#if error}
-    <p class="error-box">{error}</p>
+  {#if vm.error}
+    <p class="error-box">{vm.error}</p>
   {/if}
 
-  <LoadProgress visible={showProgress} {progress} />
+  <LoadProgress visible={vm.showProgress} progress={vm.progress} />
 
-  {#if !masterSummary}
+  {#if !vm.masterSummary}
     <div
-      class:drag-over={dragOver}
+      class:drag-over={vm.dragOver}
       class="drop-shell"
     >
       <h1>사전 ZIP 파일을 드롭하세요</h1>
@@ -271,38 +58,39 @@
   {:else}
     <section class="workspace">
       <aside class="navigator">
-        <TabBar {activeTab} onChange={(tab) => (activeTab = tab)} />
+        <TabBar activeTab={vm.activeTab} onChange={(tab) => (vm.activeTab = tab)} />
 
-        {#if activeTab === 'content'}
-          <ContentPanel items={contents} selectedLocal={selectedContentLocal} onOpen={openContent} />
-        {:else if activeTab === 'index'}
+        {#if vm.activeTab === 'content'}
+          <ContentPanel items={vm.contents} selectedLocal={vm.selectedContentLocal} onOpen={vm.openContent} />
+        {:else if vm.activeTab === 'index'}
           <IndexPanel
-            query={indexPrefix}
-            rows={indexRows}
-            loading={indexLoading}
-            selectedId={selectedEntryId}
-            onQueryChange={handleIndexQueryChange}
-            onOpen={openEntry}
+            query={vm.indexPrefix}
+            rows={vm.indexRows}
+            loading={vm.indexLoading}
+            selectedId={vm.selectedEntryId}
+            onQueryChange={vm.handleIndexQueryChange}
+            onOpen={vm.openEntry}
           />
         {:else}
           <SearchPanel
-            query={searchQuery}
-            rows={searchRows}
-            {loading}
-            selectedId={selectedEntryId}
-            onQueryChange={(value) => (searchQuery = value)}
-            onSubmit={doSearch}
-            onOpen={openEntry}
+            query={vm.searchQuery}
+            rows={vm.searchRows}
+            loading={vm.loading}
+            selectedId={vm.selectedEntryId}
+            onQueryChange={(value) => (vm.searchQuery = value)}
+            onSubmit={vm.doSearch}
+            onOpen={vm.openEntry}
           />
         {/if}
       </aside>
 
       <ReaderPane
-        mode={detailMode}
-        {selectedContent}
-        {selectedEntry}
-        onOpenHref={openInlineHref}
-        onResolveImageHref={resolveInlineImageHref}
+        mode={vm.detailMode}
+        selectedContent={vm.selectedContent}
+        selectedEntry={vm.selectedEntry}
+        highlightQuery={vm.committedSearchQuery}
+        onOpenHref={vm.openInlineHref}
+        onResolveImageHref={vm.resolveInlineImageHref}
       />
     </section>
   {/if}

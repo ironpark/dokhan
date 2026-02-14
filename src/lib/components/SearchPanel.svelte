@@ -19,7 +19,7 @@
     onOpen: (id: number) => void;
   } = $props();
 
-  const rowHeight = 56;
+  const rowHeight = 38;
   const overscan = 6;
 
   let listEl = $state<HTMLElement | null>(null);
@@ -61,7 +61,6 @@
     {#each visibleRows as row}
       <li class="row" class:selected={selectedId === row.id}>
         <button type="button" onclick={() => onOpen(row.id)}>{row.headword}</button>
-        <small>score {row.score} · {row.snippet}</small>
       </li>
     {/each}
     {#if bottomSpacer > 0}
@@ -123,10 +122,7 @@
 
   .entry-list li.row {
     border-bottom: 1px solid var(--line);
-    padding: 8px 2px;
-    display: grid;
-    gap: 3px;
-    height: 56px;
+    height: 38px;
     box-sizing: border-box;
   }
 
@@ -142,7 +138,9 @@
     border: 0;
     background: transparent;
     color: var(--text);
-    padding: 0;
+    width: 100%;
+    display: block;
+    padding: 9px 2px;
     text-align: left;
     font-weight: 600;
     cursor: pointer;
@@ -155,15 +153,6 @@
 
   .entry-list li.row.selected button {
     color: #0d4f40;
-  }
-
-  .entry-list li.row small {
-    color: var(--muted);
-    font-size: 12px;
-    word-break: break-word;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .entry-list li.spacer {

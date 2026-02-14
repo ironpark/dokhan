@@ -165,6 +165,57 @@ fn read_entry_html_from_chm(chm: &mut chm::ChmArchive, headword: &str) -> Option
     None
 }
 
+fn hydrate_entries_from_chm_bytes(chm_bytes: &[u8], entries: &mut [EntryDetail]) {
+    let Ok(mut chm) = chm::ChmArchive::open(chm_bytes.to_vec()) else {
+        return;
+    };
+    for entry in entries.iter_mut() {
+        let html_bytes = if entry.target_local.is_empty() {
+            read_entry_html_from_chm(&mut chm, &entry.headword)
+        } else {
+            read_chm_binary_object(&mut chm, &entry.target_local)
+                .or_else(|| read_entry_html_from_chm(&mut chm, &entry.headword))
+        };
+        let Some(html_bytes) = html_bytes else {
+            continue;
+        };
+
+        let html_text = decode_euc_kr(&html_bytes);
+        let paragraph_html = first_paragraph_html(&html_text).unwrap_or_default();
+        let paragraph_text = compact_ws(&strip_html_tags(&paragraph_html));
+        let body = body_html(&html_text).unwrap_or_default();
+        let body_text = compact_ws(&strip_html_tags(&body));
+
+        if !paragraph_html.is_empty() {
+            entry.definition_html = paragraph_html;
+        } else if !body.is_empty() {
+            entry.definition_html = body;
+        }
+        if !paragraph_text.is_empty() {
+            entry.definition_text = paragraph_text;
+        } else if !body_text.is_empty() {
+            entry.definition_text = body_text;
+        }
+
+        let title_aliases = find_all_tag_values(&html_text, "title")
+            .into_iter()
+            .map(|x| compact_ws(&strip_html_tags(&x)))
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>();
+        for alias in title_aliases {
+            if !entry.aliases.contains(&alias) {
+                entry.aliases.push(alias);
+            }
+        }
+        if let Some(bold) = extract_first_bold_text(&html_text) {
+            let bold = compact_ws(&bold);
+            if !bold.is_empty() && !entry.aliases.contains(&bold) {
+                entry.aliases.push(bold);
+            }
+        }
+    }
+}
+
 /// Fill empty entry body fields by reading original CHM HTML.
 pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) -> EntryDetail {
     if !entry.definition_text.is_empty() {
@@ -291,7 +342,9 @@ pub(crate) fn parse_runtime_from_zip_with_progress(
         }
 
         if lower.starts_with("merge") {
-            entries.extend(extract_index_entries_from_chm_bytes(&name, &bytes));
+            let mut parsed = extract_index_entries_from_chm_bytes(&name, &bytes);
+            hydrate_entries_from_chm_bytes(&bytes, &mut parsed);
+            entries.extend(parsed);
         }
 
         if let Some(cb) = progress.as_mut() {

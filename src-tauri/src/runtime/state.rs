@@ -7,7 +7,7 @@ use crate::app::model::{
     RuntimeIndex, RuntimeSource,
 };
 use crate::resolve_runtime_source;
-use crate::runtime::search::build_entry_search_keys;
+use crate::runtime::search::{build_entry_search_keys, warm_search_index};
 use crate::runtime::zip::{
     hydrate_zip_entry_detail, parse_runtime_from_zip_with_progress, read_content_page_from_zip,
 };
@@ -165,7 +165,7 @@ fn set_build_error_status(key: &str, message: &str, error: String) -> Result<(),
 ///
 /// Returns an error when CHM/ZIP parsing fails or status updates cannot be persisted.
 fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<RuntimeIndex>, String> {
-    match source {
+    let runtime = match source {
         RuntimeSource::ZipPath(zip_path) => {
             let mut cb = |p: BuildProgress| {
                 let _ = update_build_status(key, |st| {
@@ -175,9 +175,16 @@ fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<Run
                     st.message = p.message;
                 });
             };
-            parse_runtime_from_zip_with_progress(zip_path, Some(&mut cb)).map(Arc::new)
+            parse_runtime_from_zip_with_progress(zip_path, Some(&mut cb)).map(Arc::new)?
         }
-    }
+    };
+
+    let _ = update_build_status(key, |st| {
+        st.phase = "search-index".to_string();
+        st.message = "Building search index".to_string();
+    });
+    warm_search_index(source, &runtime.entries)?;
+    Ok(runtime)
 }
 
 /// Spawn detached worker that builds runtime and updates status.
@@ -227,6 +234,7 @@ pub(crate) fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, S
     let runtime = match source {
         RuntimeSource::ZipPath(zip_path) => Arc::new(parse_runtime_from_zip_with_progress(zip_path, None)?),
     };
+    warm_search_index(source, &runtime.entries)?;
     cache_put(source, runtime.clone())?;
     Ok(runtime)
 }
