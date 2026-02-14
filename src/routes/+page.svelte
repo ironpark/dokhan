@@ -2,12 +2,12 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
-  import LoadProgress from '$lib/components/dictionary/LoadProgress.svelte';
-  import TabBar from '$lib/components/dictionary/TabBar.svelte';
-  import ContentPanel from '$lib/components/dictionary/ContentPanel.svelte';
-  import IndexPanel from '$lib/components/dictionary/IndexPanel.svelte';
-  import SearchPanel from '$lib/components/dictionary/SearchPanel.svelte';
-  import ReaderPane from '$lib/components/dictionary/ReaderPane.svelte';
+  import LoadProgress from '$lib/components/LoadProgress.svelte';
+  import TabBar from '$lib/components/TabBar.svelte';
+  import ContentPanel from '$lib/components/ContentPanel.svelte';
+  import IndexPanel from '$lib/components/IndexPanel.svelte';
+  import SearchPanel from '$lib/components/SearchPanel.svelte';
+  import ReaderPane from '$lib/components/ReaderPane.svelte';
   import type {
     BuildProgress,
     BuildStatus,
