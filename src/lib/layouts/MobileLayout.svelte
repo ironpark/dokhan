@@ -5,6 +5,7 @@
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
     import Input from "$lib/components/ui/Input.svelte";
+    import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
     // Props
     let { vm }: { vm: DictionaryStore } = $props();
@@ -57,67 +58,81 @@
                     />
                 </div>
             </div>
-        {:else if activeTab === "home"}
-            <div class="home-view">
-                <div class="hero">
-                    <h1>독한 사전</h1>
-                    <p>독일어-한국어 전자사전</p>
-                </div>
-                <div class="search-box">
-                    <Input
-                        placeholder="사전 검색"
-                        onclick={() => (activeTab = "search")}
-                        readonly
-                    >
-                        {#snippet icon()}
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            >
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"
-                                ></line>
-                            </svg>
-                        {/snippet}
-                    </Input>
-                </div>
+        {:else}
+            <TitleToolbar
+                title="독한 사전"
+                subtitle="Dokhan Dictionary"
+                compact={true}
+                showZipAction={true}
+                onPickZip={() => vm.pickZipFile()}
+            />
 
-                <div class="content-list">
-                    <h3>목차</h3>
-                    <ContentPanel
-                        items={vm.contents}
-                        selectedLocal={vm.selectedContentLocal}
-                        onOpen={(local) => vm.openContent(local)}
+            {#if activeTab === "home"}
+                <div class="home-view">
+                    <div class="hero">
+                        <h1>독한 사전</h1>
+                        <p>독일어-한국어 전자사전</p>
+                    </div>
+                    <div class="search-box">
+                        <Input
+                            placeholder="사전 검색"
+                            onclick={() => (activeTab = "search")}
+                            readonly
+                        >
+                            {#snippet icon()}
+                                <svg
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line
+                                        x1="21"
+                                        y1="21"
+                                        x2="16.65"
+                                        y2="16.65"
+                                    ></line>
+                                </svg>
+                            {/snippet}
+                        </Input>
+                    </div>
+
+                    <div class="content-list">
+                        <h3>목차</h3>
+                        <ContentPanel
+                            items={vm.contents}
+                            selectedLocal={vm.selectedContentLocal}
+                            onOpen={(local) => vm.openContent(local)}
+                        />
+                    </div>
+                </div>
+            {:else if activeTab === "search"}
+                <div class="panel-container">
+                    <SearchPanel
+                        query={vm.searchQuery}
+                        rows={vm.searchRows}
+                        loading={vm.loading}
+                        selectedId={vm.selectedEntryId}
+                        onQueryChange={(value) => (vm.searchQuery = value)}
+                        onSubmit={(e) => vm.doSearch(e)}
+                        onOpen={(id) => vm.openEntry(id)}
                     />
                 </div>
-            </div>
-        {:else if activeTab === "search"}
-            <div class="panel-container">
-                <SearchPanel
-                    query={vm.searchQuery}
-                    rows={vm.searchRows}
-                    loading={vm.loading}
-                    selectedId={vm.selectedEntryId}
-                    onQueryChange={(value) => (vm.searchQuery = value)}
-                    onSubmit={(e) => vm.doSearch(e)}
-                    onOpen={(id) => vm.openEntry(id)}
-                />
-            </div>
-        {:else if activeTab === "index"}
-            <div class="panel-container">
-                <IndexPanel
-                    query={vm.indexPrefix}
-                    rows={vm.indexRows}
-                    loading={vm.indexLoading}
-                    selectedId={vm.selectedEntryId}
-                    onQueryChange={(val) => vm.handleIndexQueryChange(val)}
-                    onOpen={(id) => vm.openEntry(id)}
-                />
-            </div>
+            {:else if activeTab === "index"}
+                <div class="panel-container">
+                    <IndexPanel
+                        query={vm.indexPrefix}
+                        rows={vm.indexRows}
+                        loading={vm.indexLoading}
+                        selectedId={vm.selectedEntryId}
+                        onQueryChange={(val) => vm.handleIndexQueryChange(val)}
+                        onOpen={(id) => vm.openEntry(id)}
+                    />
+                </div>
+            {/if}
         {/if}
     </main>
 
@@ -212,7 +227,8 @@
     }
 
     .panel-container {
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         overflow: hidden;
         background: var(--color-surface);
     }
@@ -306,6 +322,8 @@
     }
 
     .home-view {
+        flex: 1;
+        min-height: 0;
         padding: 20px;
         display: flex;
         flex-direction: column;

@@ -5,15 +5,19 @@
     import ReaderPane from "$lib/components/ReaderPane.svelte";
     import ContentPanel from "$lib/components/ContentPanel.svelte";
     import TabBar from "$lib/components/TabBar.svelte";
+    import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
     let { vm }: { vm: DictionaryStore } = $props();
 </script>
 
 <div class="desktop-layout">
     <aside class="sidebar">
-        <div class="sidebar-header">
-            <h2>독한 사전</h2>
-        </div>
+        <TitleToolbar
+            title="독한 사전"
+            subtitle="Dokhan Dictionary"
+            showZipAction={true}
+            onPickZip={() => vm.pickZipFile()}
+        />
 
         <div class="tabs-container">
             <TabBar
@@ -94,20 +98,6 @@
         border-right: 1px solid var(--color-border);
         background: var(--color-bg);
         overflow: hidden;
-    }
-
-    .sidebar-header {
-        padding: 30px 20px 15px;
-        -webkit-app-region: drag;
-    }
-
-    .sidebar-header h2 {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--color-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
     }
 
     .sidebar-content {
