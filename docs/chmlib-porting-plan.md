@@ -3,7 +3,7 @@
 ## Goal
 - Remove external `7zz` dependency.
 - Parse CHM (`ITSF/ITSP/PMGL/PMGI`) natively in Rust.
-- Build dictionary index/content into SQLite `:memory:` runtime.
+- Build dictionary index/content in process memory runtime.
 
 ## Source Reference
 - Upstream C library: `third_party/CHMLib/src/chm_lib.c`, `third_party/CHMLib/src/lzx.c`
@@ -18,7 +18,7 @@
 - PMGI branch search optimization
 - LZX compressed object retrieval
 - Full `chm_resolve_object` parity
-- SQLite `:memory:` storage replacement
+- Optional persistent storage strategy (out of scope for CHM core port)
 
 ## Porting Phases
 1. Directory/Metadata Parity
@@ -41,7 +41,7 @@
 4. App Integration
 - Replace temporary entry-only indexing with resolved object parsing
 - Parse `.hhk/.hhc/.htm` from CHM objects directly
-- Persist runtime structures in SQLite `:memory:`
+- Keep runtime structures in memory (no DB dependency)
 
 5. Validation
 - Golden tests against known CHM set

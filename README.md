@@ -97,40 +97,15 @@ CHM 문자열 검사 기준으로 다음 구조가 반복적으로 보인다.
 - Exact 키 인덱스(표제어 직검색)
 
 6. 저장
-- 권장 포맷: `SQLite + FTS5` 또는 `tantivy/meilisearch` 계열
-- 오프라인 앱 공통 사용을 위해 단일 파일 DB 권장
+- 현재: 앱 런타임 메모리 인덱스(영속 저장소 미사용)
+- 향후: 온디스크 캐시/검색엔진은 별도 결정(요구사항 확정 후)
 
-## 7) 권장 데이터 스키마(초안)
+## 7) 런타임 데이터 모델(현재)
 
-```sql
--- 표제어/문서 메타
-CREATE TABLE entry (
-  id INTEGER PRIMARY KEY,
-  headword TEXT NOT NULL,
-  headword_norm TEXT NOT NULL,
-  lang_from TEXT,         -- de/ko/mixed
-  lang_to TEXT,           -- de/ko/mixed
-  definition_html TEXT,   -- 원문 HTML
-  definition_text TEXT,   -- 평문 변환
-  source_chm TEXT NOT NULL,
-  source_path TEXT NOT NULL, -- CHM 내부 htm 경로
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX idx_entry_headword_norm ON entry(headword_norm);
-
--- 동의어/변형어
-CREATE TABLE entry_alias (
-  entry_id INTEGER NOT NULL,
-  alias TEXT NOT NULL,
-  alias_norm TEXT NOT NULL,
-  FOREIGN KEY(entry_id) REFERENCES entry(id)
-);
-CREATE INDEX idx_entry_alias_norm ON entry_alias(alias_norm);
-
--- FTS(예: SQLite FTS5)
--- CREATE VIRTUAL TABLE entry_fts USING fts5(headword, definition_text, content='entry', content_rowid='id');
-```
+- `content tree`: `master.hhc` 기반 목차 노드 트리
+- `index entries`: CHM 실제 색인(`.hhk`) 기반 엔트리 목록
+- `search index`: 본문 텍스트 기반 메모리 검색 인덱스
+- `entry detail`: 원본 HTML + 텍스트 + 소스(`chm/path`) 메타
 
 ## 8) Tauri 단일 스택 전략 (모바일 + 데스크탑)
 
@@ -140,8 +115,8 @@ CREATE INDEX idx_entry_alias_norm ON entry_alias(alias_norm);
   - 데스크탑(Windows/macOS): 동일 Svelte UI + 동일 Rust 코어
   - 모바일(iOS/Android): Tauri 모바일 타겟 + 동일 Svelte UI + 동일 Rust 코어
 - 데이터 저장:
-  - 권장 `SQLite(FTS5)` 단일 파일 DB를 앱 로컬 저장소에 생성/갱신
-  - 초기 배포는 원본 ZIP 포함 또는 첫 실행 시 ZIP 선택 후 인덱스 생성
+  - 현재는 ZIP 로드 시 메모리 인덱스를 구성해 즉시 조회
+  - 영속 저장은 미적용(추후 별도 스토리지 전략 도입 예정)
 - 이점:
   - 플랫폼별 검색 로직 중복 제거
   - 파서/인덱서 품질을 한 코드베이스에서 유지
@@ -153,22 +128,21 @@ CREATE INDEX idx_entry_alias_norm ON entry_alias(alias_norm);
 - [ ] CHM 파서 라이브러리 선정 및 샘플 3개(`master`, `merge01`, `merge36`) 정밀 검증
 - [ ] `*.hhk` 기반 표제어 추출 정확도 테스트
 - [ ] `*.htm` 본문 정규화/언어 판별 규칙 확정
-- [ ] SQLite 인덱서/검색 API 구현
+- [ ] 영속 스토리지 전략 확정 및 통합(선택 사항)
 - [ ] 모바일/데스크탑 공용 검색 UX(자동완성/하이라이트/히스토리) 연결
 
 ## 10) 현재 구현된 Tauri 명령
 
-- `analyze_default_dataset()`: 기본 ZIP(`asset/dictionary_v77.zip`) 통계 분석
 - `analyze_zip_dataset(zipPath)`: 지정 ZIP 통계 분석
-- `preview_chm_paths(zipPath?, sampleLimit?)`: CHM별 HTML/HHK/HHC 경로 프리뷰
-- `extract_headwords_preview(zipPath?, chmFile?, sampleLimit?)`: CHM 내부 HTML 경로명 기반 표제어 샘플 추출(초기 버전)
-- `extract_headwords_from_hhk(zipPath?, chmFile?, sampleLimit?)`: CHM 바이너리 내 HHK `param name="Name"` 패턴 기반 표제어 샘플 추출(1차 구현)
-- `validate_dataset_pipeline(zipPath?)`: 전체 CHM을 순회하며 커버리지/표제어 추정치/경고를 생성하는 실행 검증 리포트
-- `build_master_features(debugRoot?)`: `master.hhc` + `merge*.htm`를 해석해 내용/색인/검색용 런타임 인덱스 로드
+- `start_master_build(debugRoot?)`: 런타임 인덱스 비동기 빌드 시작
+- `get_master_build_status(debugRoot?)`: 빌드 진행/완료 상태 조회
 - `get_master_contents(debugRoot?)`: 내용 탭 데이터(목차)
 - `get_index_entries(prefix?, limit?, debugRoot?)`: 색인 탭 데이터(접두어 조회)
 - `search_entries(query, limit?, debugRoot?)`: 검색 탭 데이터(본문 검색)
 - `get_entry_detail(id, debugRoot?)`: 본문 상세 조회
+- `get_content_page(local, sourcePath?, debugRoot?)`: 목차/링크 기반 본문 페이지 조회
+- `resolve_link_target(href, currentSourcePath?, currentLocal?, debugRoot?)`: 내부 링크 대상 해석
+- `resolve_media_data_url(href, currentSourcePath?, currentLocal?, debugRoot?)`: 이미지 등 미디어를 data URL로 변환
 
 ## 11) 참고 경로
 - `asset/dictionary_v77.zip`

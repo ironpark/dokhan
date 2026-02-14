@@ -4,59 +4,6 @@ fn analyze_zip_dataset(zip_path: String) -> Result<super::DatasetSummary, String
 }
 
 #[tauri::command]
-fn analyze_default_dataset() -> Result<super::DatasetSummary, String> {
-    super::analyze_default_dataset_impl()
-}
-
-#[tauri::command]
-fn preview_chm_paths(
-    zip_path: Option<String>,
-    sample_limit: Option<usize>,
-) -> Result<Vec<super::ChmPathPreview>, String> {
-    super::preview_chm_paths_impl(zip_path, sample_limit)
-}
-
-#[tauri::command]
-fn extract_headwords_preview(
-    zip_path: Option<String>,
-    chm_file: Option<String>,
-    sample_limit: Option<usize>,
-) -> Result<Vec<super::HeadwordPreview>, String> {
-    super::extract_headwords_preview_impl(zip_path, chm_file, sample_limit)
-}
-
-#[tauri::command]
-fn extract_headwords_from_hhk(
-    zip_path: Option<String>,
-    chm_file: Option<String>,
-    sample_limit: Option<usize>,
-) -> Result<Vec<super::HhkHeadwordPreview>, String> {
-    super::extract_headwords_from_hhk_impl(zip_path, chm_file, sample_limit)
-}
-
-#[tauri::command]
-fn validate_dataset_pipeline(
-    zip_path: Option<String>,
-) -> Result<super::DatasetValidationReport, String> {
-    super::validate_dataset_pipeline_impl(zip_path)
-}
-
-#[tauri::command]
-fn build_master_features(
-    debug_root: Option<String>,
-) -> Result<super::MasterFeatureSummary, String> {
-    super::build_master_features_impl(debug_root)
-}
-
-#[tauri::command]
-fn build_master_features_with_progress(
-    window: tauri::Window,
-    debug_root: Option<String>,
-) -> Result<super::MasterFeatureSummary, String> {
-    super::build_master_features_with_progress_impl(window, debug_root)
-}
-
-#[tauri::command]
 fn start_master_build(debug_root: Option<String>) -> Result<String, String> {
     super::start_master_build_impl(debug_root)
 }
@@ -136,13 +83,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             analyze_zip_dataset,
-            analyze_default_dataset,
-            preview_chm_paths,
-            extract_headwords_preview,
-            extract_headwords_from_hhk,
-            validate_dataset_pipeline,
-            build_master_features,
-            build_master_features_with_progress,
             start_master_build,
             get_master_build_status,
             get_master_contents,
