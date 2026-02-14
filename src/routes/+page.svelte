@@ -15,20 +15,22 @@
     let unlisten: (() => void) | undefined;
 
     (async () => {
-      unlisten = await getCurrentWebview().onDragDropEvent((event) => {
-        const payload = event.payload;
-        if (payload.type === "over") {
-          vm.dragOver = true;
-          return;
-        }
-        if (payload.type === "drop") {
+      if (!platformStore.isMobile) {
+        unlisten = await getCurrentWebview().onDragDropEvent((event) => {
+          const payload = event.payload;
+          if (payload.type === "over") {
+            vm.dragOver = true;
+            return;
+          }
+          if (payload.type === "drop") {
+            vm.dragOver = false;
+            const first = payload.paths?.[0];
+            if (first) void vm.useZipPath(first);
+            return;
+          }
           vm.dragOver = false;
-          const first = payload.paths?.[0];
-          if (first) void vm.useZipPath(first);
-          return;
-        }
-        vm.dragOver = false;
-      });
+        });
+      }
 
     })();
 
@@ -85,13 +87,20 @@
   <LoadProgress visible={vm.showProgress} progress={vm.progress} />
 
   {#if !vm.masterSummary}
-    <div class:drag-over={vm.dragOver} class="drop-shell">
-      <h1>독한 사전</h1>
-      <p><code>dictionary_v77.zip</code> 파일을 드롭하세요.</p>
-      <button type="button" class="pick-btn" onclick={onPickZipClick}
-        >ZIP 파일 선택</button
-      >
-    </div>
+    {#if platformStore.isMobile}
+      <section class="mobile-pick-shell" aria-label="ZIP 선택">
+        <h1>독한 사전</h1>
+        <p>german.kr에서 제공하는 사전 압축파일(ZIP)을 선택해 주세요.</p>
+        <button type="button" class="pick-btn" onclick={onPickZipClick}
+          >ZIP 파일 선택</button
+        >
+      </section>
+    {:else}
+      <div class:drag-over={vm.dragOver} class="drop-shell">
+        <h1>독한 사전</h1>
+        <p>german.kr에서 제공하는 사전 압축파일(ZIP)을 이 영역에 드롭해 주세요.</p>
+      </div>
+    {/if}
   {:else if platformStore.isMobile}
     <MobileLayout {vm} />
   {:else}
@@ -125,8 +134,9 @@
 
   .app-shell {
     height: 100vh;
-    display: grid;
-    grid-template-rows: auto 1fr;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   /* Utility / Shared Styles */
@@ -144,10 +154,35 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     text-align: center;
     background: var(--surface);
     transition: background 0.2s;
+  }
+
+  .mobile-pick-shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    text-align: center;
+    background: var(--surface);
+    padding: 24px;
+  }
+
+  .mobile-pick-shell h1 {
+    font-size: 24px;
+    margin: 0;
+  }
+
+  .mobile-pick-shell p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
   }
 
   .drag-over {
