@@ -2,12 +2,15 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use tauri::AppHandle;
+
 use crate::app::model::{
     BuildProgress, BuildStatus, ContentItem, ContentPage, EntryDetail, MasterFeatureSummary,
     RuntimeIndex, RuntimeSource,
 };
 use crate::resolve_runtime_source;
 use crate::runtime::search::{build_entry_search_keys, warm_search_index};
+use crate::runtime::storage::{load_runtime_cache, save_runtime_cache, PersistedRuntime};
 use crate::runtime::zip::{
     hydrate_zip_entry_detail, parse_runtime_from_zip_with_progress, read_content_page_from_zip,
 };
@@ -164,7 +167,25 @@ fn set_build_error_status(key: &str, message: &str, error: String) -> Result<(),
 /// # Errors
 ///
 /// Returns an error when CHM/ZIP parsing fails or status updates cannot be persisted.
-fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<RuntimeIndex>, String> {
+fn build_runtime_for_source(
+    app: &AppHandle,
+    source: &RuntimeSource,
+    key: &str,
+) -> Result<Arc<RuntimeIndex>, String> {
+    if let Some(persisted) = load_runtime_cache(app, source)? {
+        let runtime = Arc::new(build_runtime_index(
+            persisted.contents,
+            persisted.entries,
+            BTreeMap::new(),
+        ));
+        let _ = update_build_status(key, |st| {
+            st.phase = "cache".to_string();
+            st.message = "Loaded runtime cache".to_string();
+        });
+        warm_search_index(app, source, &runtime.entries)?;
+        return Ok(runtime);
+    }
+
     let runtime = match source {
         RuntimeSource::ZipPath(zip_path) => {
             let mut cb = |p: BuildProgress| {
@@ -183,14 +204,22 @@ fn build_runtime_for_source(source: &RuntimeSource, key: &str) -> Result<Arc<Run
         st.phase = "search-index".to_string();
         st.message = "Building search index".to_string();
     });
-    warm_search_index(source, &runtime.entries)?;
+    warm_search_index(app, source, &runtime.entries)?;
+    let _ = save_runtime_cache(
+        app,
+        source,
+        &PersistedRuntime {
+            contents: runtime.contents.clone(),
+            entries: runtime.entries.clone(),
+        },
+    );
     Ok(runtime)
 }
 
 /// Spawn detached worker that builds runtime and updates status.
-fn spawn_build_worker(source: RuntimeSource, key: String) {
+fn spawn_build_worker(app: AppHandle, source: RuntimeSource, key: String) {
     std::thread::spawn(move || {
-        let runtime = match build_runtime_for_source(&source, &key) {
+        let runtime = match build_runtime_for_source(&app, &source, &key) {
             Ok(runtime) => runtime,
             Err(err) => {
                 let _ = set_build_error_status(&key, "Failed parsing zip/chm", err);
@@ -227,14 +256,32 @@ pub(crate) fn build_runtime_index(
 /// # Errors
 ///
 /// Returns an error when parsing fails or cache/status storage is unavailable.
-pub(crate) fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, String> {
+pub(crate) fn get_runtime(app: &AppHandle, source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, String> {
     if let Some(v) = cache_get(source)? {
         return Ok(v);
+    }
+    if let Some(persisted) = load_runtime_cache(app, source)? {
+        let runtime = Arc::new(build_runtime_index(
+            persisted.contents,
+            persisted.entries,
+            BTreeMap::new(),
+        ));
+        warm_search_index(app, source, &runtime.entries)?;
+        cache_put(source, runtime.clone())?;
+        return Ok(runtime);
     }
     let runtime = match source {
         RuntimeSource::ZipPath(zip_path) => Arc::new(parse_runtime_from_zip_with_progress(zip_path, None)?),
     };
-    warm_search_index(source, &runtime.entries)?;
+    warm_search_index(app, source, &runtime.entries)?;
+    let _ = save_runtime_cache(
+        app,
+        source,
+        &PersistedRuntime {
+            contents: runtime.contents.clone(),
+            entries: runtime.entries.clone(),
+        },
+    );
     cache_put(source, runtime.clone())?;
     Ok(runtime)
 }
@@ -246,8 +293,8 @@ pub(crate) fn get_runtime(source: &RuntimeSource) -> Result<Arc<RuntimeIndex>, S
 /// # Errors
 ///
 /// Returns an error when source resolution fails or status/cache storage is unavailable.
-pub(crate) fn start_master_build_impl(zip_path: Option<String>) -> Result<String, String> {
-    let source = resolve_runtime_source(zip_path)?;
+pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>) -> Result<String, String> {
+    let source = resolve_runtime_source(app, zip_path)?;
     let key = status_key(&source);
 
     if let Some(runtime) = cache_get(&source)? {
@@ -276,7 +323,7 @@ pub(crate) fn start_master_build_impl(zip_path: Option<String>) -> Result<String
         },
     )?;
 
-    spawn_build_worker(source, key.clone());
+    spawn_build_worker(app.clone(), source, key.clone());
 
     Ok(key)
 }
@@ -287,9 +334,10 @@ pub(crate) fn start_master_build_impl(zip_path: Option<String>) -> Result<String
 ///
 /// Returns an error when source resolution fails or status storage is unavailable.
 pub(crate) fn get_master_build_status_impl(
+    app: &AppHandle,
     zip_path: Option<String>,
 ) -> Result<BuildStatus, String> {
-    let source = resolve_runtime_source(zip_path)?;
+    let source = resolve_runtime_source(app, zip_path)?;
     let key = status_key(&source);
     if let Some(st) = get_build_status_internal(&key)? {
         return Ok(st);
@@ -311,9 +359,9 @@ pub(crate) fn get_master_build_status_impl(
 /// # Errors
 ///
 /// Returns an error when source resolution or runtime loading fails.
-pub(crate) fn get_master_contents_impl(zip_path: Option<String>) -> Result<Vec<ContentItem>, String> {
-    let source = resolve_runtime_source(zip_path)?;
-    Ok(get_runtime(&source)?.contents.clone())
+pub(crate) fn get_master_contents_impl(app: &AppHandle, zip_path: Option<String>) -> Result<Vec<ContentItem>, String> {
+    let source = resolve_runtime_source(app, zip_path)?;
+    Ok(get_runtime(app, &source)?.contents.clone())
 }
 
 /// Return entry detail and hydrate body text/html when needed.
@@ -321,9 +369,13 @@ pub(crate) fn get_master_contents_impl(zip_path: Option<String>) -> Result<Vec<C
 /// # Errors
 ///
 /// Returns an error when source resolution/runtime loading fails or the entry id does not exist.
-pub(crate) fn get_entry_detail_impl(id: usize, zip_path: Option<String>) -> Result<EntryDetail, String> {
-    let source = resolve_runtime_source(zip_path)?;
-    let runtime = get_runtime(&source)?;
+pub(crate) fn get_entry_detail_impl(
+    app: &AppHandle,
+    id: usize,
+    zip_path: Option<String>,
+) -> Result<EntryDetail, String> {
+    let source = resolve_runtime_source(app, zip_path)?;
+    let runtime = get_runtime(app, &source)?;
     let entry = runtime
         .entries
         .iter()
@@ -342,6 +394,7 @@ pub(crate) fn get_entry_detail_impl(id: usize, zip_path: Option<String>) -> Resu
 ///
 /// Returns an error when source resolution/runtime loading fails or the content page is missing.
 pub(crate) fn get_content_page_impl(
+    app: &AppHandle,
     local: &str,
     source_path: Option<&str>,
     zip_path: Option<String>,
@@ -349,10 +402,10 @@ pub(crate) fn get_content_page_impl(
     let source_path = source_path
         .unwrap_or("master.chm")
         .to_ascii_lowercase();
-    let source = resolve_runtime_source(zip_path)?;
+    let source = resolve_runtime_source(app, zip_path)?;
     match &source {
         RuntimeSource::ZipPath(zip_path) => {
-            let runtime = get_runtime(&source)?;
+            let runtime = get_runtime(app, &source)?;
             if source_path == "master.chm" {
                 if let Some(v) = runtime.content_pages.get(local).cloned() {
                     return Ok(v);

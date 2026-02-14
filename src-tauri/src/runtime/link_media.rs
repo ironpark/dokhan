@@ -1,5 +1,6 @@
 //! Internal hyperlink and media path resolution for CHM-rendered HTML.
 use base64::Engine as _;
+use tauri::AppHandle;
 
 use crate::chm;
 use crate::app::model::{LinkTarget, RuntimeSource};
@@ -168,6 +169,7 @@ pub(crate) fn read_chm_binary_object(chm: &mut chm::ChmArchive, local: &str) -> 
 ///
 /// Returns an error for unsupported hrefs, invalid runtime source, or missing media objects.
 fn resolve_media_data_url_inner(
+    app: &AppHandle,
     href: &str,
     current_source_path: Option<&str>,
     current_local: Option<&str>,
@@ -180,7 +182,7 @@ fn resolve_media_data_url_inner(
     let source_path = source_override
         .or(current_source_path.map(|x| x.to_ascii_lowercase()))
         .unwrap_or_else(|| "master.chm".to_string());
-    let bytes = match resolve_runtime_source(zip_path)? {
+    let bytes = match resolve_runtime_source(app, zip_path)? {
         RuntimeSource::ZipPath(zip_path) => {
             let mut chm = open_named_chm_from_zip(&zip_path, &source_path)?;
             read_chm_binary_object(&mut chm, &resolved_local)
@@ -198,12 +200,13 @@ fn resolve_media_data_url_inner(
 ///
 /// Returns an error for unsupported hrefs, invalid runtime source, or missing media objects.
 pub(crate) fn resolve_media_data_url_impl(
+    app: &AppHandle,
     href: &str,
     current_source_path: Option<&str>,
     current_local: Option<&str>,
     zip_path: Option<String>,
 ) -> Result<String, String> {
-    resolve_media_data_url_inner(href, current_source_path, current_local, zip_path)
+    resolve_media_data_url_inner(app, href, current_source_path, current_local, zip_path)
 }
 
 /// Resolve link href to content page or dictionary entry target.
@@ -212,6 +215,7 @@ pub(crate) fn resolve_media_data_url_impl(
 ///
 /// Returns an error for unsupported hrefs or when runtime/source resolution fails.
 pub(crate) fn resolve_link_target_impl(
+    app: &AppHandle,
     href: &str,
     current_source_path: Option<&str>,
     current_local: Option<&str>,
@@ -224,8 +228,8 @@ pub(crate) fn resolve_link_target_impl(
         .or(current_source_path.map(|x| x.to_ascii_lowercase()))
         .unwrap_or_else(|| "master.chm".to_string());
     let local_path = resolve_relative_local(&local_raw, current_local, is_absolute);
-    let source = resolve_runtime_source(zip_path)?;
-    let runtime = get_runtime(&source)?;
+    let source = resolve_runtime_source(app, zip_path)?;
+    let runtime = get_runtime(app, &source)?;
 
     let local_lower = local_path.to_ascii_lowercase();
     let local_stem_key = normalize_search_key(&path_stem(&local_path));

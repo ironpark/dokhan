@@ -13,20 +13,20 @@ export function prepareZipSource(path: string): Promise<string> {
   return invoke<string>('prepare_zip_source', { path });
 }
 
-export function startMasterBuild(zipPath: string): Promise<string> {
+export function startMasterBuild(zipPath: string | null = null): Promise<string> {
   return invoke<string>('start_master_build', { zipPath });
 }
 
-export function getMasterBuildStatus(zipPath: string): Promise<BuildStatus> {
+export function getMasterBuildStatus(zipPath: string | null = null): Promise<BuildStatus> {
   return invoke<BuildStatus>('get_master_build_status', { zipPath });
 }
 
-export function getMasterContents(zipPath: string): Promise<ContentItem[]> {
+export function getMasterContents(zipPath: string | null = null): Promise<ContentItem[]> {
   return invoke<ContentItem[]>('get_master_contents', { zipPath });
 }
 
 export function getIndexEntries(
-  zipPath: string,
+  zipPath: string | null,
   prefix: string,
   limit: number | null = null
 ): Promise<DictionaryIndexEntry[]> {
@@ -34,19 +34,19 @@ export function getIndexEntries(
 }
 
 export function searchEntries(
-  zipPath: string,
+  zipPath: string | null,
   query: string,
   limit = 200
 ): Promise<SearchHit[]> {
   return invoke<SearchHit[]>('search_entries', { query, limit, zipPath });
 }
 
-export function getEntryDetail(zipPath: string, id: number): Promise<EntryDetail> {
+export function getEntryDetail(zipPath: string | null, id: number): Promise<EntryDetail> {
   return invoke<EntryDetail>('get_entry_detail', { id, zipPath });
 }
 
 export function getContentPage(
-  zipPath: string,
+  zipPath: string | null,
   local: string,
   sourcePath: string | null = null
 ): Promise<ContentPage> {
@@ -54,7 +54,7 @@ export function getContentPage(
 }
 
 export function resolveLinkTarget(
-  zipPath: string,
+  zipPath: string | null,
   href: string,
   currentSourcePath: string | null,
   currentLocal: string | null
@@ -68,7 +68,7 @@ export function resolveLinkTarget(
 }
 
 export function resolveMediaDataUrl(
-  zipPath: string,
+  zipPath: string | null,
   href: string,
   currentSourcePath: string | null,
   currentLocal: string | null

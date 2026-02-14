@@ -6,16 +6,26 @@ mod runtime;
 
 pub use app::commands::run;
 use crate::app::model::RuntimeSource;
+use tauri::AppHandle;
 
 /// Resolve runtime source from optional ZIP path argument.
 ///
 /// # Errors
 ///
 /// Returns an error when `zip_path` is missing or does not resolve to an existing ZIP file.
-fn resolve_runtime_source(input: Option<String>) -> Result<RuntimeSource, String> {
+fn resolve_runtime_source(app: &AppHandle, input: Option<String>) -> Result<RuntimeSource, String> {
     match input {
-        Some(raw) => Ok(RuntimeSource::ZipPath(parsing::dataset::resolve_zip_path(&raw)?)),
-        None => Err("zip path is required".to_string()),
+        Some(raw) => {
+            let resolved = parsing::dataset::resolve_zip_path(&raw)?;
+            let managed = runtime::storage::ensure_managed_zip_copy(app, &resolved)?;
+            Ok(RuntimeSource::ZipPath(managed))
+        }
+        None => {
+            if let Some(found) = runtime::storage::latest_managed_zip(app)? {
+                return Ok(RuntimeSource::ZipPath(found));
+            }
+            Err("zip path is required (no managed zip cache found)".to_string())
+        }
     }
 }
 

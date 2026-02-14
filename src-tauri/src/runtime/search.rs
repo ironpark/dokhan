@@ -1,7 +1,10 @@
 //! In-memory index and full-text search utilities.
 use std::collections::{BTreeMap, HashMap};
+use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use tauri::AppHandle;
 use tantivy::collector::TopDocs;
 use tantivy::doc;
 use tantivy::query::QueryParser;
@@ -9,15 +12,22 @@ use tantivy::schema::{Field, Schema, TantivyDocument, Value, INDEXED, STORED, TE
 use tantivy::{Index, IndexReader, ReloadPolicy};
 
 use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit};
-use crate::parsing::text::compact_ws;
 use crate::app::model::RuntimeSource;
+use crate::parsing::text::compact_ws;
 use crate::runtime::state::get_runtime;
+use crate::runtime::storage::search_index_dir;
 use crate::resolve_runtime_source;
 
 static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<TantivySearchIndex>>>> = OnceLock::new();
 static NORMALIZE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static NORMALIZE_LOOSE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 const NORMALIZE_CACHE_MAX: usize = 65_536;
+const SEARCH_INDEX_WRITER_HEAP_BYTES: usize = 50_000_000;
+
+const FIELD_ID: &str = "id";
+const FIELD_HEADWORD: &str = "headword";
+const FIELD_ALIASES: &str = "aliases";
+const FIELD_BODY: &str = "body";
 
 #[derive(Clone)]
 struct TantivySearchIndex {
@@ -40,17 +50,66 @@ fn source_key(source: &RuntimeSource) -> String {
     }
 }
 
-fn build_tantivy_index(entries: &[EntryDetail]) -> Result<TantivySearchIndex, String> {
+fn tantivy_schema() -> Schema {
     let mut schema_builder = Schema::builder();
-    let id_field = schema_builder.add_u64_field("id", INDEXED | STORED);
-    let headword_field = schema_builder.add_text_field("headword", TEXT);
-    let aliases_field = schema_builder.add_text_field("aliases", TEXT);
-    let body_field = schema_builder.add_text_field("body", TEXT);
-    let schema = schema_builder.build();
+    let _ = schema_builder.add_u64_field(FIELD_ID, INDEXED | STORED);
+    let _ = schema_builder.add_text_field(FIELD_HEADWORD, TEXT);
+    let _ = schema_builder.add_text_field(FIELD_ALIASES, TEXT);
+    let _ = schema_builder.add_text_field(FIELD_BODY, TEXT);
+    schema_builder.build()
+}
 
-    let index = Index::create_in_ram(schema);
+fn extract_fields(index: &Index) -> Result<(Field, Field, Field, Field), String> {
+    let schema = index.schema();
+    let id_field = schema
+        .get_field(FIELD_ID)
+        .map_err(|_| "tantivy index schema missing id field".to_string())?;
+    let headword_field = schema
+        .get_field(FIELD_HEADWORD)
+        .map_err(|_| "tantivy index schema missing headword field".to_string())?;
+    let aliases_field = schema
+        .get_field(FIELD_ALIASES)
+        .map_err(|_| "tantivy index schema missing aliases field".to_string())?;
+    let body_field = schema
+        .get_field(FIELD_BODY)
+        .map_err(|_| "tantivy index schema missing body field".to_string())?;
+    Ok((id_field, headword_field, aliases_field, body_field))
+}
+
+fn load_search_index(dir: &Path) -> Result<TantivySearchIndex, String> {
+    let index = Index::open_in_dir(dir).map_err(|e| format!("tantivy open failed: {e}"))?;
+    let (id_field, headword_field, aliases_field, body_field) = extract_fields(&index)?;
+    let reader = index
+        .reader_builder()
+        .reload_policy(ReloadPolicy::Manual)
+        .try_into()
+        .map_err(|e| format!("tantivy reader init failed: {e}"))?;
+    reader
+        .reload()
+        .map_err(|e| format!("tantivy reader reload failed: {e}"))?;
+
+    Ok(TantivySearchIndex {
+        index,
+        reader,
+        id_field,
+        headword_field,
+        aliases_field,
+        body_field,
+    })
+}
+
+fn rebuild_search_index(dir: &Path, entries: &[EntryDetail]) -> Result<TantivySearchIndex, String> {
+    if dir.exists() {
+        fs::remove_dir_all(dir).map_err(|e| format!("failed to clear search index dir: {e}"))?;
+    }
+    fs::create_dir_all(dir).map_err(|e| format!("failed to create search index dir: {e}"))?;
+
+    let schema = tantivy_schema();
+    let index = Index::create_in_dir(dir, schema).map_err(|e| format!("tantivy create failed: {e}"))?;
+    let (id_field, headword_field, aliases_field, body_field) = extract_fields(&index)?;
+
     let mut writer = index
-        .writer(50_000_000)
+        .writer(SEARCH_INDEX_WRITER_HEAP_BYTES)
         .map_err(|e| format!("tantivy writer init failed: {e}"))?;
     for entry in entries {
         let aliases = entry.aliases.join(" ");
@@ -64,6 +123,7 @@ fn build_tantivy_index(entries: &[EntryDetail]) -> Result<TantivySearchIndex, St
     writer
         .commit()
         .map_err(|e| format!("tantivy commit failed: {e}"))?;
+
     let reader = index
         .reader_builder()
         .reload_policy(ReloadPolicy::Manual)
@@ -84,6 +144,7 @@ fn build_tantivy_index(entries: &[EntryDetail]) -> Result<TantivySearchIndex, St
 }
 
 fn get_or_build_tantivy_index(
+    app: &AppHandle,
     source: &RuntimeSource,
     entries: &[EntryDetail],
 ) -> Result<Arc<TantivySearchIndex>, String> {
@@ -98,7 +159,11 @@ fn get_or_build_tantivy_index(
         }
     }
 
-    let built = Arc::new(build_tantivy_index(entries)?);
+    let dir = search_index_dir(app, source)?;
+    let built = match load_search_index(&dir) {
+        Ok(index) => Arc::new(index),
+        Err(_) => Arc::new(rebuild_search_index(&dir, entries)?),
+    };
     let mut guard = cache
         .lock()
         .map_err(|_| "search cache lock poisoned".to_string())?;
@@ -112,10 +177,11 @@ fn get_or_build_tantivy_index(
 ///
 /// Returns an error when Tantivy index creation fails.
 pub(crate) fn warm_search_index(
+    app: &AppHandle,
     source: &RuntimeSource,
     entries: &[EntryDetail],
 ) -> Result<(), String> {
-    let _ = get_or_build_tantivy_index(source, entries)?;
+    let _ = get_or_build_tantivy_index(app, source, entries)?;
     Ok(())
 }
 
@@ -225,12 +291,13 @@ pub(crate) fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearc
 
 /// Return index rows, optionally filtered by prefix.
 pub(crate) fn get_index_entries_impl(
+    app: &AppHandle,
     prefix: Option<String>,
     limit: Option<usize>,
     zip_path: Option<String>,
 ) -> Result<Vec<DictionaryIndexEntry>, String> {
-    let source = resolve_runtime_source(zip_path)?;
-    let runtime = get_runtime(&source)?;
+    let source = resolve_runtime_source(app, zip_path)?;
+    let runtime = get_runtime(app, &source)?;
     let p = prefix.unwrap_or_default();
     let p_key = normalize_search_key(&p);
     let p_loose = normalize_search_key_loose(&p);
@@ -305,12 +372,13 @@ fn search_entries_linear(query: &str, limit: usize, entries: &[EntryDetail], key
 }
 
 fn search_entries_tantivy(
+    app: &AppHandle,
     source: &RuntimeSource,
     query: &str,
     limit: usize,
     entries: &[EntryDetail],
 ) -> Result<Vec<SearchHit>, String> {
-    let idx = get_or_build_tantivy_index(source, entries)?;
+    let idx = get_or_build_tantivy_index(app, source, entries)?;
     let mut parser = QueryParser::for_index(
         &idx.index,
         vec![idx.headword_field, idx.aliases_field, idx.body_field],
@@ -357,6 +425,7 @@ fn search_entries_tantivy(
 
 /// Execute weighted in-memory search over headword/aliases/body.
 pub(crate) fn search_entries_impl(
+    app: &AppHandle,
     query: &str,
     limit: Option<usize>,
     zip_path: Option<String>,
@@ -365,10 +434,10 @@ pub(crate) fn search_entries_impl(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let source = resolve_runtime_source(zip_path)?;
-    let runtime = get_runtime(&source)?;
+    let source = resolve_runtime_source(app, zip_path)?;
+    let runtime = get_runtime(app, &source)?;
     let limit = limit.unwrap_or(50).clamp(1, 200);
-    match search_entries_tantivy(&source, &q, limit, &runtime.entries) {
+    match search_entries_tantivy(app, &source, &q, limit, &runtime.entries) {
         Ok(v) => Ok(v),
         Err(_) => Ok(search_entries_linear(
             &q,

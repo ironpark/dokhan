@@ -89,8 +89,8 @@ fn prepare_zip_source(path: String, app: tauri::AppHandle) -> Result<String, Str
 ///
 /// Returns an error when `zip_path` is missing/invalid or status storage cannot be updated.
 #[tauri::command]
-fn start_master_build(zip_path: Option<String>) -> Result<String, String> {
-    start_master_build_impl(zip_path)
+fn start_master_build(zip_path: Option<String>, app: tauri::AppHandle) -> Result<String, String> {
+    start_master_build_impl(&app, zip_path)
 }
 
 /// Get current asynchronous build status for the given ZIP source.
@@ -101,8 +101,9 @@ fn start_master_build(zip_path: Option<String>) -> Result<String, String> {
 #[tauri::command]
 fn get_master_build_status(
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<BuildStatus, String> {
-    get_master_build_status_impl(zip_path)
+    get_master_build_status_impl(&app, zip_path)
 }
 
 /// Return parsed content tree entries.
@@ -113,8 +114,9 @@ fn get_master_build_status(
 #[tauri::command]
 fn get_master_contents(
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<ContentItem>, String> {
-    get_master_contents_impl(zip_path)
+    get_master_contents_impl(&app, zip_path)
 }
 
 /// Return index rows with optional prefix filtering.
@@ -127,8 +129,9 @@ fn get_index_entries(
     prefix: Option<String>,
     limit: Option<usize>,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<DictionaryIndexEntry>, String> {
-    get_index_entries_impl(prefix, limit, zip_path)
+    get_index_entries_impl(&app, prefix, limit, zip_path)
 }
 
 /// Run full-text search against in-memory runtime index.
@@ -141,8 +144,9 @@ fn search_entries(
     query: String,
     limit: Option<usize>,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<SearchHit>, String> {
-    search_entries_impl(&query, limit, zip_path)
+    search_entries_impl(&app, &query, limit, zip_path)
 }
 
 /// Load a dictionary entry detail by stable runtime id.
@@ -154,8 +158,9 @@ fn search_entries(
 fn get_entry_detail(
     id: usize,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<EntryDetail, String> {
-    get_entry_detail_impl(id, zip_path)
+    get_entry_detail_impl(&app, id, zip_path)
 }
 
 /// Read a content page by local path and optional source CHM.
@@ -168,8 +173,9 @@ fn get_content_page(
     local: String,
     source_path: Option<String>,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<ContentPage, String> {
-    get_content_page_impl(&local, source_path.as_deref(), zip_path)
+    get_content_page_impl(&app, &local, source_path.as_deref(), zip_path)
 }
 
 /// Resolve an internal CHM hyperlink to either content or entry target.
@@ -183,8 +189,10 @@ fn resolve_link_target(
     current_source_path: Option<String>,
     current_local: Option<String>,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<LinkTarget, String> {
     resolve_link_target_impl(
+        &app,
         &href,
         current_source_path.as_deref(),
         current_local.as_deref(),
@@ -203,8 +211,10 @@ fn resolve_media_data_url(
     current_source_path: Option<String>,
     current_local: Option<String>,
     zip_path: Option<String>,
+    app: tauri::AppHandle,
 ) -> Result<String, String> {
     resolve_media_data_url_impl(
+        &app,
         &href,
         current_source_path.as_deref(),
         current_local.as_deref(),

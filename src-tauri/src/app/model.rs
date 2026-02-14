@@ -1,5 +1,5 @@
 //! Serializable API models and runtime data structures shared across modules.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -44,7 +44,7 @@ pub(crate) struct MainVolumeCoverage {
     pub(crate) covered: bool,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ContentItem {
     pub(crate) title: String,
@@ -70,7 +70,7 @@ pub(crate) struct SearchHit {
     pub(crate) snippet: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct EntryDetail {
     pub(crate) id: usize,

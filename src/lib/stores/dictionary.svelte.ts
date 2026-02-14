@@ -34,7 +34,7 @@ function toErrorMessage(errorValue: unknown): string {
 export class DictionaryStore {
   loading = $state(false);
   error = $state('');
-  zipPath = $state('asset/dictionary_v77.zip');
+  zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
 
   masterSummary = $state<MasterFeatureSummary | null>(null);
@@ -94,14 +94,22 @@ export class DictionaryStore {
   }
 
   async bootMasterFeatures() {
+    await this.#bootMasterFeaturesWithPath(this.zipPath);
+  }
+
+  async bootFromManagedCache() {
+    await this.#bootMasterFeaturesWithPath(null, true);
+  }
+
+  async #bootMasterFeaturesWithPath(zipPath: string | null, silentNoCache = false) {
     this.loading = true;
     this.error = '';
     this.showProgress = true;
     this.progress = { phase: 'start', current: 0, total: 1, message: '초기화 중' };
     try {
-      await startMasterBuild(this.zipPath);
+      await startMasterBuild(zipPath);
       while (true) {
-        const status = await getMasterBuildStatus(this.zipPath);
+        const status = await getMasterBuildStatus(zipPath);
         this.progress = {
           phase: status.phase,
           current: status.current,
@@ -114,6 +122,7 @@ export class DictionaryStore {
             throw new Error(status.error ?? '빌드 실패');
           }
           this.masterSummary = status.summary;
+          this.zipPath = status.summary?.zipPath ?? zipPath;
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, BUILD_POLL_MS));
@@ -133,7 +142,12 @@ export class DictionaryStore {
         await this.openContent(this.contents[0].local);
       }
     } catch (e) {
-      this.error = toErrorMessage(e);
+      const message = toErrorMessage(e);
+      if (silentNoCache && message.includes('no managed zip cache found')) {
+        this.error = '';
+      } else {
+        this.error = message;
+      }
     } finally {
       this.showProgress = false;
       this.loading = false;
@@ -147,7 +161,7 @@ export class DictionaryStore {
       return;
     }
     this.zipPath = nextPath;
-    await this.bootMasterFeatures();
+    await this.#bootMasterFeaturesWithPath(nextPath);
   }
 
   async pickZipFile() {

@@ -15,6 +15,8 @@
     let unlisten: (() => void) | undefined;
 
     (async () => {
+      await vm.bootFromManagedCache();
+
       if (!platformStore.isMobile) {
         unlisten = await getCurrentWebview().onDragDropEvent((event) => {
           const payload = event.payload;
