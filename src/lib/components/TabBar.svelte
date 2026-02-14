@@ -25,6 +25,7 @@
   }
 
   button {
+    position: relative;
     border: 0;
     border-right: 1px solid var(--line);
     border-radius: 0;
@@ -39,7 +40,13 @@
     border-right: 0;
   }
 
+  button:hover {
+    background: #ece6d8;
+  }
+
   button.active {
-    background: var(--accent-2);
+    background: #e3efe9;
+    color: #0d4f40;
+    box-shadow: inset 0 -2px 0 #0f6c58;
   }
 </style>
