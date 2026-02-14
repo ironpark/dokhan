@@ -91,6 +91,11 @@ pub(crate) fn body_html(text: &str) -> Option<String> {
     Some(text[tag_end + 1..b_end].to_string())
 }
 
+/// Sanitize HTML fragment to prevent script/event-handler execution in webview.
+pub(crate) fn sanitize_html_fragment(fragment: &str) -> String {
+    ammonia::Builder::default().clean(fragment).to_string()
+}
+
 /// Extract first `<b>` text from first paragraph.
 pub(crate) fn extract_first_bold_text(text: &str) -> Option<String> {
     let p_html = first_paragraph_html(text)?;

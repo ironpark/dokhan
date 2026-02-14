@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { Snippet } from "svelte";
+    import type { HTMLInputAttributes } from "svelte/elements";
 
     let {
         value = $bindable(""),
@@ -9,14 +10,12 @@
         class: className = "",
         oninput,
         ...rest
-    }: {
+    }: HTMLInputAttributes & {
         value?: string;
         placeholder?: string;
         readonly?: boolean;
         icon?: Snippet;
         class?: string;
-        oninput?: (e: Event) => void;
-        [key: string]: any;
     } = $props();
 </script>
 
@@ -32,6 +31,10 @@
         {readonly}
         class:has-icon={!!icon}
         {oninput}
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
         {...rest}
     />
 </div>

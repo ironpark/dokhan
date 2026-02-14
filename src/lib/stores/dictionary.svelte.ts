@@ -1,6 +1,5 @@
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
-  analyzeZipDataset,
   getContentPage,
   getEntryDetail,
   getIndexEntries,
@@ -69,16 +68,6 @@ export class DictionaryStore {
     }
   }
 
-  async tryAutoBootDefaultZip() {
-    if (this.masterSummary || this.loading) return;
-    try {
-      await analyzeZipDataset(this.zipPath);
-      await this.bootMasterFeatures();
-    } catch {
-      // Keep drop-zone UI when default zip is not available.
-    }
-  }
-
   async #withLoading<T>(task: () => Promise<T>): Promise<T | undefined> {
     this.loading = true;
     this.error = '';
@@ -98,6 +87,10 @@ export class DictionaryStore {
     this.selectedContent = null;
     this.selectedContentLocal = '';
     this.detailMode = 'none';
+  }
+
+  closeDetail() {
+    this.#clearSelection();
   }
 
   async bootMasterFeatures() {
@@ -154,8 +147,6 @@ export class DictionaryStore {
       return;
     }
     this.zipPath = nextPath;
-    const ok = await this.#withLoading(() => analyzeZipDataset(nextPath));
-    if (!ok) return;
     await this.bootMasterFeatures();
   }
 

@@ -30,7 +30,6 @@
         vm.dragOver = false;
       });
 
-      await vm.tryAutoBootDefaultZip();
     })();
 
     return () => {
@@ -44,7 +43,7 @@
     const text = vm.error;
     try {
       await writeText(text);
-      copyMessage = "Copied";
+      copyMessage = "복사됨";
       setTimeout(() => {
         copyMessage = "";
       }, 1200);
@@ -56,7 +55,7 @@
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        copyMessage = "Copied";
+        copyMessage = "복사됨";
         setTimeout(() => {
           copyMessage = "";
         }, 1200);
@@ -75,7 +74,7 @@
     <div class="error-box">
       <pre>{vm.error}</pre>
       <button type="button" class="copy-btn" onclick={copyErrorText}
-        >Copy</button
+        >복사</button
       >
       {#if copyMessage}
         <small>{copyMessage}</small>
@@ -87,10 +86,10 @@
 
   {#if !vm.masterSummary}
     <div class:drag-over={vm.dragOver} class="drop-shell">
-      <h1>German-Korean<br />Dictionary</h1>
-      <p>Drop <code>dictionary_v77.zip</code> here.</p>
+      <h1>독한 사전</h1>
+      <p><code>dictionary_v77.zip</code> 파일을 드롭하세요.</p>
       <button type="button" class="pick-btn" onclick={onPickZipClick}
-        >Select ZIP File</button
+        >ZIP 파일 선택</button
       >
     </div>
   {:else if platformStore.isMobile}

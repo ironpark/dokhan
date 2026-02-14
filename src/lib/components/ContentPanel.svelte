@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ContentItem } from "$lib/types/dictionary";
+  import { createVirtualizer } from "@tanstack/svelte-virtual";
   import ListItem from "$lib/components/ui/ListItem.svelte";
 
   let {
@@ -12,75 +13,72 @@
     onOpen: (local: string) => void;
   } = $props();
 
-  const rowHeight = 38;
-  const overscan = 8;
-
   let listEl = $state<HTMLElement | null>(null);
-  let scrollTop = $state(0);
-  let viewportHeight = $state(0);
 
-  const totalCount = $derived(items.length);
-  const visibleCount = $derived(
-    Math.ceil(viewportHeight / rowHeight) + overscan * 2,
-  );
-  const startIndex = $derived.by(() => {
-    const raw = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
-    const maxStart = Math.max(0, totalCount - visibleCount);
-    return Math.min(raw, maxStart);
+  const virtualizer = createVirtualizer({
+    count: 0,
+    getScrollElement: () => listEl,
+    estimateSize: () => 38,
+    overscan: 5,
   });
-  const endIndex = $derived(Math.min(totalCount, startIndex + visibleCount));
-  const topSpacer = $derived(startIndex * rowHeight);
-  const bottomSpacer = $derived((totalCount - endIndex) * rowHeight);
-  const visibleItems = $derived(items.slice(startIndex, endIndex));
 
-  function handleScroll() {
-    if (!listEl) return;
-    scrollTop = listEl.scrollTop;
-    viewportHeight = listEl.clientHeight;
-  }
+  let lastItemCount = $state(0);
+  $effect(() => {
+    if (items.length !== lastItemCount) {
+      lastItemCount = items.length;
+      $virtualizer.scrollToIndex(0);
+    }
+    $virtualizer.setOptions({
+      count: items.length,
+      getScrollElement: () => listEl,
+    });
+    requestAnimationFrame(() => {
+      $virtualizer.measure();
+    });
+  });
 
   $effect(() => {
-    viewportHeight = listEl?.clientHeight ?? 0;
+    if (!listEl) return;
+    const ro = new ResizeObserver(() => {
+      $virtualizer.measure();
+    });
+    ro.observe(listEl);
+    return () => ro.disconnect();
   });
+
+  const virtualRows = $derived($virtualizer.getVirtualItems());
+  const totalSize = $derived($virtualizer.getTotalSize());
 </script>
 
-<ul class="entry-list" bind:this={listEl} onscroll={handleScroll}>
-  {#if topSpacer > 0}
-    <li class="spacer" style={`height:${topSpacer}px`} aria-hidden="true"></li>
-  {/if}
-  {#each visibleItems as item}
-    <ListItem
-      selected={selectedLocal === item.local}
-      onclick={() => onOpen(item.local)}
-    >
-      {item.title}
-    </ListItem>
-  {/each}
-  {#if bottomSpacer > 0}
-    <li
-      class="spacer"
-      style={`height:${bottomSpacer}px`}
-      aria-hidden="true"
-    ></li>
-  {/if}
-</ul>
+<div class="entry-list" bind:this={listEl}>
+  <div style="height: {totalSize}px; width: 100%; position: relative;">
+    {#each virtualRows as row (row.index)}
+      <div
+        style="position: absolute; top: 0; left: 0; width: 100%; height: {row.size}px; transform: translateY({row.start}px);"
+      >
+        {#if items[row.index]}
+          <ListItem
+            selected={selectedLocal === items[row.index].local}
+            onclick={() => onOpen(items[row.index].local)}
+          >
+            {items[row.index].title}
+          </ListItem>
+        {/if}
+      </div>
+    {/each}
+  </div>
+</div>
 
 <style>
   .entry-list {
     margin: 0;
-    padding: 10px;
+    padding: 0;
     list-style: none;
     min-height: 0;
     height: 100%;
     box-sizing: border-box;
     overflow-y: auto;
     scrollbar-gutter: stable;
-  }
-
-  .spacer {
-    border: 0;
-    padding: 0;
-    margin: 0;
-    pointer-events: none;
+    position: relative;
   }
 </style>

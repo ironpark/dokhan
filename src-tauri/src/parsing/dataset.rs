@@ -1,12 +1,15 @@
 //! ZIP dataset path resolution and summary/statistics extraction.
+#[cfg(test)]
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use zip::ZipArchive;
 
+#[cfg(test)]
 use crate::app::model::{DatasetSummary, FileTypeCount, MainVolumeCoverage};
 
+#[cfg(test)]
 fn basename_lower(name: &str) -> String {
     name.rsplit(['/', '\\'])
         .next()
@@ -25,6 +28,7 @@ pub(crate) fn open_zip_archive(path: &Path) -> Result<ZipArchive<File>, String> 
 }
 
 /// Compute coverage for merge01..merge36 including split volumes.
+#[cfg(test)]
 pub(crate) fn build_main_volume_coverage(names: &[String]) -> Vec<MainVolumeCoverage> {
     let base_names = names.iter().map(|name| basename_lower(name)).collect::<Vec<_>>();
     let name_set: BTreeSet<_> = base_names.iter().cloned().collect();
@@ -52,6 +56,7 @@ pub(crate) fn build_main_volume_coverage(names: &[String]) -> Vec<MainVolumeCove
 /// # Errors
 ///
 /// Returns an error when ZIP iteration fails.
+#[cfg(test)]
 pub(crate) fn summarize_zip(zip_path: &Path) -> Result<DatasetSummary, String> {
     let mut archive = open_zip_archive(zip_path)?;
 

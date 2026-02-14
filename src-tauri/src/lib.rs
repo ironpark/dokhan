@@ -19,16 +19,6 @@ fn resolve_runtime_source(input: Option<String>) -> Result<RuntimeSource, String
     }
 }
 
-/// Analyze ZIP dataset and return summary information for UI.
-///
-/// # Errors
-///
-/// Returns an error when the input path cannot be resolved or the ZIP is unreadable.
-pub(crate) fn analyze_zip_dataset_impl(zip_path: &str) -> Result<app::model::DatasetSummary, String> {
-    let resolved = parsing::dataset::resolve_zip_path(zip_path)?;
-    parsing::dataset::summarize_zip(&resolved)
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;

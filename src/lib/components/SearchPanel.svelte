@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SearchHit } from "$lib/types/dictionary";
+  import { createVirtualizer } from "@tanstack/svelte-virtual";
   import Input from "$lib/components/ui/Input.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import ListItem from "$lib/components/ui/ListItem.svelte";
@@ -22,36 +23,41 @@
     onOpen: (id: number) => void;
   } = $props();
 
-  const rowHeight = 38;
-  const overscan = 6;
-
   let listEl = $state<HTMLElement | null>(null);
-  let scrollTop = $state(0);
-  let viewportHeight = $state(0);
 
-  const totalCount = $derived(rows.length);
-  const visibleCount = $derived(
-    Math.ceil(viewportHeight / rowHeight) + overscan * 2,
-  );
-  const startIndex = $derived.by(() => {
-    const raw = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
-    const maxStart = Math.max(0, totalCount - visibleCount);
-    return Math.min(raw, maxStart);
+  const virtualizer = createVirtualizer({
+    count: 0,
+    getScrollElement: () => listEl,
+    estimateSize: () => 38,
+    overscan: 5,
   });
-  const endIndex = $derived(Math.min(totalCount, startIndex + visibleCount));
-  const topSpacer = $derived(startIndex * rowHeight);
-  const bottomSpacer = $derived((totalCount - endIndex) * rowHeight);
-  const visibleRows = $derived(rows.slice(startIndex, endIndex));
 
-  function handleScroll() {
-    if (!listEl) return;
-    scrollTop = listEl.scrollTop;
-    viewportHeight = listEl.clientHeight;
-  }
+  let lastRowCount = $state(0);
+  $effect(() => {
+    if (rows.length !== lastRowCount) {
+      lastRowCount = rows.length;
+      $virtualizer.scrollToIndex(0);
+    }
+    $virtualizer.setOptions({
+      count: rows.length,
+      getScrollElement: () => listEl,
+    });
+    requestAnimationFrame(() => {
+      $virtualizer.measure();
+    });
+  });
 
   $effect(() => {
-    viewportHeight = listEl?.clientHeight ?? 0;
+    if (!listEl) return;
+    const ro = new ResizeObserver(() => {
+      $virtualizer.measure();
+    });
+    ro.observe(listEl);
+    return () => ro.disconnect();
   });
+
+  const virtualRows = $derived($virtualizer.getVirtualItems());
+  const totalSize = $derived($virtualizer.getTotalSize());
 </script>
 
 <section class="panel">
@@ -63,27 +69,24 @@
     />
     <Button type="submit" disabled={loading}>검색</Button>
   </form>
-  <ul class="entry-list" bind:this={listEl} onscroll={handleScroll}>
-    {#if topSpacer > 0}
-      <li
-        class="spacer"
-        style={`height:${topSpacer}px`}
-        aria-hidden="true"
-      ></li>
-    {/if}
-    {#each visibleRows as row}
-      <ListItem selected={selectedId === row.id} onclick={() => onOpen(row.id)}>
-        {row.headword}
-      </ListItem>
-    {/each}
-    {#if bottomSpacer > 0}
-      <li
-        class="spacer"
-        style={`height:${bottomSpacer}px`}
-        aria-hidden="true"
-      ></li>
-    {/if}
-  </ul>
+  <div class="entry-list" bind:this={listEl}>
+    <div style="height: {totalSize}px; width: 100%; position: relative;">
+      {#each virtualRows as row (row.index)}
+        <div
+          style="position: absolute; top: 0; left: 0; width: 100%; height: {row.size}px; transform: translateY({row.start}px);"
+        >
+          {#if rows[row.index]}
+            <ListItem
+              selected={selectedId === rows[row.index].id}
+              onclick={() => onOpen(rows[row.index].id)}
+            >
+              {rows[row.index].headword}
+            </ListItem>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </div>
 </section>
 
 <style>
@@ -105,19 +108,13 @@
 
   .entry-list {
     margin: 0;
-    padding: 0 10px 10px;
+    padding: 0;
     list-style: none;
     min-height: 0;
     height: 100%;
     box-sizing: border-box;
     overflow-y: auto;
     scrollbar-gutter: stable;
-  }
-
-  .spacer {
-    border: 0;
-    padding: 0;
-    margin: 0;
-    pointer-events: none;
+    position: relative;
   }
 </style>

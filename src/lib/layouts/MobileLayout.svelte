@@ -16,9 +16,7 @@
 
     function handleBack() {
         if (showReader) {
-            // "Close" reader
-            vm.selectedEntryId = null;
-            vm.selectedContentLocal = "";
+            vm.closeDetail();
         }
     }
 </script>
@@ -31,7 +29,7 @@
                     <button
                         class="back-btn"
                         onclick={handleBack}
-                        aria-label="Go back"
+                        aria-label="뒤로가기"
                     >
                         <svg
                             width="24"
@@ -44,7 +42,7 @@
                             <path d="M19 12H5M12 19l-7-7 7-7" />
                         </svg>
                     </button>
-                    <span class="header-title">Detail</span>
+                    <span class="header-title">본문</span>
                 </header>
                 <div class="reader-content">
                     <ReaderPane
@@ -62,12 +60,12 @@
         {:else if activeTab === "home"}
             <div class="home-view">
                 <div class="hero">
-                    <h1>German-Korean<br />Dictionary</h1>
-                    <p>Simple & Fast.</p>
+                    <h1>독한 사전</h1>
+                    <p>독일어-한국어 전자사전</p>
                 </div>
                 <div class="search-box">
                     <Input
-                        placeholder="Search dictionary..."
+                        placeholder="사전 검색"
                         onclick={() => (activeTab = "search")}
                         readonly
                     >
@@ -89,7 +87,7 @@
                 </div>
 
                 <div class="content-list">
-                    <h3>Contents</h3>
+                    <h3>목차</h3>
                     <ContentPanel
                         items={vm.contents}
                         selectedLocal={vm.selectedContentLocal}
@@ -105,7 +103,7 @@
                     loading={vm.loading}
                     selectedId={vm.selectedEntryId}
                     onQueryChange={(value) => (vm.searchQuery = value)}
-                    onSubmit={vm.doSearch}
+                    onSubmit={(e) => vm.doSearch(e)}
                     onOpen={(id) => vm.openEntry(id)}
                 />
             </div>
@@ -116,7 +114,7 @@
                     rows={vm.indexRows}
                     loading={vm.indexLoading}
                     selectedId={vm.selectedEntryId}
-                    onQueryChange={vm.handleIndexQueryChange}
+                    onQueryChange={(val) => vm.handleIndexQueryChange(val)}
                     onOpen={(id) => vm.openEntry(id)}
                 />
             </div>
@@ -145,7 +143,7 @@
                         ></polyline></svg
                     >
                 </div>
-                <span>Home</span>
+                <span>홈</span>
             </button>
             <button
                 class:active={activeTab === "search"}
@@ -169,7 +167,7 @@
                         ></line></svg
                     >
                 </div>
-                <span>Search</span>
+                <span>검색</span>
             </button>
             <button
                 class:active={activeTab === "index"}
@@ -190,7 +188,7 @@
                         ></path></svg
                     >
                 </div>
-                <span>Index</span>
+                <span>색인</span>
             </button>
         </nav>
     {/if}

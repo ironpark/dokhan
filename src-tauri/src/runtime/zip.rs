@@ -8,7 +8,7 @@ use crate::parsing::dataset::open_zip_archive;
 use crate::parsing::index::{extract_index_entries_from_chm_bytes, parse_master_hhc_text};
 use crate::parsing::text::{
     body_html, compact_ws, decode_euc_kr, extract_first_bold_text, find_all_tag_values,
-    first_paragraph_html, strip_html_tags,
+    first_paragraph_html, sanitize_html_fragment, strip_html_tags,
 };
 use crate::runtime::link_media::read_chm_binary_object;
 use crate::runtime::search::normalize_search_key;
@@ -23,6 +23,7 @@ fn decode_content_page(local: String, source_path: String, bytes: &[u8]) -> Cont
         .find(|x| !x.is_empty())
         .unwrap_or_else(|| local.clone());
     let b_html = body_html(&text).unwrap_or_default();
+    let b_html = sanitize_html_fragment(&b_html);
     let b_text = compact_ws(&strip_html_tags(&b_html));
     ContentPage {
         local,
@@ -187,9 +188,9 @@ fn hydrate_entries_from_chm_bytes(chm_bytes: &[u8], entries: &mut [EntryDetail])
         let body_text = compact_ws(&strip_html_tags(&body));
 
         if !paragraph_html.is_empty() {
-            entry.definition_html = paragraph_html;
+            entry.definition_html = sanitize_html_fragment(&paragraph_html);
         } else if !body.is_empty() {
-            entry.definition_html = body;
+            entry.definition_html = sanitize_html_fragment(&body);
         }
         if !paragraph_text.is_empty() {
             entry.definition_text = paragraph_text;
@@ -243,9 +244,9 @@ pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) 
     let body = body_html(&html_text).unwrap_or_default();
     let body_text = compact_ws(&strip_html_tags(&body));
     if !paragraph_html.is_empty() {
-        entry.definition_html = paragraph_html.clone();
+        entry.definition_html = sanitize_html_fragment(&paragraph_html);
     } else if !body.is_empty() {
-        entry.definition_html = body.clone();
+        entry.definition_html = sanitize_html_fragment(&body);
     }
     if !paragraph_text.is_empty() {
         entry.definition_text = paragraph_text;

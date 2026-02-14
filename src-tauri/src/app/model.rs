@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FileTypeCount {
@@ -10,6 +11,7 @@ pub(crate) struct FileTypeCount {
     pub(crate) count: usize,
 }
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DatasetSummary {
@@ -32,6 +34,7 @@ pub(crate) struct DatasetSummary {
     pub(crate) sample_chm_files: Vec<String>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct MainVolumeCoverage {

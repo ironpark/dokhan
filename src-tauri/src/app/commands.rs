@@ -1,10 +1,13 @@
 //! Tauri command handlers exposed to the frontend.
+#[cfg(target_os = "android")]
 use std::fs;
+#[cfg(target_os = "android")]
 use std::path::PathBuf;
+#[cfg(target_os = "android")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::app::model::{
-    BuildStatus, ContentItem, ContentPage, DatasetSummary, DictionaryIndexEntry, EntryDetail,
+    BuildStatus, ContentItem, ContentPage, DictionaryIndexEntry, EntryDetail,
     LinkTarget, SearchHit,
 };
 use crate::runtime::link_media::{resolve_link_target_impl, resolve_media_data_url_impl};
@@ -17,41 +20,6 @@ use crate::runtime::state::{
 use std::io;
 #[cfg(target_os = "android")]
 use tauri_plugin_fs::FsExt;
-
-/// Analyze a ZIP file and return dataset-level statistics.
-///
-/// # Errors
-///
-/// Returns an error when the given ZIP path cannot be resolved or the archive is invalid.
-#[tauri::command]
-fn analyze_zip_dataset(zip_path: String) -> Result<DatasetSummary, String> {
-    crate::analyze_zip_dataset_impl(&zip_path)
-}
-
-/// Persist raw ZIP bytes to a temporary file and return absolute path.
-///
-/// # Errors
-///
-/// Returns an error when temp directory creation or file write fails.
-#[tauri::command]
-fn persist_zip_blob(bytes: Vec<u8>) -> Result<String, String> {
-    if bytes.is_empty() {
-        return Err("zip blob is empty".to_string());
-    }
-    let mut dir = std::env::temp_dir();
-    dir.push("german-kr-zips");
-    fs::create_dir_all(&dir).map_err(|e| format!("failed to create temp zip dir: {e}"))?;
-
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| format!("failed to read system time: {e}"))?
-        .as_millis();
-    let file_name = format!("picked-{stamp}-{}.zip", std::process::id());
-    let mut out = PathBuf::from(&dir);
-    out.push(file_name);
-    fs::write(&out, bytes).map_err(|e| format!("failed to write temp zip: {e}"))?;
-    Ok(out.to_string_lossy().to_string())
-}
 
 /// Normalize selected ZIP path/URI to a local file-system path.
 ///
@@ -254,8 +222,6 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            analyze_zip_dataset,
-            persist_zip_blob,
             prepare_zip_source,
             start_master_build,
             get_master_build_status,

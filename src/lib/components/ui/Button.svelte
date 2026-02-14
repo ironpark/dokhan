@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { Snippet } from "svelte";
+    import type { HTMLButtonAttributes } from "svelte/elements";
 
     type Variant = "default" | "ghost" | "outline" | "icon";
     type Size = "sm" | "md" | "lg" | "icon";
@@ -12,14 +13,12 @@
         onclick,
         disabled = false,
         ...rest
-    }: {
+    }: HTMLButtonAttributes & {
         variant?: Variant;
         size?: Size;
         class?: string;
         children?: Snippet;
-        onclick?: (e: MouseEvent) => void;
         disabled?: boolean;
-        [key: string]: any;
     } = $props();
 </script>
 

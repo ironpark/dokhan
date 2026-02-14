@@ -12,7 +12,7 @@
 <div class="desktop-layout">
     <aside class="sidebar">
         <div class="sidebar-header">
-            <h2>German-Korean</h2>
+            <h2>독한 사전</h2>
         </div>
 
         <div class="tabs-container">
@@ -37,7 +37,7 @@
                     rows={vm.indexRows}
                     loading={vm.indexLoading}
                     selectedId={vm.selectedEntryId}
-                    onQueryChange={vm.handleIndexQueryChange}
+                    onQueryChange={(val) => vm.handleIndexQueryChange(val)}
                     onOpen={(id) => vm.openEntry(id)}
                 />
             {:else}
@@ -47,7 +47,7 @@
                     loading={vm.loading}
                     selectedId={vm.selectedEntryId}
                     onQueryChange={(value) => (vm.searchQuery = value)}
-                    onSubmit={vm.doSearch}
+                    onSubmit={(e) => vm.doSearch(e)}
                     onOpen={(id) => vm.openEntry(id)}
                 />
             {/if}
@@ -58,8 +58,8 @@
         {#if !vm.selectedContent && !vm.selectedEntry}
             <div class="empty-state">
                 <div class="logo-placeholder">
-                    <h1>Dictionary</h1>
-                    <p>Select an item to view details</p>
+                    <h1>독한 사전</h1>
+                    <p>항목을 선택하면 본문이 표시됩니다.</p>
                 </div>
             </div>
         {:else}
@@ -113,6 +113,7 @@
     .sidebar-content {
         overflow: hidden;
         background: var(--color-bg);
+        min-height: 0;
     }
 
     .main-content {
