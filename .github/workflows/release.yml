@@ -52,6 +52,10 @@ jobs:
 
     env:
       JAVA_VERSION: "17"
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -91,6 +95,16 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
+      - name: Prepare Android signing keystore
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "Missing Android signing secrets."
+            echo "Required: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/android-release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/android-release.keystore" >> "$GITHUB_ENV"
+
       - name: Sanitize Gradle local overrides
         run: sed -i '/^android\\.aapt2FromMavenOverride=/d' src-tauri/gen/android/gradle.properties
 
@@ -128,7 +142,7 @@ jobs:
             -name "*.deb" -o \
             -name "*.rpm" -o \
             -name "*.zip" \
-          \) -exec cp -f {} release-upload-assets/ \;
+          \) ! -name "*unsigned*" -exec cp -f {} release-upload-assets/ \;
           ls -al release-upload-assets
 
       - name: Publish release

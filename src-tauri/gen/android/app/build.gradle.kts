@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -13,6 +14,15 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasReleaseSigning = !keystorePath.isNullOrBlank()
+    && !keystorePassword.isNullOrBlank()
+    && !keyAlias.isNullOrBlank()
+    && !keyPassword.isNullOrBlank()
+
 android {
     compileSdk = 36
     namespace = "io.github.ironpark.dokhan"
@@ -24,6 +34,17 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    if (hasReleaseSigning) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = keyAlias
+                keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -38,6 +59,9 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
@@ -51,6 +75,24 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
+        }
+    }
+}
+
+val requiresReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (requiresReleaseBuild && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing is required. Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, " +
+            "ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD."
+    )
 }
 
 rust {

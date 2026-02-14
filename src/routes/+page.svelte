@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import LoadProgress from "$lib/components/LoadProgress.svelte";
   import MobileLayout from "$lib/layouts/MobileLayout.svelte";
   import DesktopLayout from "$lib/layouts/DesktopLayout.svelte";
@@ -12,13 +13,22 @@
   let copyMessage = $state("");
 
   onMount(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenDragDrop: (() => void) | undefined;
+    let unlistenCloseRequest: (() => void) | undefined;
 
     (async () => {
       await vm.bootFromManagedCache();
 
-      if (!platformStore.isMobile) {
-        unlisten = await getCurrentWebview().onDragDropEvent((event) => {
+      if (platformStore.isMobile) {
+        unlistenCloseRequest = await getCurrentWindow().onCloseRequested(
+          (event) => {
+            if (vm.handleMobileBackNavigation()) {
+              event.preventDefault();
+            }
+          },
+        );
+      } else {
+        unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
           const payload = event.payload;
           if (payload.type === "over") {
             vm.dragOver = true;
@@ -38,7 +48,8 @@
 
     return () => {
       vm.dispose();
-      if (unlisten) unlisten();
+      if (unlistenDragDrop) unlistenDragDrop();
+      if (unlistenCloseRequest) unlistenCloseRequest();
     };
   });
 
@@ -147,7 +158,8 @@
   }
 
   .app-shell {
-    height: 100vh;
+    height: 100dvh;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -242,6 +254,11 @@
     max-width: 520px;
     width: calc(100% - 20px);
     padding: 26px 22px 24px;
+  }
+
+  .entry-shell.mobile {
+    padding-top: calc(24px + env(safe-area-inset-top));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
   .mobile .entry-card h1 {

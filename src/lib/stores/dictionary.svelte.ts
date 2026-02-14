@@ -36,6 +36,7 @@ export class DictionaryStore {
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
+  mobileTab = $state<'home' | 'search' | 'index'>('home');
 
   masterSummary = $state<MasterFeatureSummary | null>(null);
   contents = $state<ContentItem[]>([]);
@@ -91,6 +92,18 @@ export class DictionaryStore {
 
   closeDetail() {
     this.#clearSelection();
+  }
+
+  handleMobileBackNavigation(): boolean {
+    if (this.selectedEntryId || this.selectedContentLocal) {
+      this.closeDetail();
+      return true;
+    }
+    if (this.mobileTab !== 'home') {
+      this.mobileTab = 'home';
+      return true;
+    }
+    return false;
   }
 
   async bootMasterFeatures() {

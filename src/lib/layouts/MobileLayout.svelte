@@ -10,7 +10,6 @@
     // Props
     let { vm }: { vm: DictionaryStore } = $props();
 
-    let activeTab = $state<"home" | "search" | "index">("home");
     let showReader = $derived(
         !!(vm.selectedEntryId || vm.selectedContentLocal),
     );
@@ -67,7 +66,7 @@
                 onPickZip={() => vm.pickZipFile()}
             />
 
-            {#if activeTab === "home"}
+            {#if vm.mobileTab === "home"}
                 <div class="home-view">
                     <div class="hero">
                         <h1>독한 사전</h1>
@@ -76,7 +75,7 @@
                     <div class="search-box">
                         <Input
                             placeholder="사전 검색"
-                            onclick={() => (activeTab = "search")}
+                            onclick={() => (vm.mobileTab = "search")}
                             readonly
                         >
                             {#snippet icon()}
@@ -109,7 +108,7 @@
                         />
                     </div>
                 </div>
-            {:else if activeTab === "search"}
+            {:else if vm.mobileTab === "search"}
                 <div class="panel-container">
                     <SearchPanel
                         query={vm.searchQuery}
@@ -121,7 +120,7 @@
                         onOpen={(id) => vm.openEntry(id)}
                     />
                 </div>
-            {:else if activeTab === "index"}
+            {:else if vm.mobileTab === "index"}
                 <div class="panel-container">
                     <IndexPanel
                         query={vm.indexPrefix}
@@ -139,8 +138,8 @@
     {#if !showReader}
         <nav class="bottom-nav">
             <button
-                class:active={activeTab === "home"}
-                onclick={() => (activeTab = "home")}
+                class:active={vm.mobileTab === "home"}
+                onclick={() => (vm.mobileTab = "home")}
             >
                 <div class="icon">
                     <svg
@@ -161,8 +160,8 @@
                 <span>홈</span>
             </button>
             <button
-                class:active={activeTab === "search"}
-                onclick={() => (activeTab = "search")}
+                class:active={vm.mobileTab === "search"}
+                onclick={() => (vm.mobileTab = "search")}
             >
                 <div class="icon">
                     <svg
@@ -185,8 +184,8 @@
                 <span>검색</span>
             </button>
             <button
-                class:active={activeTab === "index"}
-                onclick={() => (activeTab = "index")}
+                class:active={vm.mobileTab === "index"}
+                onclick={() => (vm.mobileTab = "index")}
             >
                 <div class="icon">
                     <svg
@@ -213,7 +212,9 @@
     .mobile-layout {
         display: grid;
         grid-template-rows: 1fr auto;
-        height: 100vh;
+        height: 100dvh;
+        min-height: 100svh;
+        padding-top: env(safe-area-inset-top);
         background: var(--color-bg);
         color: var(--color-text);
     }
