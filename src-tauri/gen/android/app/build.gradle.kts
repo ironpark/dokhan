@@ -14,14 +14,14 @@ val tauriProperties = Properties().apply {
     }
 }
 
-val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-val hasReleaseSigning = !keystorePath.isNullOrBlank()
-    && !keystorePassword.isNullOrBlank()
-    && !keyAlias.isNullOrBlank()
-    && !keyPassword.isNullOrBlank()
+val signingKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val signingKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val signingKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val signingKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasReleaseSigning = !signingKeystorePath.isNullOrBlank()
+    && !signingKeystorePassword.isNullOrBlank()
+    && !signingKeyAlias.isNullOrBlank()
+    && !signingKeyPassword.isNullOrBlank()
 
 android {
     compileSdk = 36
@@ -37,10 +37,10 @@ android {
     if (hasReleaseSigning) {
         signingConfigs {
             create("release") {
-                storeFile = file(keystorePath!!)
-                storePassword = keystorePassword
-                keyAlias = keyAlias
-                keyPassword = keyPassword
+                storeFile = file(signingKeystorePath!!)
+                storePassword = signingKeystorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
             }
         }
     }
