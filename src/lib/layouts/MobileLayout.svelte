@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import { DictionaryStore } from "$lib/stores/dictionary.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
     import ContentPanel from "$lib/components/ContentPanel.svelte";
@@ -13,12 +14,40 @@
     let showReader = $derived(
         !!(vm.selectedEntryId || vm.selectedContentLocal),
     );
+    let readerHistoryArmed = false;
 
     function handleBack() {
         if (showReader) {
-            vm.closeDetail();
+            history.back();
         }
     }
+
+    onMount(() => {
+        const onPopState = () => {
+            if (vm.selectedEntryId || vm.selectedContentLocal) {
+                vm.closeDetail();
+                return;
+            }
+            if (vm.mobileTab !== "home") {
+                vm.mobileTab = "home";
+            }
+        };
+        window.addEventListener("popstate", onPopState);
+        return () => {
+            window.removeEventListener("popstate", onPopState);
+        };
+    });
+
+    $effect(() => {
+        if (showReader && !readerHistoryArmed) {
+            history.pushState({ dokhanReader: true }, "");
+            readerHistoryArmed = true;
+            return;
+        }
+        if (!showReader) {
+            readerHistoryArmed = false;
+        }
+    });
 </script>
 
 <div class="mobile-layout">
