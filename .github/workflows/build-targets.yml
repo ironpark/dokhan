@@ -33,6 +33,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
@@ -91,10 +96,23 @@ jobs:
 
       - name: Install Android SDK components
         run: |
-          sdkmanager --install "platform-tools"
-          sdkmanager --install "platforms;android-34"
-          sdkmanager --install "build-tools;34.0.0"
-          sdkmanager --install "ndk;29.0.14206865"
+          INSTALLED="$(sdkmanager --list_installed 2>/dev/null || true)"
+          MISSING=()
+          for PKG in \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "ndk;29.0.14206865"
+          do
+            if echo "$INSTALLED" | grep -Fq "$PKG"; then
+              echo "Already installed: $PKG"
+            else
+              MISSING+=("$PKG")
+            fi
+          done
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            yes | sdkmanager --install "${MISSING[@]}"
+          fi
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
