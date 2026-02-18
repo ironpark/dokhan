@@ -447,7 +447,7 @@ export class DictionaryStore {
     const rows = await this.#withBusy('search', () => searchEntries(this.zipPath, searchTerm, 200));
     if (rows && reqSeq === this.#searchRequestSeq) {
       this.searchRows = rows;
-      if (recordRecent) {
+      if (recordRecent && rows.length > 0) {
         this.#pushRecentSearch(searchTerm);
       }
     }

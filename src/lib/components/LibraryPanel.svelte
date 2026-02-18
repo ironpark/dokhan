@@ -14,70 +14,114 @@
     onOpenRecent: (item: RecentViewItem) => void;
     onRemoveFavorite: (key: string) => void;
   } = $props();
+
+  const favoriteItems = $derived(favorites.slice(0, 100));
+  const recentItems = $derived(recents.slice(0, 20));
 </script>
 
 <section class="panel">
-  <div class="section">
+  <div class="section favorites-section">
     <h3>즐겨찾기</h3>
-    {#if favorites.length}
-      <ul>
-        {#each favorites as item (item.key)}
-          <li>
-            <button type="button" class="item-btn" onclick={() => onOpenFavorite(item)}>
-              <small>{item.kind === "entry" ? "표제어" : "목차"}</small>
-              <span>{item.label}</span>
-            </button>
-            <button
-              type="button"
-              class="remove-btn"
-              aria-label="즐겨찾기 삭제"
-              onclick={() => onRemoveFavorite(item.key)}
-            >
-              제거
-            </button>
-          </li>
-        {/each}
-      </ul>
+    {#if favoriteItems.length}
+      <div class="section-body favorites-scroll">
+        <ul>
+          {#each favoriteItems as item (item.key)}
+            <li>
+              <button type="button" class="item-btn" onclick={() => onOpenFavorite(item)}>
+                <small>{item.kind === "entry" ? "표제어" : "목차"}</small>
+                <span>{item.label}</span>
+              </button>
+              <button
+                type="button"
+                class="remove-btn"
+                aria-label="즐겨찾기 삭제"
+                onclick={() => onRemoveFavorite(item.key)}
+              >
+                제거
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </div>
     {:else}
       <p class="empty">아직 저장된 즐겨찾기가 없습니다.</p>
     {/if}
   </div>
 
-  <div class="section">
+  <div class="section recent-section">
     <h3>최근 열람</h3>
-    {#if recents.length}
-      <ul>
-        {#each recents as item (item.key)}
-          <li>
-            <button type="button" class="item-btn" onclick={() => onOpenRecent(item)}>
-              <small>{item.kind === "entry" ? "표제어" : "목차"}</small>
-              <span>{item.label}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="empty">최근 열람 기록이 없습니다.</p>
-    {/if}
+    <div class="section-body recent-scroll">
+      {#if recentItems.length}
+        <ul>
+          {#each recentItems as item (item.key)}
+            <li>
+              <button type="button" class="item-btn" onclick={() => onOpenRecent(item)}>
+                <small>{item.kind === "entry" ? "표제어" : "목차"}</small>
+                <span>{item.label}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="empty">최근 열람 기록이 없습니다.</p>
+      {/if}
+    </div>
   </div>
 </section>
 
 <style>
   .panel {
     height: 100%;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     box-sizing: border-box;
     padding: 10px;
-    display: grid;
+    padding-bottom: 10px;
+    display: flex;
+    flex-direction: column;
     gap: 14px;
-    align-content: start;
   }
 
   .section {
+    flex: 0 0 auto;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 10px;
     overflow: hidden;
+  }
+
+  .section-body {
+    min-height: 0;
+  }
+
+  .favorites-section {
+    flex: 0 0 auto;
+    min-height: 130px;
+    max-height: 46%;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  .favorites-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: #b8bfcc transparent;
+  }
+
+  .favorites-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .favorites-scroll::-webkit-scrollbar-thumb {
+    background: #b8bfcc;
+    border-radius: 999px;
+  }
+
+  .favorites-scroll::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .section h3 {
@@ -141,5 +185,34 @@
     padding: 10px 12px 12px;
     font-size: 12px;
     color: var(--color-text-muted);
+  }
+
+  .recent-section {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  .recent-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: #b8bfcc transparent;
+  }
+
+  .recent-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .recent-scroll::-webkit-scrollbar-thumb {
+    background: #b8bfcc;
+    border-radius: 999px;
+  }
+
+  .recent-scroll::-webkit-scrollbar-track {
+    background: transparent;
   }
 </style>
