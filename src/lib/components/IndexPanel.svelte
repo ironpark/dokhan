@@ -33,18 +33,34 @@
   });
 
   let lastRowCount = $state(0);
+  let lastVirtualizerCount = $state(-1);
+  let highlightCacheToken = $state("");
+  const highlightSegmentCache = new Map<string, Segment[]>();
+
   $effect(() => {
+    const nextCount = rows.length;
     if (rows.length !== lastRowCount) {
-      lastRowCount = rows.length;
+      lastRowCount = nextCount;
       $virtualizer.scrollToIndex(0);
     }
-    $virtualizer.setOptions({
-      count: rows.length,
-      getScrollElement: () => listEl,
-    });
-    requestAnimationFrame(() => {
-      $virtualizer.measure();
-    });
+    if (nextCount !== lastVirtualizerCount) {
+      lastVirtualizerCount = nextCount;
+      $virtualizer.setOptions({
+        count: nextCount,
+        getScrollElement: () => listEl,
+      });
+      queueMicrotask(() => {
+        $virtualizer.measure();
+      });
+    }
+  });
+
+  $effect(() => {
+    const nextToken = `${query}\u0001${rows.length}`;
+    if (nextToken !== highlightCacheToken) {
+      highlightCacheToken = nextToken;
+      highlightSegmentCache.clear();
+    }
   });
 
   $effect(() => {
@@ -106,6 +122,25 @@
     }
     return segments.length ? segments : [{ text, hit: false }];
   }
+
+  function getSegmentsForRow(row: DictionaryIndexEntry): Segment[] {
+    const rangeKey = row.headwordHighlights.length
+      ? row.headwordHighlights
+          .map(({ start, end }) => `${start}-${end}`)
+          .join(",")
+      : "";
+    const cacheKey = `${row.id}\u0001${row.headword}\u0001${rangeKey}`;
+    const cached = highlightSegmentCache.get(cacheKey);
+    if (cached) return cached;
+
+    const next = splitByHighlights(row.headword, row.headwordHighlights);
+    if (highlightSegmentCache.size >= 1200) {
+      const oldest = highlightSegmentCache.keys().next().value;
+      if (oldest) highlightSegmentCache.delete(oldest);
+    }
+    highlightSegmentCache.set(cacheKey, next);
+    return next;
+  }
 </script>
 
 <section class="panel" class:input-bottom={inputAtBottom}>
@@ -140,7 +175,7 @@
                 selected={selectedId === rows[row.index].id}
                 onclick={() => onOpen(rows[row.index].id)}
               >
-                {#each splitByHighlights(rows[row.index].headword, rows[row.index].headwordHighlights) as seg}
+                {#each getSegmentsForRow(rows[row.index]) as seg}
                   {#if seg.hit}
                     <strong>{seg.text}</strong>
                   {:else}

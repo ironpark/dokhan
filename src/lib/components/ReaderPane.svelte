@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
   import type {
     ContentPage,
     DetailMode,
@@ -90,23 +91,6 @@
       ` --reader-max-width: ${readerWidthMap[readerWidth] ?? readerWidthMap.normal};`,
   );
 
-  function handleFontSizeChange(event: Event) {
-    const value = (event.currentTarget as HTMLSelectElement)
-      .value as ReaderFontSize;
-    onReaderFontSizeChange(value);
-  }
-
-  function handleLineHeightChange(event: Event) {
-    const value = (event.currentTarget as HTMLSelectElement)
-      .value as ReaderLineHeight;
-    onReaderLineHeightChange(value);
-  }
-
-  function handleWidthChange(event: Event) {
-    const value = (event.currentTarget as HTMLSelectElement).value as ReaderWidth;
-    onReaderWidthChange(value);
-  }
-
   function escapeRegex(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -186,16 +170,11 @@
     }
   }
 
-  function interceptLinksAndResolveImages(
+  function interceptLinks(
     node: HTMLElement,
-    initial: RenderContext,
+    initial: Pick<RenderContext, "sourcePath" | "local">,
   ) {
     let context = initial;
-    let revision = 0;
-    let lastStructureSignature = "";
-    let lastHighlightSignature = "";
-    const activeObjectUrls = new Set<string>();
-
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest("a") as HTMLAnchorElement | null;
@@ -205,6 +184,27 @@
       event.preventDefault();
       onOpenHref(href, context.sourcePath, context.local);
     };
+
+    node.addEventListener("click", onClick);
+    return {
+      update(next: Pick<RenderContext, "sourcePath" | "local">) {
+        context = next;
+      },
+      destroy() {
+        node.removeEventListener("click", onClick);
+      },
+    };
+  }
+
+  function decorateRenderedHtml(
+    node: HTMLElement,
+    initial: RenderContext,
+  ) {
+    let context = initial;
+    let revision = 0;
+    let lastStructureSignature = "";
+    let lastHighlightSignature = "";
+    const activeObjectUrls = new Set<string>();
 
     async function hydrateImages(
       currentRevision: number,
@@ -326,7 +326,6 @@
       });
     }
 
-    node.addEventListener("click", onClick);
     scheduleDecorations();
     return {
       update(next: RenderContext) {
@@ -335,7 +334,6 @@
       },
       destroy() {
         revision += 1;
-        node.removeEventListener("click", onClick);
         clearHighlights(node);
         revokeObjectUrls();
       },
@@ -346,79 +344,32 @@
 <section class="reader" style={readerStyleVars}>
   {#if mode === "content" && selectedContent}
     <article class="body-content">
-      <header class="doc-header">
-        <h2>{selectedContent.title}</h2>
-        <div class="doc-actions">
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={preprocessEnabled}
-            onclick={onTogglePreprocess}
-          >
-            {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
-          </button>
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={markerPreprocessEnabled}
-            onclick={onToggleMarkerPreprocess}
-            disabled={!preprocessEnabled}
-          >
-            {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
-          </button>
-          <button
-            type="button"
-            class="favorite-btn mini-btn"
-            class:active={isFavorite}
-            onclick={onToggleFavorite}
-          >
-            {isFavorite ? "★ 저장됨" : "☆ 저장"}
-          </button>
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={showReaderTools}
-            onclick={() => (showReaderTools = !showReaderTools)}
-          >
-            보기 옵션
-          </button>
-        </div>
-      </header>
-      {#if showReaderTools}
-        <div class="doc-tools-row">
-          <div class="view-controls">
-            <label class="option-field">
-              <span class="option-label">글자 크기</span>
-              <select value={readerFontSize} onchange={handleFontSizeChange}>
-                <option value="sm">작게</option>
-                <option value="md">보통</option>
-                <option value="lg">크게</option>
-              </select>
-            </label>
-            <label class="option-field">
-              <span class="option-label">줄 간격</span>
-              <select value={readerLineHeight} onchange={handleLineHeightChange}>
-                <option value="tight">좁게</option>
-                <option value="normal">보통</option>
-                <option value="loose">넓게</option>
-              </select>
-            </label>
-            <label class="option-field">
-              <span class="option-label">본문 폭</span>
-              <select value={readerWidth} onchange={handleWidthChange}>
-                <option value="narrow">좁게</option>
-                <option value="normal">보통</option>
-                <option value="wide">넓게</option>
-              </select>
-            </label>
-          </div>
-        </div>
-      {/if}
+      <ReaderToolbar
+        title={selectedContent.title}
+        {preprocessEnabled}
+        {markerPreprocessEnabled}
+        {isFavorite}
+        {showReaderTools}
+        {readerFontSize}
+        {readerLineHeight}
+        {readerWidth}
+        {onTogglePreprocess}
+        {onToggleMarkerPreprocess}
+        {onToggleFavorite}
+        onToggleReaderTools={() => (showReaderTools = !showReaderTools)}
+        onReaderFontSizeChange={onReaderFontSizeChange}
+        onReaderLineHeightChange={onReaderLineHeightChange}
+        onReaderWidthChange={onReaderWidthChange}
+      />
       {#if selectedContent.bodyHtml}
-        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}::${preprocessEnabled}::${markerPreprocessEnabled}`}
+        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${selectedContent.bodyHtml.length}`}
           <div
             class="html-rendered"
-            use:interceptLinksAndResolveImages={{
+            use:interceptLinks={{
+              sourcePath: selectedContent.sourcePath,
+              local: selectedContent.local,
+            }}
+            use:decorateRenderedHtml={{
               sourcePath: selectedContent.sourcePath,
               local: selectedContent.local,
               html: selectedContent.bodyHtml,
@@ -436,80 +387,33 @@
     </article>
   {:else if mode === "entry" && selectedEntry}
     <article class="body-content">
-      <header class="doc-header">
-        <h2>{selectedEntry.headword}</h2>
-        <div class="doc-actions">
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={preprocessEnabled}
-            onclick={onTogglePreprocess}
-          >
-            {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
-          </button>
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={markerPreprocessEnabled}
-            onclick={onToggleMarkerPreprocess}
-            disabled={!preprocessEnabled}
-          >
-            {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
-          </button>
-          <button
-            type="button"
-            class="favorite-btn mini-btn"
-            class:active={isFavorite}
-            onclick={onToggleFavorite}
-          >
-            {isFavorite ? "★ 저장됨" : "☆ 저장"}
-          </button>
-          <button
-            type="button"
-            class="mini-btn"
-            class:active={showReaderTools}
-            onclick={() => (showReaderTools = !showReaderTools)}
-          >
-            보기 옵션
-          </button>
-        </div>
-      </header>
+      <ReaderToolbar
+        title={selectedEntry.headword}
+        {preprocessEnabled}
+        {markerPreprocessEnabled}
+        {isFavorite}
+        {showReaderTools}
+        {readerFontSize}
+        {readerLineHeight}
+        {readerWidth}
+        {onTogglePreprocess}
+        {onToggleMarkerPreprocess}
+        {onToggleFavorite}
+        onToggleReaderTools={() => (showReaderTools = !showReaderTools)}
+        onReaderFontSizeChange={onReaderFontSizeChange}
+        onReaderLineHeightChange={onReaderLineHeightChange}
+        onReaderWidthChange={onReaderWidthChange}
+      />
       <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
-      {#if showReaderTools}
-        <div class="doc-tools-row">
-          <div class="view-controls">
-            <label class="option-field">
-              <span class="option-label">글자 크기</span>
-              <select value={readerFontSize} onchange={handleFontSizeChange}>
-                <option value="sm">작게</option>
-                <option value="md">보통</option>
-                <option value="lg">크게</option>
-              </select>
-            </label>
-            <label class="option-field">
-              <span class="option-label">줄 간격</span>
-              <select value={readerLineHeight} onchange={handleLineHeightChange}>
-                <option value="tight">좁게</option>
-                <option value="normal">보통</option>
-                <option value="loose">넓게</option>
-              </select>
-            </label>
-            <label class="option-field">
-              <span class="option-label">본문 폭</span>
-              <select value={readerWidth} onchange={handleWidthChange}>
-                <option value="narrow">좁게</option>
-                <option value="normal">보통</option>
-                <option value="wide">넓게</option>
-              </select>
-            </label>
-          </div>
-        </div>
-      {/if}
       {#if selectedEntry.definitionHtml}
-        {#key `${selectedEntry.id}::${highlightQuery}::${preprocessEnabled}::${markerPreprocessEnabled}`}
+        {#key `${selectedEntry.id}::${selectedEntry.definitionHtml.length}`}
           <div
             class="html-rendered"
-            use:interceptLinksAndResolveImages={{
+            use:interceptLinks={{
+              sourcePath: selectedEntry.sourcePath,
+              local: null,
+            }}
+            use:decorateRenderedHtml={{
               sourcePath: selectedEntry.sourcePath,
               local: null,
               html: selectedEntry.definitionHtml,
@@ -723,13 +627,6 @@
     font-weight: 600;
   }
 
-  h2 {
-    margin: 6px 0 4px;
-    font-size: clamp(24px, 3vw, 30px);
-    line-height: 1.15;
-    letter-spacing: -0.015em;
-  }
-
   .alias-line {
     margin: 5px 0 14px;
     color: var(--color-text-muted);
@@ -742,163 +639,9 @@
     color: var(--color-text-muted);
   }
 
-  .doc-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .doc-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 6px;
-    flex-shrink: 0;
-  }
-
-  .doc-tools-row {
-    display: flex;
-    width: 100%;
-    margin: 8px 0 10px;
-  }
-
-  .mini-btn {
-    border: 1px solid transparent;
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 999px;
-    font-size: 12px;
-    line-height: 1;
-    padding: 7px 10px;
-    cursor: pointer;
-    white-space: nowrap;
-    margin-top: 6px;
-    transition:
-      background-color var(--motion-fast),
-      border-color var(--motion-fast),
-      color var(--motion-fast),
-      opacity var(--motion-fast);
-  }
-
-  .mini-btn.active {
-    color: var(--color-accent);
-    border-color: color-mix(in oklab, var(--color-accent), white 62%);
-    background: var(--color-accent-soft);
-  }
-
-  .favorite-btn.active {
-    color: #ad7a00;
-    border-color: #e8ca77;
-    background: #fff8dc;
-  }
-
-  .mini-btn:hover {
-    border-color: var(--color-border-strong);
-  }
-
-  .mini-btn:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
-
-  .view-controls {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    border: 1px solid color-mix(in oklab, var(--color-border), white 25%);
-    border-radius: 14px;
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in oklab, var(--color-surface-soft), white 45%) 0%,
-        color-mix(in oklab, var(--color-surface-soft), white 20%) 100%
-      );
-    padding: 10px;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-
-  .option-field {
-    display: grid;
-    gap: 6px;
-  }
-
-  .option-label {
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
-    font-weight: 600;
-  }
-
-  .view-controls select {
-    appearance: none;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1;
-    padding: 9px 30px 9px 10px;
-    outline: none;
-    background-image:
-      linear-gradient(45deg, transparent 50%, currentColor 50%),
-      linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position:
-      calc(100% - 15px) calc(50% - 2px),
-      calc(100% - 10px) calc(50% - 2px);
-    background-size:
-      5px 5px,
-      5px 5px;
-    background-repeat: no-repeat;
-    transition:
-      border-color var(--motion-fast),
-      box-shadow var(--motion-fast),
-      background-color var(--motion-fast);
-  }
-
-  .view-controls select:hover {
-    border-color: var(--color-border-strong);
-  }
-
-  .view-controls select:focus-visible {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 80%);
-  }
-
-  .mini-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--color-accent-soft);
-  }
-
   @media (max-width: 768px) {
     .reader {
       padding: var(--space-4) var(--space-4) var(--space-5);
-    }
-
-    .doc-header {
-      flex-direction: column;
-    }
-
-    .doc-actions {
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .doc-tools-row {
-      margin-top: 6px;
-      margin-bottom: 8px;
-    }
-
-    .view-controls {
-      grid-template-columns: 1fr;
-      gap: 8px;
-      padding: 9px;
-      border-radius: 12px;
     }
 
     .html-rendered :global(ol.dict-sense-list) {

@@ -179,12 +179,6 @@ function buildRoundTooltip(label: string): string | null {
   return markerGroupHint(classifyRoundMarker(label));
 }
 
-function buildSquareTooltip(label: string): string | null {
-  const meta = SQUARE_MARKER_META[label];
-  if (meta) return meta.tooltip;
-  return markerGroupHint(classifySquareMarker(label));
-}
-
 function isPartOfSpeechMarker(label: string): boolean {
   return /^(adj|adv|verb|subst|pron|praep|prep|konj|interj|part|num)\.?$/i.test(label);
 }

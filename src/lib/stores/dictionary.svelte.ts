@@ -11,6 +11,13 @@ import {
   searchEntries,
   startMasterBuild
 } from '$lib/api/dictionary';
+import {
+  MAX_FAVORITES,
+  MAX_RECENT_SEARCHES,
+  dedupeRecentViews,
+  loadDictionaryPrefs,
+  saveDictionaryPrefs
+} from '$lib/stores/dictionaryPrefs';
 import type {
   BuildProgress,
   ContentItem,
@@ -31,25 +38,6 @@ import type {
 
 const BUILD_POLL_MS = 80;
 const INDEX_DEBOUNCE_MS = 120;
-const MAX_RECENT_SEARCHES = 10;
-const MAX_RECENT_VIEWS = 20;
-const MAX_FAVORITES = 100;
-const PREFS_KEY = 'dokhan:user-prefs';
-const READER_FONT_SIZES: ReaderFontSize[] = ['sm', 'md', 'lg'];
-const READER_LINE_HEIGHTS: ReaderLineHeight[] = ['tight', 'normal', 'loose'];
-const READER_WIDTHS: ReaderWidth[] = ['narrow', 'normal', 'wide'];
-
-function dedupeRecentViews(rows: RecentViewItem[]): RecentViewItem[] {
-  const seen = new Set<string>();
-  const out: RecentViewItem[] = [];
-  for (const row of rows) {
-    if (seen.has(row.key)) continue;
-    seen.add(row.key);
-    out.push(row);
-    if (out.length >= MAX_RECENT_VIEWS) break;
-  }
-  return out;
-}
 
 function toErrorMessage(errorValue: unknown): string {
   return typeof errorValue === 'string' ? errorValue : String(errorValue);
@@ -104,7 +92,15 @@ export class DictionaryStore {
   #lastRetryAction: (() => Promise<void>) | null = null;
 
   constructor() {
-    this.#restorePrefs();
+    const prefs = loadDictionaryPrefs();
+    this.recentSearches = prefs.recentSearches;
+    this.recentViews = prefs.recentViews;
+    this.favorites = prefs.favorites;
+    this.preprocessEnabled = prefs.preprocessEnabled;
+    this.markerPreprocessEnabled = prefs.markerPreprocessEnabled;
+    this.readerFontSize = prefs.readerFontSize;
+    this.readerLineHeight = prefs.readerLineHeight;
+    this.readerWidth = prefs.readerWidth;
   }
 
   dispose() {
@@ -222,62 +218,16 @@ export class DictionaryStore {
   }
 
   #persistPrefs() {
-    if (typeof window === 'undefined') return;
-    try {
-      const payload = {
-        recentSearches: this.recentSearches,
-        recentViews: this.recentViews,
-        favorites: this.favorites,
-        preprocessEnabled: this.preprocessEnabled,
-        markerPreprocessEnabled: this.markerPreprocessEnabled,
-        readerFontSize: this.readerFontSize,
-        readerLineHeight: this.readerLineHeight,
-        readerWidth: this.readerWidth
-      };
-      window.localStorage.setItem(PREFS_KEY, JSON.stringify(payload));
-    } catch {
-      // Ignore persistence failures (private mode, quota, etc.)
-    }
-  }
-
-  #restorePrefs() {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = window.localStorage.getItem(PREFS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        recentSearches?: string[];
-        recentViews?: RecentViewItem[];
-        favorites?: FavoriteItem[];
-        preprocessEnabled?: boolean;
-        markerPreprocessEnabled?: boolean;
-        readerFontSize?: ReaderFontSize;
-        readerLineHeight?: ReaderLineHeight;
-        readerWidth?: ReaderWidth;
-      };
-      this.recentSearches = Array.isArray(parsed.recentSearches)
-        ? parsed.recentSearches.slice(0, MAX_RECENT_SEARCHES)
-        : [];
-      this.recentViews = Array.isArray(parsed.recentViews)
-        ? dedupeRecentViews(parsed.recentViews)
-        : [];
-      this.favorites = Array.isArray(parsed.favorites)
-        ? parsed.favorites.slice(0, MAX_FAVORITES)
-        : [];
-      this.preprocessEnabled = parsed.preprocessEnabled ?? true;
-      this.markerPreprocessEnabled = parsed.markerPreprocessEnabled ?? true;
-      this.readerFontSize = READER_FONT_SIZES.includes(parsed.readerFontSize as ReaderFontSize)
-        ? (parsed.readerFontSize as ReaderFontSize)
-        : 'md';
-      this.readerLineHeight = READER_LINE_HEIGHTS.includes(parsed.readerLineHeight as ReaderLineHeight)
-        ? (parsed.readerLineHeight as ReaderLineHeight)
-        : 'normal';
-      this.readerWidth = READER_WIDTHS.includes(parsed.readerWidth as ReaderWidth)
-        ? (parsed.readerWidth as ReaderWidth)
-        : 'normal';
-    } catch {
-      // Ignore malformed prefs.
-    }
+    saveDictionaryPrefs({
+      recentSearches: this.recentSearches,
+      recentViews: this.recentViews,
+      favorites: this.favorites,
+      preprocessEnabled: this.preprocessEnabled,
+      markerPreprocessEnabled: this.markerPreprocessEnabled,
+      readerFontSize: this.readerFontSize,
+      readerLineHeight: this.readerLineHeight,
+      readerWidth: this.readerWidth
+    });
   }
 
   async bootFromManagedCache() {
