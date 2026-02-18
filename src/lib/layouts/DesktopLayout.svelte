@@ -48,7 +48,7 @@
                 <SearchPanel
                     query={vm.searchQuery}
                     rows={vm.searchRows}
-                    loading={vm.loading}
+                    loading={vm.isSearching}
                     selectedId={vm.selectedEntryId}
                     onQueryChange={(value) => (vm.searchQuery = value)}
                     onSubmit={(e) => vm.doSearch(e)}

@@ -82,15 +82,30 @@
   async function onPickZipClick() {
     await vm.pickZipFile();
   }
+
+  async function onRetryClick() {
+    await vm.retryLastOperation();
+  }
 </script>
 
 <main class="app-shell">
   {#if vm.error}
-    <div class="error-box">
-      <pre>{vm.error}</pre>
-      <button type="button" class="copy-btn" onclick={copyErrorText}
-        >복사</button
-      >
+    <div class="error-box" role="alert" aria-live="assertive">
+      <strong>작업 중 오류가 발생했습니다.</strong>
+      <p>다시 시도하거나 ZIP 파일을 다시 선택해 복구해 주세요.</p>
+      <div class="error-actions">
+        <button type="button" class="error-btn primary" onclick={onRetryClick}>
+          다시 시도
+        </button>
+        <button type="button" class="error-btn" onclick={onPickZipClick}>
+          ZIP 다시 선택
+        </button>
+        <button type="button" class="error-btn" onclick={copyErrorText}>오류 복사</button>
+      </div>
+      <details>
+        <summary>기술 오류 보기</summary>
+        <pre>{vm.error}</pre>
+      </details>
       {#if copyMessage}
         <small>{copyMessage}</small>
       {/if}
@@ -121,6 +136,9 @@
           <p class="description">
             german.kr에서 제공하는 사전 압축파일(ZIP)을 이 영역에 드롭해 주세요.
           </p>
+          <button type="button" class="pick-btn" onclick={onPickZipClick}
+            >ZIP 파일 선택</button
+          >
           <p class="drop-hint">Drag and Drop ZIP</p>
         </div>
       </section>
@@ -167,12 +185,54 @@
 
   /* Utility / Shared Styles */
   .error-box {
-    background: #ffdbdd;
-    color: #c00;
-    padding: 10px;
+    background: #fff2f2;
+    color: #7c1d1d;
+    padding: 10px 12px;
     border-bottom: 1px solid #faa;
     position: relative;
     z-index: 9999;
+    display: grid;
+    gap: 8px;
+  }
+
+  .error-box strong {
+    font-size: 13px;
+  }
+
+  .error-box p {
+    margin: 0;
+    font-size: 12px;
+    color: #8f3434;
+  }
+
+  .error-box pre {
+    margin: 4px 0 0;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .error-btn {
+    border: 1px solid #eab3b3;
+    background: #fff;
+    color: #8c2727;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .error-btn.primary {
+    background: #c24141;
+    border-color: #c24141;
+    color: #fff;
   }
 
   .entry-shell {

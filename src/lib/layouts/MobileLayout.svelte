@@ -5,7 +5,6 @@
     import ContentPanel from "$lib/components/ContentPanel.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
-    import Input from "$lib/components/ui/Input.svelte";
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
     // Props
@@ -102,30 +101,30 @@
                         <p>독일어-한국어 전자사전</p>
                     </div>
                     <div class="search-box">
-                        <Input
-                            placeholder="사전 검색"
+                        <button
+                            type="button"
+                            class="search-launch"
+                            aria-label="검색 탭으로 이동"
                             onclick={() => (vm.mobileTab = "search")}
-                            readonly
                         >
-                            {#snippet icon()}
-                                <svg
-                                    width="18"
-                                    height="18"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                >
-                                    <circle cx="11" cy="11" r="8"></circle>
-                                    <line
-                                        x1="21"
-                                        y1="21"
-                                        x2="16.65"
-                                        y2="16.65"
-                                    ></line>
-                                </svg>
-                            {/snippet}
-                        </Input>
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line
+                                    x1="21"
+                                    y1="21"
+                                    x2="16.65"
+                                    y2="16.65"
+                                ></line>
+                            </svg>
+                            <span>사전 검색 열기</span>
+                        </button>
                     </div>
 
                     <div class="content-list">
@@ -142,7 +141,7 @@
                     <SearchPanel
                         query={vm.searchQuery}
                         rows={vm.searchRows}
-                        loading={vm.loading}
+                        loading={vm.isSearching}
                         selectedId={vm.selectedEntryId}
                         onQueryChange={(value) => (vm.searchQuery = value)}
                         onSubmit={(e) => vm.doSearch(e)}
@@ -270,8 +269,9 @@
         background: rgba(255, 255, 255, 0.8);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        padding-bottom: env(safe-area-inset-bottom);
-        height: 60px;
+        padding-top: 6px;
+        padding-bottom: 8px;
+        min-height: 60px;
         align-items: center;
     }
 
@@ -285,6 +285,7 @@
         justify-content: center;
         gap: 4px;
         font-size: 10px;
+        min-height: 44px;
         color: var(--color-text-muted);
         cursor: pointer;
     }
@@ -381,6 +382,25 @@
 
     .search-box {
         position: relative;
+    }
+
+    .search-launch {
+        width: 100%;
+        height: 42px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-surface);
+        color: var(--color-text-muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .search-launch:active {
+        background: var(--color-surface-hover);
     }
 
     .content-list h3 {

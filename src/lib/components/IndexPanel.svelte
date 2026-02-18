@@ -66,22 +66,30 @@
     />
   </div>
   <div class="entry-list" bind:this={listEl}>
-    <div style="height: {totalSize}px; width: 100%; position: relative;">
-      {#each virtualRows as row (row.index)}
-        <div
-          style="position: absolute; top: 0; left: 0; width: 100%; height: {row.size}px; transform: translateY({row.start}px);"
-        >
-          {#if rows[row.index]}
-            <ListItem
-              selected={selectedId === rows[row.index].id}
-              onclick={() => onOpen(rows[row.index].id)}
-            >
-              {rows[row.index].headword}
-            </ListItem>
-          {/if}
-        </div>
-      {/each}
-    </div>
+    {#if loading}
+      <p class="status-message">색인을 불러오는 중입니다.</p>
+    {:else if !rows.length && query.trim()}
+      <p class="status-message">일치하는 색인 항목이 없습니다.</p>
+    {:else if !rows.length}
+      <p class="status-message">색인 데이터가 없습니다.</p>
+    {:else}
+      <div style="height: {totalSize}px; width: 100%; position: relative;">
+        {#each virtualRows as row (row.index)}
+          <div
+            style="position: absolute; top: 0; left: 0; width: 100%; height: {row.size}px; transform: translateY({row.start}px);"
+          >
+            {#if rows[row.index]}
+              <ListItem
+                selected={selectedId === rows[row.index].id}
+                onclick={() => onOpen(rows[row.index].id)}
+              >
+                {rows[row.index].headword}
+              </ListItem>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 </section>
 
@@ -112,5 +120,12 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
     position: relative;
+  }
+
+  .status-message {
+    margin: 0;
+    padding: 18px 12px;
+    font-size: 13px;
+    color: var(--color-text-muted);
   }
 </style>

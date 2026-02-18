@@ -33,6 +33,9 @@ function toErrorMessage(errorValue: unknown): string {
 
 export class DictionaryStore {
   loading = $state(false);
+  isBooting = $state(false);
+  isSearching = $state(false);
+  isOpeningDetail = $state(false);
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
@@ -61,6 +64,10 @@ export class DictionaryStore {
   #indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   #indexRequestSeq = 0;
   #detailRequestSeq = 0;
+  #bootBusyCount = 0;
+  #searchBusyCount = 0;
+  #detailBusyCount = 0;
+  #lastRetryAction: (() => Promise<void>) | null = null;
 
   dispose() {
     if (this.#indexDebounceTimer) {
@@ -69,8 +76,45 @@ export class DictionaryStore {
     }
   }
 
-  async #withLoading<T>(task: () => Promise<T>): Promise<T | undefined> {
-    this.loading = true;
+  #syncLoadingState() {
+    this.isBooting = this.#bootBusyCount > 0;
+    this.isSearching = this.#searchBusyCount > 0;
+    this.isOpeningDetail = this.#detailBusyCount > 0;
+    this.loading = this.isBooting || this.isSearching || this.isOpeningDetail;
+  }
+
+  #beginBusy(kind: 'boot' | 'search' | 'detail') {
+    if (kind === 'boot') this.#bootBusyCount += 1;
+    if (kind === 'search') this.#searchBusyCount += 1;
+    if (kind === 'detail') this.#detailBusyCount += 1;
+    this.#syncLoadingState();
+  }
+
+  #endBusy(kind: 'boot' | 'search' | 'detail') {
+    if (kind === 'boot') this.#bootBusyCount = Math.max(0, this.#bootBusyCount - 1);
+    if (kind === 'search') this.#searchBusyCount = Math.max(0, this.#searchBusyCount - 1);
+    if (kind === 'detail') this.#detailBusyCount = Math.max(0, this.#detailBusyCount - 1);
+    this.#syncLoadingState();
+  }
+
+  #setRetryAction(action: (() => Promise<void>) | null) {
+    this.#lastRetryAction = action;
+  }
+
+  async retryLastOperation() {
+    if (this.#lastRetryAction) {
+      await this.#lastRetryAction();
+      return;
+    }
+    if (this.zipPath) {
+      await this.useZipPath(this.zipPath);
+      return;
+    }
+    await this.bootFromManagedCache();
+  }
+
+  async #withBusy<T>(kind: 'search' | 'detail', task: () => Promise<T>): Promise<T | undefined> {
+    this.#beginBusy(kind);
     this.error = '';
     try {
       return await task();
@@ -78,7 +122,7 @@ export class DictionaryStore {
       this.error = toErrorMessage(e);
       return undefined;
     } finally {
-      this.loading = false;
+      this.#endBusy(kind);
     }
   }
 
@@ -115,7 +159,10 @@ export class DictionaryStore {
   }
 
   async #bootMasterFeaturesWithPath(zipPath: string | null, silentNoCache = false) {
-    this.loading = true;
+    this.#setRetryAction(async () => {
+      await this.#bootMasterFeaturesWithPath(zipPath, false);
+    });
+    this.#beginBusy('boot');
     this.error = '';
     this.showProgress = true;
     this.progress = { phase: 'start', current: 0, total: 1, message: '초기화 중' };
@@ -163,7 +210,7 @@ export class DictionaryStore {
       }
     } finally {
       this.showProgress = false;
-      this.loading = false;
+      this.#endBusy('boot');
     }
   }
 
@@ -174,6 +221,9 @@ export class DictionaryStore {
       return;
     }
     this.zipPath = nextPath;
+    this.#setRetryAction(async () => {
+      await this.useZipPath(nextPath);
+    });
     await this.#bootMasterFeaturesWithPath(nextPath);
   }
 
@@ -202,7 +252,6 @@ export class DictionaryStore {
   }
 
   #beginSourcePrepare() {
-    this.loading = true;
     this.error = '';
     this.showProgress = true;
     this.progress = {
@@ -217,13 +266,15 @@ export class DictionaryStore {
     if (this.progress?.phase === 'source-prepare') {
       this.showProgress = false;
       this.progress = null;
-      this.loading = false;
     }
   }
 
   async openContent(local: string, sourcePath: string | null = null) {
+    this.#setRetryAction(async () => {
+      await this.openContent(local, sourcePath);
+    });
     const reqSeq = ++this.#detailRequestSeq;
-    const page = await this.#withLoading(() => getContentPage(this.zipPath, local, sourcePath));
+    const page = await this.#withBusy('detail', () => getContentPage(this.zipPath, local, sourcePath));
     if (!page || reqSeq !== this.#detailRequestSeq) return;
     this.selectedContent = page;
     this.selectedContentLocal = local;
@@ -233,10 +284,13 @@ export class DictionaryStore {
   }
 
   async openEntry(id: number) {
+    this.#setRetryAction(async () => {
+      await this.openEntry(id);
+    });
     const reqSeq = ++this.#detailRequestSeq;
     this.selectedEntryId = id;
     this.selectedContentLocal = '';
-    const entry = await this.#withLoading(() => getEntryDetail(this.zipPath, id));
+    const entry = await this.#withBusy('detail', () => getEntryDetail(this.zipPath, id));
     if (!entry || reqSeq !== this.#detailRequestSeq) return;
     this.selectedEntry = entry;
     this.selectedContent = null;
@@ -246,6 +300,9 @@ export class DictionaryStore {
   async #loadIndexByPrefix(prefix: string) {
     if (!this.masterSummary) return;
     const trimmed = prefix.trim();
+    this.#setRetryAction(async () => {
+      await this.#loadIndexByPrefix(trimmed);
+    });
     const requestSeq = ++this.#indexRequestSeq;
     this.indexLoading = true;
     try {
@@ -276,7 +333,16 @@ export class DictionaryStore {
       return;
     }
     this.committedSearchQuery = this.searchQuery.trim();
-    const rows = await this.#withLoading(() => searchEntries(this.zipPath, this.searchQuery, 200));
+    const searchTerm = this.searchQuery;
+    this.#setRetryAction(async () => {
+      this.searchQuery = searchTerm;
+      this.committedSearchQuery = searchTerm.trim();
+      const retryRows = await this.#withBusy('search', () =>
+        searchEntries(this.zipPath, searchTerm, 200)
+      );
+      if (retryRows) this.searchRows = retryRows;
+    });
+    const rows = await this.#withBusy('search', () => searchEntries(this.zipPath, searchTerm, 200));
     if (rows) this.searchRows = rows;
   }
 
@@ -285,7 +351,10 @@ export class DictionaryStore {
     currentSourcePath: string | null,
     currentLocal: string | null
   ) {
-    const target = await this.#withLoading(() =>
+    this.#setRetryAction(async () => {
+      await this.openInlineHref(href, currentSourcePath, currentLocal);
+    });
+    const target = await this.#withBusy('detail', () =>
       resolveLinkTarget(this.zipPath, href, currentSourcePath, currentLocal)
     );
     if (!target) return;
