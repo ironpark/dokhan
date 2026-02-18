@@ -61,6 +61,10 @@ export type EntryDetail = {
   definitionHtml: string;
 };
 
+export type ReaderFontSize = 'sm' | 'md' | 'lg';
+export type ReaderLineHeight = 'tight' | 'normal' | 'loose';
+export type ReaderWidth = 'narrow' | 'normal' | 'wide';
+
 export type DictionaryLinkTarget =
   | { kind: 'content'; local: string; sourcePath: string }
   | { kind: 'entry'; id: number };

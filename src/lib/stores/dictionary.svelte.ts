@@ -21,6 +21,9 @@ import type {
   EntryDetail,
   FavoriteItem,
   MasterFeatureSummary,
+  ReaderFontSize,
+  ReaderLineHeight,
+  ReaderWidth,
   RecentViewItem,
   SearchHit,
   Tab
@@ -32,6 +35,9 @@ const MAX_RECENT_SEARCHES = 10;
 const MAX_RECENT_VIEWS = 20;
 const MAX_FAVORITES = 100;
 const PREFS_KEY = 'dokhan:user-prefs';
+const READER_FONT_SIZES: ReaderFontSize[] = ['sm', 'md', 'lg'];
+const READER_LINE_HEIGHTS: ReaderLineHeight[] = ['tight', 'normal', 'loose'];
+const READER_WIDTHS: ReaderWidth[] = ['narrow', 'normal', 'wide'];
 
 function dedupeRecentViews(rows: RecentViewItem[]): RecentViewItem[] {
   const seen = new Set<string>();
@@ -56,6 +62,10 @@ export class DictionaryStore {
   isOpeningDetail = $state(false);
   autoOpenFirstContent = $state(true);
   preprocessEnabled = $state(true);
+  markerPreprocessEnabled = $state(true);
+  readerFontSize = $state<ReaderFontSize>('md');
+  readerLineHeight = $state<ReaderLineHeight>('normal');
+  readerWidth = $state<ReaderWidth>('normal');
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
@@ -191,6 +201,26 @@ export class DictionaryStore {
     this.#persistPrefs();
   }
 
+  setMarkerPreprocessEnabled(enabled: boolean) {
+    this.markerPreprocessEnabled = enabled;
+    this.#persistPrefs();
+  }
+
+  setReaderFontSize(value: ReaderFontSize) {
+    this.readerFontSize = value;
+    this.#persistPrefs();
+  }
+
+  setReaderLineHeight(value: ReaderLineHeight) {
+    this.readerLineHeight = value;
+    this.#persistPrefs();
+  }
+
+  setReaderWidth(value: ReaderWidth) {
+    this.readerWidth = value;
+    this.#persistPrefs();
+  }
+
   #persistPrefs() {
     if (typeof window === 'undefined') return;
     try {
@@ -198,7 +228,11 @@ export class DictionaryStore {
         recentSearches: this.recentSearches,
         recentViews: this.recentViews,
         favorites: this.favorites,
-        preprocessEnabled: this.preprocessEnabled
+        preprocessEnabled: this.preprocessEnabled,
+        markerPreprocessEnabled: this.markerPreprocessEnabled,
+        readerFontSize: this.readerFontSize,
+        readerLineHeight: this.readerLineHeight,
+        readerWidth: this.readerWidth
       };
       window.localStorage.setItem(PREFS_KEY, JSON.stringify(payload));
     } catch {
@@ -216,6 +250,10 @@ export class DictionaryStore {
         recentViews?: RecentViewItem[];
         favorites?: FavoriteItem[];
         preprocessEnabled?: boolean;
+        markerPreprocessEnabled?: boolean;
+        readerFontSize?: ReaderFontSize;
+        readerLineHeight?: ReaderLineHeight;
+        readerWidth?: ReaderWidth;
       };
       this.recentSearches = Array.isArray(parsed.recentSearches)
         ? parsed.recentSearches.slice(0, MAX_RECENT_SEARCHES)
@@ -227,6 +265,16 @@ export class DictionaryStore {
         ? parsed.favorites.slice(0, MAX_FAVORITES)
         : [];
       this.preprocessEnabled = parsed.preprocessEnabled ?? true;
+      this.markerPreprocessEnabled = parsed.markerPreprocessEnabled ?? true;
+      this.readerFontSize = READER_FONT_SIZES.includes(parsed.readerFontSize as ReaderFontSize)
+        ? (parsed.readerFontSize as ReaderFontSize)
+        : 'md';
+      this.readerLineHeight = READER_LINE_HEIGHTS.includes(parsed.readerLineHeight as ReaderLineHeight)
+        ? (parsed.readerLineHeight as ReaderLineHeight)
+        : 'normal';
+      this.readerWidth = READER_WIDTHS.includes(parsed.readerWidth as ReaderWidth)
+        ? (parsed.readerWidth as ReaderWidth)
+        : 'normal';
     } catch {
       // Ignore malformed prefs.
     }

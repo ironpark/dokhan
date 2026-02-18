@@ -3,7 +3,11 @@
     ContentPage,
     DetailMode,
     EntryDetail,
+    ReaderFontSize,
+    ReaderLineHeight,
+    ReaderWidth,
   } from "$lib/types/dictionary";
+  import { applyDictionaryPreprocess } from "$lib/utils/readerPreprocess";
 
   let {
     mode,
@@ -16,6 +20,14 @@
     onToggleFavorite = () => {},
     preprocessEnabled = true,
     onTogglePreprocess = () => {},
+    markerPreprocessEnabled = true,
+    onToggleMarkerPreprocess = () => {},
+    readerFontSize = "md",
+    readerLineHeight = "normal",
+    readerWidth = "normal",
+    onReaderFontSizeChange = () => {},
+    onReaderLineHeightChange = () => {},
+    onReaderWidthChange = () => {},
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
@@ -35,6 +47,14 @@
     onToggleFavorite?: () => void;
     preprocessEnabled?: boolean;
     onTogglePreprocess?: () => void;
+    markerPreprocessEnabled?: boolean;
+    onToggleMarkerPreprocess?: () => void;
+    readerFontSize?: ReaderFontSize;
+    readerLineHeight?: ReaderLineHeight;
+    readerWidth?: ReaderWidth;
+    onReaderFontSizeChange?: (value: ReaderFontSize) => void;
+    onReaderLineHeightChange?: (value: ReaderLineHeight) => void;
+    onReaderWidthChange?: (value: ReaderWidth) => void;
   } = $props();
 
   type RenderContext = {
@@ -43,7 +63,49 @@
     html: string;
     highlightQuery: string;
     preprocessEnabled: boolean;
+    markerPreprocessEnabled: boolean;
   };
+
+  const readerFontSizeMap: Record<ReaderFontSize, string> = {
+    sm: "14px",
+    md: "15px",
+    lg: "17px",
+  };
+  const readerLineHeightMap: Record<ReaderLineHeight, string> = {
+    tight: "1.5",
+    normal: "1.62",
+    loose: "1.76",
+  };
+  const readerWidthMap: Record<ReaderWidth, string> = {
+    narrow: "760px",
+    normal: "860px",
+    wide: "980px",
+  };
+
+  let showReaderTools = $state(false);
+
+  const readerStyleVars = $derived(
+    `--reader-font-size: ${readerFontSizeMap[readerFontSize] ?? readerFontSizeMap.md};` +
+      ` --reader-line-height: ${readerLineHeightMap[readerLineHeight] ?? readerLineHeightMap.normal};` +
+      ` --reader-max-width: ${readerWidthMap[readerWidth] ?? readerWidthMap.normal};`,
+  );
+
+  function handleFontSizeChange(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement)
+      .value as ReaderFontSize;
+    onReaderFontSizeChange(value);
+  }
+
+  function handleLineHeightChange(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement)
+      .value as ReaderLineHeight;
+    onReaderLineHeightChange(value);
+  }
+
+  function handleWidthChange(event: Event) {
+    const value = (event.currentTarget as HTMLSelectElement).value as ReaderWidth;
+    onReaderWidthChange(value);
+  }
 
   function escapeRegex(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -130,6 +192,9 @@
   ) {
     let context = initial;
     let revision = 0;
+    let lastStructureSignature = "";
+    let lastHighlightSignature = "";
+    const activeObjectUrls = new Set<string>();
 
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -148,7 +213,11 @@
       const images = Array.from(
         node.querySelectorAll("img[src]"),
       ) as HTMLImageElement[];
+      let processed = 0;
       for (const image of images) {
+        if (processed >= 24) {
+          return;
+        }
         if (currentRevision !== revision || !node.isConnected) {
           return;
         }
@@ -156,11 +225,13 @@
         if (
           !src ||
           src.startsWith("data:") ||
+          src.startsWith("blob:") ||
           src.startsWith("http://") ||
           src.startsWith("https://")
         ) {
           continue;
         }
+        processed += 1;
         const resolved = await onResolveImageHref(
           src,
           snapshot.sourcePath,
@@ -170,162 +241,87 @@
           return;
         }
         if (resolved) {
+          if (resolved.startsWith("data:")) {
+            try {
+              const blob = await (await fetch(resolved)).blob();
+              if (currentRevision !== revision || !node.isConnected) {
+                return;
+              }
+              const blobUrl = URL.createObjectURL(blob);
+              activeObjectUrls.add(blobUrl);
+              image.setAttribute("src", blobUrl);
+              continue;
+            } catch {
+              // Fallback to raw URL assignment below.
+            }
+          }
           image.setAttribute("src", resolved);
         }
       }
     }
 
-    function extractSenseNo(node: Node): number | null {
-      if (!(node instanceof HTMLSpanElement)) return null;
-      const text = node.textContent?.trim() ?? "";
-      const match = text.match(/^(\d+)\.$/);
-      if (!match) return null;
-      const no = Number.parseInt(match[1], 10);
-      if (!Number.isFinite(no) || no <= 0) return null;
-      return no;
+    function revokeObjectUrls() {
+      for (const url of activeObjectUrls) {
+        URL.revokeObjectURL(url);
+      }
+      activeObjectUrls.clear();
     }
 
-    function extractAlphaSenseNo(node: Node): number | null {
-      if (!(node instanceof HTMLSpanElement)) return null;
-      const text = node.textContent?.trim() ?? "";
-      const match = text.match(/^([a-z])\)$/i);
-      if (!match) return null;
-      const code = match[1].toLowerCase().charCodeAt(0) - 96;
-      if (!Number.isFinite(code) || code <= 0) return null;
-      return code;
+    function computeStructureSignature(snapshot: RenderContext): string {
+      return [
+        snapshot.sourcePath ?? "",
+        snapshot.local ?? "",
+        String(snapshot.html.length),
+        snapshot.preprocessEnabled ? "1" : "0",
+        snapshot.markerPreprocessEnabled ? "1" : "0",
+      ].join("\u0001");
     }
 
-    function collectMarkers(
-      nodes: Node[],
-      extract: (node: Node) => number | null,
-      minimum = 2,
-    ): Array<{ idx: number; no: number }> {
-      const markers = nodes
-        .map((node, idx) => ({ idx, no: extract(node) }))
-        .filter((row): row is { idx: number; no: number } => row.no !== null);
-      if (markers.length < minimum) return [];
-      for (let i = 1; i < markers.length; i += 1) {
-        if (markers[i].no <= markers[i - 1].no) return [];
-      }
-      return markers;
-    }
-
-    function buildOrderedList(
-      nodes: Node[],
-      markers: Array<{ idx: number; no: number }>,
-      options: {
-        listClassName: string;
-        itemClassName: string;
-        type?: "a";
-      },
-    ): { preface: DocumentFragment; list: HTMLOListElement } {
-      const preface = document.createDocumentFragment();
-      const first = markers[0];
-      for (let i = 0; i < first.idx; i += 1) {
-        preface.appendChild(nodes[i]);
-      }
-
-      const list = document.createElement("ol");
-      list.className = options.listClassName;
-      if (options.type) {
-        list.setAttribute("type", options.type);
-      }
-      if (first.no > 1) {
-        list.setAttribute("start", String(first.no));
-      }
-
-      for (let i = 0; i < markers.length; i += 1) {
-        const marker = markers[i];
-        const end = i + 1 < markers.length ? markers[i + 1].idx : nodes.length;
-        const li = document.createElement("li");
-        li.className = options.itemClassName;
-        for (let j = marker.idx + 1; j < end; j += 1) {
-          li.appendChild(nodes[j]);
-        }
-        list.appendChild(li);
-      }
-
-      return { preface, list };
-    }
-
-    function applyAlphaSubSenseList(listItem: HTMLElement) {
-      if (listItem.dataset.alphaSenseListApplied === "1") return;
-      const nodes = Array.from(listItem.childNodes);
-      const markers = collectMarkers(nodes, extractAlphaSenseNo);
-      if (!markers.length) return;
-      const { preface, list } = buildOrderedList(nodes, markers, {
-        listClassName: "dict-subsense-list",
-        itemClassName: "dict-subsense-item",
-        type: "a",
-      });
-      listItem.replaceChildren(preface, list);
-      listItem.dataset.alphaSenseListApplied = "1";
-    }
-
-    function applySenseList(root: HTMLElement) {
-      if (root.dataset.senseListApplied === "1") return;
-      const nodes = Array.from(root.childNodes);
-      const markers = collectMarkers(nodes, extractSenseNo);
-      if (!markers.length) return;
-
-      const { preface, list } = buildOrderedList(nodes, markers, {
-        listClassName: "dict-sense-list",
-        itemClassName: "dict-sense-item",
-      });
-
-      root.replaceChildren(preface, list);
-
-      const topLevelItems = Array.from(
-        list.querySelectorAll(":scope > li.dict-sense-item"),
-      ) as HTMLElement[];
-      for (const item of topLevelItems) {
-        applyAlphaSubSenseList(item);
-      }
-
-      root.dataset.senseListApplied = "1";
-    }
-
-    function applyBrSpacing(root: HTMLElement) {
-      const breaks = Array.from(root.querySelectorAll("br"));
-      for (const br of breaks) {
-        if ((br as HTMLElement).dataset.spaced === "1") continue;
-        const spacer = document.createElement("span");
-        spacer.className = "dict-br-spacer";
-        spacer.setAttribute("aria-hidden", "true");
-        br.insertAdjacentElement("afterend", spacer);
-        (br as HTMLElement).dataset.spaced = "1";
-      }
+    function computeHighlightSignature(snapshot: RenderContext): string {
+      return [
+        snapshot.sourcePath ?? "",
+        snapshot.local ?? "",
+        String(snapshot.html.length),
+        snapshot.highlightQuery,
+      ].join("\u0001");
     }
 
     function scheduleDecorations() {
       const currentRevision = ++revision;
       const snapshot = { ...context };
+      const nextStructureSignature = computeStructureSignature(snapshot);
+      const nextHighlightSignature = computeHighlightSignature(snapshot);
+      const needsStructureWork = nextStructureSignature !== lastStructureSignature;
+      const needsHighlightWork = nextHighlightSignature !== lastHighlightSignature;
+      if (!needsStructureWork && !needsHighlightWork) return;
       queueMicrotask(async () => {
         if (currentRevision !== revision || !node.isConnected) return;
-        try {
-          await hydrateImages(currentRevision, snapshot);
-        } catch {
-          // Keep rendering stable even if media resolution fails.
-        }
-        if (currentRevision !== revision || !node.isConnected) return;
-        if (snapshot.preprocessEnabled) {
-          try {
-            applySenseList(node);
-          } catch {
-            // Keep rendering stable even if sense list transformation fails.
+        if (needsStructureWork) {
+          revokeObjectUrls();
+          if (snapshot.preprocessEnabled) {
+            try {
+              applyDictionaryPreprocess(node, {
+                markerTagging: snapshot.markerPreprocessEnabled,
+              });
+            } catch {
+              // Keep rendering stable even if preprocess transformation fails.
+            }
           }
+        }
+        if (needsHighlightWork) {
           if (currentRevision !== revision || !node.isConnected) return;
           try {
-            applyBrSpacing(node);
+            applyHighlights(node, snapshot.highlightQuery);
           } catch {
-            // Keep rendering stable even if spacing injection fails.
+            clearHighlights(node);
           }
         }
-        if (currentRevision !== revision || !node.isConnected) return;
-        try {
-          applyHighlights(node, snapshot.highlightQuery);
-        } catch {
-          clearHighlights(node);
+        lastStructureSignature = nextStructureSignature;
+        lastHighlightSignature = nextHighlightSignature;
+        if (needsStructureWork) {
+          void hydrateImages(currentRevision, snapshot).catch(() => {
+            // Keep rendering stable even if media resolution fails.
+          });
         }
       });
     }
@@ -341,12 +337,13 @@
         revision += 1;
         node.removeEventListener("click", onClick);
         clearHighlights(node);
+        revokeObjectUrls();
       },
     };
   }
 </script>
 
-<section class="reader">
+<section class="reader" style={readerStyleVars}>
   {#if mode === "content" && selectedContent}
     <article class="body-content">
       <header class="doc-header">
@@ -362,16 +359,63 @@
           </button>
           <button
             type="button"
+            class="mini-btn"
+            class:active={markerPreprocessEnabled}
+            onclick={onToggleMarkerPreprocess}
+            disabled={!preprocessEnabled}
+          >
+            {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
+          </button>
+          <button
+            type="button"
             class="favorite-btn mini-btn"
             class:active={isFavorite}
             onclick={onToggleFavorite}
           >
             {isFavorite ? "★ 저장됨" : "☆ 저장"}
           </button>
+          <button
+            type="button"
+            class="mini-btn"
+            class:active={showReaderTools}
+            onclick={() => (showReaderTools = !showReaderTools)}
+          >
+            보기 옵션
+          </button>
         </div>
       </header>
+      {#if showReaderTools}
+        <div class="doc-tools-row">
+          <div class="view-controls">
+            <label class="option-field">
+              <span class="option-label">글자 크기</span>
+              <select value={readerFontSize} onchange={handleFontSizeChange}>
+                <option value="sm">작게</option>
+                <option value="md">보통</option>
+                <option value="lg">크게</option>
+              </select>
+            </label>
+            <label class="option-field">
+              <span class="option-label">줄 간격</span>
+              <select value={readerLineHeight} onchange={handleLineHeightChange}>
+                <option value="tight">좁게</option>
+                <option value="normal">보통</option>
+                <option value="loose">넓게</option>
+              </select>
+            </label>
+            <label class="option-field">
+              <span class="option-label">본문 폭</span>
+              <select value={readerWidth} onchange={handleWidthChange}>
+                <option value="narrow">좁게</option>
+                <option value="normal">보통</option>
+                <option value="wide">넓게</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      {/if}
       {#if selectedContent.bodyHtml}
-        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}::${preprocessEnabled}`}
+        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}::${preprocessEnabled}::${markerPreprocessEnabled}`}
           <div
             class="html-rendered"
             use:interceptLinksAndResolveImages={{
@@ -380,6 +424,7 @@
               html: selectedContent.bodyHtml,
               highlightQuery,
               preprocessEnabled,
+              markerPreprocessEnabled,
             }}
           >
             {@html selectedContent.bodyHtml}
@@ -404,17 +449,64 @@
           </button>
           <button
             type="button"
+            class="mini-btn"
+            class:active={markerPreprocessEnabled}
+            onclick={onToggleMarkerPreprocess}
+            disabled={!preprocessEnabled}
+          >
+            {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
+          </button>
+          <button
+            type="button"
             class="favorite-btn mini-btn"
             class:active={isFavorite}
             onclick={onToggleFavorite}
           >
             {isFavorite ? "★ 저장됨" : "☆ 저장"}
           </button>
+          <button
+            type="button"
+            class="mini-btn"
+            class:active={showReaderTools}
+            onclick={() => (showReaderTools = !showReaderTools)}
+          >
+            보기 옵션
+          </button>
         </div>
       </header>
       <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
+      {#if showReaderTools}
+        <div class="doc-tools-row">
+          <div class="view-controls">
+            <label class="option-field">
+              <span class="option-label">글자 크기</span>
+              <select value={readerFontSize} onchange={handleFontSizeChange}>
+                <option value="sm">작게</option>
+                <option value="md">보통</option>
+                <option value="lg">크게</option>
+              </select>
+            </label>
+            <label class="option-field">
+              <span class="option-label">줄 간격</span>
+              <select value={readerLineHeight} onchange={handleLineHeightChange}>
+                <option value="tight">좁게</option>
+                <option value="normal">보통</option>
+                <option value="loose">넓게</option>
+              </select>
+            </label>
+            <label class="option-field">
+              <span class="option-label">본문 폭</span>
+              <select value={readerWidth} onchange={handleWidthChange}>
+                <option value="narrow">좁게</option>
+                <option value="normal">보통</option>
+                <option value="wide">넓게</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      {/if}
       {#if selectedEntry.definitionHtml}
-        {#key `${selectedEntry.id}::${highlightQuery}::${preprocessEnabled}`}
+        {#key `${selectedEntry.id}::${highlightQuery}::${preprocessEnabled}::${markerPreprocessEnabled}`}
           <div
             class="html-rendered"
             use:interceptLinksAndResolveImages={{
@@ -423,6 +515,7 @@
               html: selectedEntry.definitionHtml,
               highlightQuery,
               preprocessEnabled,
+              markerPreprocessEnabled,
             }}
           >
             {@html selectedEntry.definitionHtml}
@@ -451,7 +544,7 @@
   }
 
   .body-content {
-    max-width: 860px;
+    max-width: var(--reader-max-width);
     margin: 0 auto;
   }
 
@@ -477,8 +570,8 @@
 
   .html-rendered :global(li.dict-sense-item) {
     margin: 0 0 0.64em;
-    line-height: 1.66;
-    font-size: 15px;
+    line-height: var(--reader-line-height);
+    font-size: var(--reader-font-size);
   }
 
   .html-rendered :global(ol.dict-subsense-list) {
@@ -488,8 +581,8 @@
 
   .html-rendered :global(li.dict-subsense-item) {
     margin: 0 0 0.32em;
-    line-height: 1.62;
-    font-size: 15px;
+    line-height: var(--reader-line-height);
+    font-size: var(--reader-font-size);
   }
 
   .html-rendered :global(li.dict-sense-item > :first-child),
@@ -504,19 +597,19 @@
 
   .html-rendered :global(p) {
     margin: 0 0 0.82em;
-    line-height: 1.62;
-    font-size: 15px;
+    line-height: var(--reader-line-height);
+    font-size: var(--reader-font-size);
   }
 
   .html-rendered :global(h3) {
     margin: 1.1em 0 0.55em;
-    font-size: 18px;
+    font-size: calc(var(--reader-font-size) * 1.2);
     line-height: 1.35;
   }
 
   .html-rendered :global(h4) {
     margin: 0.9em 0 0.45em;
-    font-size: 16px;
+    font-size: calc(var(--reader-font-size) * 1.08);
     line-height: 1.35;
   }
 
@@ -529,6 +622,105 @@
     background: #ffe38f;
     color: #2b2300;
     padding: 0 1px;
+  }
+
+  .html-rendered :global(span.dict-marker) {
+    position: relative;
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.95em;
+    line-height: inherit;
+    font-weight: 700;
+    letter-spacing: 0;
+    cursor: help;
+  }
+
+  .html-rendered :global(span.dict-marker[data-tooltip]::before) {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(2px);
+    z-index: 30;
+    max-width: min(340px, 72vw);
+    width: max-content;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: rgba(18, 21, 28, 0.96);
+    color: #f6f8fb;
+    font-size: 11px;
+    line-height: 1.35;
+    font-weight: 500;
+    letter-spacing: 0;
+    white-space: normal;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 80ms ease,
+      transform 80ms ease,
+      visibility 80ms ease;
+  }
+
+  .html-rendered :global(span.dict-marker[data-tooltip]::after) {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%) translateY(2px);
+    border: 6px solid transparent;
+    border-top-color: rgba(18, 21, 28, 0.96);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 80ms ease,
+      transform 80ms ease,
+      visibility 80ms ease;
+  }
+
+  .html-rendered :global(span.dict-marker[data-tooltip]:hover::before),
+  .html-rendered :global(span.dict-marker[data-tooltip]:hover::after),
+  .html-rendered :global(span.dict-marker[data-tooltip]:focus-visible::before),
+  .html-rendered :global(span.dict-marker[data-tooltip]:focus-visible::after) {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .html-rendered :global(span.dict-marker-round.dict-marker-register) {
+    color: #0f5a72;
+  }
+
+  .html-rendered :global(span.dict-marker-round.dict-marker-region) {
+    color: #2f6a2f;
+  }
+
+  .html-rendered :global(span.dict-marker-round.dict-marker-time) {
+    color: #8a5a10;
+  }
+
+  .html-rendered :global(span.dict-marker-round.dict-marker-usage),
+  .html-rendered :global(span.dict-marker-square.dict-marker-usage),
+  .html-rendered :global(span.dict-marker-square.dict-marker-meaning) {
+    color: #60428a;
+  }
+
+  .html-rendered :global(span.dict-marker-square.dict-marker-domain) {
+    color: #4a4a4a;
+  }
+
+  .html-rendered :global(span.dict-marker-square.dict-marker-orthography) {
+    color: #0a5f52;
+  }
+
+  .html-rendered :global(span.dict-marker-angle.dict-marker-grammar) {
+    color: #9a4f00;
+    font-weight: 600;
   }
 
   h2 {
@@ -558,13 +750,21 @@
   }
 
   .doc-actions {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 6px;
     flex-shrink: 0;
   }
 
+  .doc-tools-row {
+    display: flex;
+    width: 100%;
+    margin: 8px 0 10px;
+  }
+
   .mini-btn {
-    border: 1px solid var(--color-border);
+    border: 1px solid transparent;
     background: var(--color-surface);
     color: var(--color-text-muted);
     border-radius: 999px;
@@ -577,7 +777,8 @@
     transition:
       background-color var(--motion-fast),
       border-color var(--motion-fast),
-      color var(--motion-fast);
+      color var(--motion-fast),
+      opacity var(--motion-fast);
   }
 
   .mini-btn.active {
@@ -596,12 +797,110 @@
     border-color: var(--color-border-strong);
   }
 
+  .mini-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .view-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    border: 1px solid color-mix(in oklab, var(--color-border), white 25%);
+    border-radius: 14px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--color-surface-soft), white 45%) 0%,
+        color-mix(in oklab, var(--color-surface-soft), white 20%) 100%
+      );
+    padding: 10px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .option-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .option-label {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    font-weight: 600;
+  }
+
+  .view-controls select {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 9px 30px 9px 10px;
+    outline: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 15px) calc(50% - 2px),
+      calc(100% - 10px) calc(50% - 2px);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+    transition:
+      border-color var(--motion-fast),
+      box-shadow var(--motion-fast),
+      background-color var(--motion-fast);
+  }
+
+  .view-controls select:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  .view-controls select:focus-visible {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 80%);
+  }
+
   .mini-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px var(--color-accent-soft);
   }
 
   @media (max-width: 768px) {
+    .reader {
+      padding: var(--space-4) var(--space-4) var(--space-5);
+    }
+
+    .doc-header {
+      flex-direction: column;
+    }
+
+    .doc-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .doc-tools-row {
+      margin-top: 6px;
+      margin-bottom: 8px;
+    }
+
+    .view-controls {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 9px;
+      border-radius: 12px;
+    }
+
     .html-rendered :global(ol.dict-sense-list) {
       margin: 0.58em 0 0.52em;
       padding-left: 1.5em;

@@ -27,6 +27,8 @@ type ZipBytes = Arc<[u8]>;
 static CHM_BYTES_CACHE: OnceLock<Mutex<BTreeMap<String, ChmBytes>>> = OnceLock::new();
 static ZIP_BYTES_CACHE: OnceLock<Mutex<BTreeMap<String, ZipBytes>>> = OnceLock::new();
 static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<chm::ChmArchive>>>> = OnceLock::new();
+const MAX_CHM_BYTES_CACHE_ITEMS: usize = 24;
+const MAX_CHM_ARCHIVE_CACHE_ITEMS: usize = 16;
 
 /// Decode CHM page bytes into normalized content payload.
 fn decode_content_page(local: String, source_path: String, bytes: &[u8]) -> ContentPage {
@@ -136,7 +138,14 @@ fn get_cached_chm_bytes(zip_path: &Path, chm_name: &str) -> Result<Option<ChmByt
 fn cache_chm_bytes(zip_path: &Path, chm_name: &str, bytes: ChmBytes) -> Result<(), String> {
     let cache = CHM_BYTES_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
     let mut guard = cache.lock().map_err(|_| "chm cache lock poisoned".to_string())?;
-    guard.insert(chm_cache_key(zip_path, chm_name), bytes);
+    let key = chm_cache_key(zip_path, chm_name);
+    guard.insert(key, bytes);
+    while guard.len() > MAX_CHM_BYTES_CACHE_ITEMS {
+        let Some(oldest_key) = guard.keys().next().cloned() else {
+            break;
+        };
+        guard.remove(&oldest_key);
+    }
     Ok(())
 }
 
@@ -155,7 +164,14 @@ fn cache_chm_archive(zip_path: &Path, chm_name: &str, archive: chm::ChmArchive) 
     let mut guard = cache
         .lock()
         .map_err(|_| "chm archive cache lock poisoned".to_string())?;
-    guard.insert(chm_cache_key(zip_path, chm_name), Arc::new(archive));
+    let key = chm_cache_key(zip_path, chm_name);
+    guard.insert(key, Arc::new(archive));
+    while guard.len() > MAX_CHM_ARCHIVE_CACHE_ITEMS {
+        let Some(oldest_key) = guard.keys().next().cloned() else {
+            break;
+        };
+        guard.remove(&oldest_key);
+    }
     Ok(())
 }
 

@@ -88,6 +88,18 @@
                         preprocessEnabled={vm.preprocessEnabled}
                         onTogglePreprocess={() =>
                             vm.setPreprocessEnabled(!vm.preprocessEnabled)}
+                        markerPreprocessEnabled={vm.markerPreprocessEnabled}
+                        onToggleMarkerPreprocess={() =>
+                            vm.setMarkerPreprocessEnabled(!vm.markerPreprocessEnabled)}
+                        readerFontSize={vm.readerFontSize}
+                        readerLineHeight={vm.readerLineHeight}
+                        readerWidth={vm.readerWidth}
+                        onReaderFontSizeChange={(value) =>
+                            vm.setReaderFontSize(value)}
+                        onReaderLineHeightChange={(value) =>
+                            vm.setReaderLineHeight(value)}
+                        onReaderWidthChange={(value) =>
+                            vm.setReaderWidth(value)}
                     />
                 </div>
             </div>
