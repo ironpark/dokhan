@@ -33,6 +33,18 @@ const MAX_RECENT_VIEWS = 20;
 const MAX_FAVORITES = 100;
 const PREFS_KEY = 'dokhan:user-prefs';
 
+function dedupeRecentViews(rows: RecentViewItem[]): RecentViewItem[] {
+  const seen = new Set<string>();
+  const out: RecentViewItem[] = [];
+  for (const row of rows) {
+    if (seen.has(row.key)) continue;
+    seen.add(row.key);
+    out.push(row);
+    if (out.length >= MAX_RECENT_VIEWS) break;
+  }
+  return out;
+}
+
 function toErrorMessage(errorValue: unknown): string {
   return typeof errorValue === 'string' ? errorValue : String(errorValue);
 }
@@ -201,7 +213,7 @@ export class DictionaryStore {
         ? parsed.recentSearches.slice(0, MAX_RECENT_SEARCHES)
         : [];
       this.recentViews = Array.isArray(parsed.recentViews)
-        ? parsed.recentViews.slice(0, MAX_RECENT_VIEWS)
+        ? dedupeRecentViews(parsed.recentViews)
         : [];
       this.favorites = Array.isArray(parsed.favorites)
         ? parsed.favorites.slice(0, MAX_FAVORITES)
@@ -339,12 +351,12 @@ export class DictionaryStore {
     this.selectedEntryId = null;
     this.detailMode = 'content';
     this.#pushRecentView({
-      key: `content:${sourcePath ?? ''}:${local}`,
+      key: `content:${page.sourcePath}:${local}`,
       kind: 'content',
       label: page.title,
       id: null,
       local,
-      sourcePath: sourcePath ?? page.sourcePath,
+      sourcePath: page.sourcePath,
       viewedAt: Date.now()
     });
   }
@@ -454,7 +466,7 @@ export class DictionaryStore {
 
   #pushRecentView(item: RecentViewItem) {
     const next = [item, ...this.recentViews.filter((row) => row.key !== item.key)];
-    this.recentViews = next.slice(0, MAX_RECENT_VIEWS);
+    this.recentViews = dedupeRecentViews(next);
     this.#persistPrefs();
   }
 

@@ -9,6 +9,7 @@
     rows,
     loading = false,
     inputAtBottom = false,
+    recentUnderInput = false,
     recentSearches = [],
     selectedId = null,
     onQueryChange,
@@ -20,6 +21,7 @@
     rows: SearchHit[];
     loading?: boolean;
     inputAtBottom?: boolean;
+    recentUnderInput?: boolean;
     recentSearches?: string[];
     selectedId?: number | null;
     onQueryChange: (value: string) => void;
@@ -70,7 +72,12 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
-  const showRecentInline = $derived(recentSearches.length > 0 && !query.trim());
+  const showRecentInline = $derived(
+    recentUnderInput && recentSearches.length > 0 && !query.trim(),
+  );
+  const showRecentInList = $derived(
+    !recentUnderInput && recentSearches.length > 0 && !query.trim(),
+  );
 </script>
 
 <section
@@ -107,7 +114,20 @@
     {:else if !rows.length && query.trim()}
       <p class="status-message">검색 결과가 없습니다.</p>
     {:else if !rows.length}
-      <p class="status-message">검색어를 입력하고 검색 버튼을 눌러주세요.</p>
+      {#if showRecentInList}
+        <div class="recent-block">
+          <p class="status-message">최근 검색어</p>
+          <div class="recent-list">
+            {#each recentSearches as term (term)}
+              <button type="button" onclick={() => onPickRecentSearch(term)}>
+                {term}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <p class="status-message">검색어를 입력하고 검색 버튼을 눌러주세요.</p>
+      {/if}
     {:else}
       <div style="height: {totalSize}px; width: 100%; position: relative;">
         {#each virtualRows as row (row.index)}
@@ -147,7 +167,7 @@
   }
 
   .search-group {
-    background: var(--color-surface);
+    background: transparent;
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -217,6 +237,10 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+
+  .recent-block {
+    padding: 10px 12px;
   }
 
   .recent-list button {

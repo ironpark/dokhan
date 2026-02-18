@@ -146,6 +146,7 @@
                         rows={vm.searchRows}
                         loading={vm.isSearching}
                         inputAtBottom={true}
+                        recentUnderInput={true}
                         recentSearches={vm.recentSearches}
                         selectedId={vm.selectedEntryId}
                         onQueryChange={(value) => vm.handleSearchQueryChange(value)}

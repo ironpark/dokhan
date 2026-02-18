@@ -114,7 +114,7 @@
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
       onclear={() => onQueryChange("")}
       clearable={true}
-      placeholder="색인 fuzzy 검색 (예: hnd, ab)"
+      placeholder="색인 검색 (예: hnd, ab)"
     />
   </div>
   <div class="entry-list" bind:this={listEl}>
