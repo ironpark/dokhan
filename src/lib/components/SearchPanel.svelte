@@ -9,18 +9,22 @@
     rows,
     loading = false,
     inputAtBottom = false,
+    recentSearches = [],
     selectedId = null,
     onQueryChange,
     onSubmit,
+    onPickRecentSearch,
     onOpen,
   }: {
     query: string;
     rows: SearchHit[];
     loading?: boolean;
     inputAtBottom?: boolean;
+    recentSearches?: string[];
     selectedId?: number | null;
     onQueryChange: (value: string) => void;
     onSubmit: (event: Event) => void;
+    onPickRecentSearch: (query: string) => void;
     onOpen: (id: number) => void;
   } = $props();
 
@@ -66,17 +70,37 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
+  const showRecentInline = $derived(recentSearches.length > 0 && !query.trim());
 </script>
 
-<section class="panel" class:input-bottom={inputAtBottom}>
-  <form class="search-line" onsubmit={onSubmit}>
+<section
+  class="panel"
+  class:input-bottom={inputAtBottom}
+>
+  <div class="search-group">
+    <form class="search-line" onsubmit={onSubmit}>
     <Input
       value={query}
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
+      onclear={() => onQueryChange("")}
+      clearable={true}
       placeholder="독일어/한국어 검색"
     />
-    <Button type="submit" disabled={loading || !query.trim()}>검색</Button>
-  </form>
+      <Button type="submit" disabled={loading || !query.trim()}>검색</Button>
+    </form>
+    {#if showRecentInline}
+      <div class="search-recent">
+        <p>최근 검색어</p>
+        <div class="recent-list">
+          {#each recentSearches as term (term)}
+            <button type="button" onclick={() => onPickRecentSearch(term)}>
+              {term}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
   <div class="entry-list" bind:this={listEl}>
     {#if loading}
       <p class="status-message">검색 결과를 불러오는 중입니다.</p>
@@ -122,6 +146,11 @@
     grid-template-rows: 1fr auto;
   }
 
+  .search-group {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+
   .search-line {
     margin: 0;
     padding: 10px;
@@ -132,7 +161,14 @@
   }
 
   .panel.input-bottom .search-line {
+    border-top: none;
+    background: transparent;
+    padding-bottom: 10px;
+  }
+
+  .panel.input-bottom .search-group {
     order: 2;
+    border-bottom: none;
     border-top: 1px solid var(--color-border);
     background: color-mix(in oklab, var(--color-surface), white 12%);
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
@@ -154,11 +190,43 @@
     order: 1;
   }
 
+  .search-recent {
+    padding: 8px 10px 10px;
+    border-top: none;
+    background: transparent;
+  }
+
+  .search-recent p {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .panel.input-bottom .search-recent {
+    border-top: none;
+  }
+
   .status-message {
     margin: 0;
     padding: 18px 12px;
     font-size: 13px;
     color: var(--color-text-muted);
+  }
+
+  .recent-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .recent-list button {
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
   }
 
   .result-row {

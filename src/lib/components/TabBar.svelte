@@ -26,12 +26,17 @@
     class:active={activeTab === "search"}
     onclick={() => onChange("search")}>검색</button
   >
+  <button
+    type="button"
+    class:active={activeTab === "favorites"}
+    onclick={() => onChange("favorites")}>즐겨찾기</button
+  >
 </div>
 
 <style>
   .tabbar {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     background: transparent;
     border-bottom: 1px solid var(--color-border);
   }

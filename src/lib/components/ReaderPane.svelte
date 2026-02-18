@@ -12,6 +12,8 @@
     highlightQuery = "",
     onOpenHref,
     onResolveImageHref,
+    isFavorite = false,
+    onToggleFavorite = () => {},
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
@@ -27,6 +29,8 @@
       currentSourcePath: string | null,
       currentLocal: string | null,
     ) => Promise<string | null>;
+    isFavorite?: boolean;
+    onToggleFavorite?: () => void;
   } = $props();
 
   type RenderContext = {
@@ -204,6 +208,17 @@
 <section class="reader">
   {#if mode === "content" && selectedContent}
     <article class="body-content">
+      <header class="doc-header">
+        <h2>{selectedContent.title}</h2>
+        <button
+          type="button"
+          class="favorite-btn"
+          class:active={isFavorite}
+          onclick={onToggleFavorite}
+        >
+          {isFavorite ? "★ 저장됨" : "☆ 저장"}
+        </button>
+      </header>
       {#if selectedContent.bodyHtml}
         {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}`}
           <div
@@ -224,7 +239,17 @@
     </article>
   {:else if mode === "entry" && selectedEntry}
     <article class="body-content">
-      <h2>{selectedEntry.headword}</h2>
+      <header class="doc-header">
+        <h2>{selectedEntry.headword}</h2>
+        <button
+          type="button"
+          class="favorite-btn"
+          class:active={isFavorite}
+          onclick={onToggleFavorite}
+        >
+          {isFavorite ? "★ 저장됨" : "☆ 저장"}
+        </button>
+      </header>
       <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
       {#if selectedEntry.definitionHtml}
         {#key `${selectedEntry.id}::${highlightQuery}`}
@@ -299,5 +324,31 @@
 
   .placeholder {
     color: var(--muted);
+  }
+
+  .doc-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .favorite-btn {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1;
+    padding: 7px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    margin-top: 6px;
+  }
+
+  .favorite-btn.active {
+    color: #ad7a00;
+    border-color: #e8ca77;
+    background: #fff8dc;
   }
 </style>

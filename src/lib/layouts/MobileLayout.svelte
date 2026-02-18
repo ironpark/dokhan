@@ -5,6 +5,7 @@
     import ContentPanel from "$lib/components/ContentPanel.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
+    import LibraryPanel from "$lib/components/LibraryPanel.svelte";
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
     // Props
@@ -82,6 +83,8 @@
                             vm.openInlineHref(href, path, local)}
                         onResolveImageHref={(href, path, local) =>
                             vm.resolveInlineImageHref(href, path, local)}
+                        isFavorite={vm.isCurrentFavorite()}
+                        onToggleFavorite={() => vm.toggleCurrentFavorite()}
                     />
                 </div>
             </div>
@@ -143,9 +146,11 @@
                         rows={vm.searchRows}
                         loading={vm.isSearching}
                         inputAtBottom={true}
+                        recentSearches={vm.recentSearches}
                         selectedId={vm.selectedEntryId}
-                        onQueryChange={(value) => (vm.searchQuery = value)}
+                        onQueryChange={(value) => vm.handleSearchQueryChange(value)}
                         onSubmit={(e) => vm.doSearch(e)}
+                        onPickRecentSearch={(query) => vm.useRecentSearch(query)}
                         onOpen={(id) => vm.openEntry(id)}
                     />
                 </div>
@@ -159,6 +164,16 @@
                         selectedId={vm.selectedEntryId}
                         onQueryChange={(val) => vm.handleIndexQueryChange(val)}
                         onOpen={(id) => vm.openEntry(id)}
+                    />
+                </div>
+            {:else if vm.mobileTab === "favorites"}
+                <div class="panel-container">
+                    <LibraryPanel
+                        favorites={vm.favorites}
+                        recents={vm.recentViews}
+                        onOpenFavorite={(item) => vm.openFavorite(item)}
+                        onOpenRecent={(item) => vm.openRecentView(item)}
+                        onRemoveFavorite={(key) => vm.removeFavorite(key)}
                     />
                 </div>
             {/if}
@@ -234,6 +249,27 @@
                 </div>
                 <span>색인</span>
             </button>
+            <button
+                class:active={vm.mobileTab === "favorites"}
+                onclick={() => (vm.mobileTab = "favorites")}
+            >
+                <div class="icon">
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        ><path
+                            d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"
+                        ></path></svg
+                    >
+                </div>
+                <span>저장</span>
+            </button>
         </nav>
     {/if}
 </div>
@@ -266,7 +302,7 @@
 
     .bottom-nav {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
         gap: 6px;
         border-top: 1px solid var(--color-border);
         background: rgba(255, 255, 255, 0.88);

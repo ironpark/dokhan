@@ -112,6 +112,8 @@
     <Input
       value={query}
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
+      onclear={() => onQueryChange("")}
+      clearable={true}
       placeholder="색인 fuzzy 검색 (예: hnd, ab)"
     />
   </div>

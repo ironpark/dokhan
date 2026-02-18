@@ -25,6 +25,25 @@ export type DictionaryIndexEntry = {
   sourcePath: string;
 };
 
+export type FavoriteItem = {
+  key: string;
+  kind: "entry" | "content";
+  label: string;
+  id: number | null;
+  local: string | null;
+  sourcePath: string | null;
+};
+
+export type RecentViewItem = {
+  key: string;
+  kind: "entry" | "content";
+  label: string;
+  id: number | null;
+  local: string | null;
+  sourcePath: string | null;
+  viewedAt: number;
+};
+
 export type SearchHit = {
   id: number;
   headword: string;
@@ -64,5 +83,5 @@ export type BuildStatus = {
   summary: MasterFeatureSummary | null;
 };
 
-export type Tab = 'content' | 'index' | 'search';
+export type Tab = 'content' | 'index' | 'search' | 'favorites';
 export type DetailMode = 'content' | 'entry' | 'none';

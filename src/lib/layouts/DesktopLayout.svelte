@@ -4,6 +4,7 @@
     import IndexPanel from "$lib/components/IndexPanel.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
     import ContentPanel from "$lib/components/ContentPanel.svelte";
+    import LibraryPanel from "$lib/components/LibraryPanel.svelte";
     import TabBar from "$lib/components/TabBar.svelte";
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
@@ -45,15 +46,27 @@
                     onOpen={(id) => vm.openEntry(id)}
                 />
             {:else}
-                <SearchPanel
-                    query={vm.searchQuery}
-                    rows={vm.searchRows}
-                    loading={vm.isSearching}
-                    selectedId={vm.selectedEntryId}
-                    onQueryChange={(value) => (vm.searchQuery = value)}
-                    onSubmit={(e) => vm.doSearch(e)}
-                    onOpen={(id) => vm.openEntry(id)}
-                />
+                {#if vm.activeTab === "search"}
+                    <SearchPanel
+                        query={vm.searchQuery}
+                        rows={vm.searchRows}
+                        loading={vm.isSearching}
+                        recentSearches={vm.recentSearches}
+                        selectedId={vm.selectedEntryId}
+                        onQueryChange={(value) => vm.handleSearchQueryChange(value)}
+                        onSubmit={(e) => vm.doSearch(e)}
+                        onPickRecentSearch={(query) => vm.useRecentSearch(query)}
+                        onOpen={(id) => vm.openEntry(id)}
+                    />
+                {:else}
+                    <LibraryPanel
+                        favorites={vm.favorites}
+                        recents={vm.recentViews}
+                        onOpenFavorite={(item) => vm.openFavorite(item)}
+                        onOpenRecent={(item) => vm.openRecentView(item)}
+                        onRemoveFavorite={(key) => vm.removeFavorite(key)}
+                    />
+                {/if}
             {/if}
         </div>
     </aside>
@@ -76,6 +89,8 @@
                     vm.openInlineHref(href, path, local)}
                 onResolveImageHref={(href, path, local) =>
                     vm.resolveInlineImageHref(href, path, local)}
+                isFavorite={vm.isCurrentFavorite()}
+                onToggleFavorite={() => vm.toggleCurrentFavorite()}
             />
         {/if}
     </main>

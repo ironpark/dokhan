@@ -19,13 +19,19 @@ import type {
   DictionaryIndexEntry,
   DictionaryLinkTarget,
   EntryDetail,
+  FavoriteItem,
   MasterFeatureSummary,
+  RecentViewItem,
   SearchHit,
   Tab
 } from '$lib/types/dictionary';
 
 const BUILD_POLL_MS = 80;
 const INDEX_DEBOUNCE_MS = 120;
+const MAX_RECENT_SEARCHES = 10;
+const MAX_RECENT_VIEWS = 20;
+const MAX_FAVORITES = 100;
+const PREFS_KEY = 'dokhan:user-prefs';
 
 function toErrorMessage(errorValue: unknown): string {
   return typeof errorValue === 'string' ? errorValue : String(errorValue);
@@ -40,12 +46,15 @@ export class DictionaryStore {
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
-  mobileTab = $state<'home' | 'search' | 'index'>('home');
+  mobileTab = $state<'home' | 'search' | 'index' | 'favorites'>('home');
 
   masterSummary = $state<MasterFeatureSummary | null>(null);
   contents = $state<ContentItem[]>([]);
   indexRows = $state<DictionaryIndexEntry[]>([]);
   searchRows = $state<SearchHit[]>([]);
+  recentSearches = $state<string[]>([]);
+  recentViews = $state<RecentViewItem[]>([]);
+  favorites = $state<FavoriteItem[]>([]);
 
   indexPrefix = $state('');
   searchQuery = $state('');
@@ -65,10 +74,15 @@ export class DictionaryStore {
   #indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   #indexRequestSeq = 0;
   #detailRequestSeq = 0;
+  #searchRequestSeq = 0;
   #bootBusyCount = 0;
   #searchBusyCount = 0;
   #detailBusyCount = 0;
   #lastRetryAction: (() => Promise<void>) | null = null;
+
+  constructor() {
+    this.#restorePrefs();
+  }
 
   dispose() {
     if (this.#indexDebounceTimer) {
@@ -157,6 +171,44 @@ export class DictionaryStore {
 
   setAutoOpenFirstContent(enabled: boolean) {
     this.autoOpenFirstContent = enabled;
+  }
+
+  #persistPrefs() {
+    if (typeof window === 'undefined') return;
+    try {
+      const payload = {
+        recentSearches: this.recentSearches,
+        recentViews: this.recentViews,
+        favorites: this.favorites
+      };
+      window.localStorage.setItem(PREFS_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore persistence failures (private mode, quota, etc.)
+    }
+  }
+
+  #restorePrefs() {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(PREFS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        recentSearches?: string[];
+        recentViews?: RecentViewItem[];
+        favorites?: FavoriteItem[];
+      };
+      this.recentSearches = Array.isArray(parsed.recentSearches)
+        ? parsed.recentSearches.slice(0, MAX_RECENT_SEARCHES)
+        : [];
+      this.recentViews = Array.isArray(parsed.recentViews)
+        ? parsed.recentViews.slice(0, MAX_RECENT_VIEWS)
+        : [];
+      this.favorites = Array.isArray(parsed.favorites)
+        ? parsed.favorites.slice(0, MAX_FAVORITES)
+        : [];
+    } catch {
+      // Ignore malformed prefs.
+    }
   }
 
   async bootFromManagedCache() {
@@ -286,6 +338,15 @@ export class DictionaryStore {
     this.selectedEntry = null;
     this.selectedEntryId = null;
     this.detailMode = 'content';
+    this.#pushRecentView({
+      key: `content:${sourcePath ?? ''}:${local}`,
+      kind: 'content',
+      label: page.title,
+      id: null,
+      local,
+      sourcePath: sourcePath ?? page.sourcePath,
+      viewedAt: Date.now()
+    });
   }
 
   async openEntry(id: number) {
@@ -300,6 +361,15 @@ export class DictionaryStore {
     this.selectedEntry = entry;
     this.selectedContent = null;
     this.detailMode = 'entry';
+    this.#pushRecentView({
+      key: `entry:${id}`,
+      kind: 'entry',
+      label: entry.headword,
+      id,
+      local: null,
+      sourcePath: entry.sourcePath,
+      viewedAt: Date.now()
+    });
   }
 
   async #loadIndexByPrefix(prefix: string) {
@@ -330,25 +400,160 @@ export class DictionaryStore {
     }, INDEX_DEBOUNCE_MS);
   }
 
+  handleSearchQueryChange(value: string) {
+    this.searchQuery = value;
+    if (!value.trim()) {
+      this.searchRows = [];
+      this.committedSearchQuery = '';
+    }
+  }
+
   async doSearch(event: Event) {
     event.preventDefault();
-    if (!this.searchQuery.trim()) {
+    await this.#runSearch(this.searchQuery, true);
+  }
+
+  async #runSearch(rawQuery: string, recordRecent: boolean) {
+    const searchTerm = rawQuery.trim();
+    if (!searchTerm) {
       this.searchRows = [];
       this.committedSearchQuery = '';
       return;
     }
-    this.committedSearchQuery = this.searchQuery.trim();
-    const searchTerm = this.searchQuery;
+    this.committedSearchQuery = searchTerm;
+    const reqSeq = ++this.#searchRequestSeq;
     this.#setRetryAction(async () => {
       this.searchQuery = searchTerm;
-      this.committedSearchQuery = searchTerm.trim();
+      this.committedSearchQuery = searchTerm;
       const retryRows = await this.#withBusy('search', () =>
         searchEntries(this.zipPath, searchTerm, 200)
       );
-      if (retryRows) this.searchRows = retryRows;
+      if (retryRows && reqSeq === this.#searchRequestSeq) {
+        this.searchRows = retryRows;
+      }
     });
     const rows = await this.#withBusy('search', () => searchEntries(this.zipPath, searchTerm, 200));
-    if (rows) this.searchRows = rows;
+    if (rows && reqSeq === this.#searchRequestSeq) {
+      this.searchRows = rows;
+      if (recordRecent) {
+        this.#pushRecentSearch(searchTerm);
+      }
+    }
+  }
+
+  useRecentSearch(query: string) {
+    this.searchQuery = query;
+    void this.#runSearch(query, false);
+  }
+
+  #pushRecentSearch(query: string) {
+    const next = [query, ...this.recentSearches.filter((item) => item !== query)];
+    this.recentSearches = next.slice(0, MAX_RECENT_SEARCHES);
+    this.#persistPrefs();
+  }
+
+  #pushRecentView(item: RecentViewItem) {
+    const next = [item, ...this.recentViews.filter((row) => row.key !== item.key)];
+    this.recentViews = next.slice(0, MAX_RECENT_VIEWS);
+    this.#persistPrefs();
+  }
+
+  openRecentView(item: RecentViewItem) {
+    if (item.kind === 'entry' && item.id != null) {
+      void this.openEntry(item.id);
+      return;
+    }
+    if (item.kind === 'content' && item.local) {
+      void this.openContent(item.local, item.sourcePath);
+    }
+  }
+
+  isFavoriteEntry(id: number): boolean {
+    return this.favorites.some((item) => item.kind === 'entry' && item.id === id);
+  }
+
+  isFavoriteContent(local: string, sourcePath: string | null): boolean {
+    const key = `content:${sourcePath ?? ''}:${local}`;
+    return this.favorites.some((item) => item.key === key);
+  }
+
+  toggleFavoriteEntry(entry: Pick<EntryDetail, 'id' | 'headword' | 'sourcePath'>) {
+    const key = `entry:${entry.id}`;
+    if (this.favorites.some((item) => item.key === key)) {
+      this.favorites = this.favorites.filter((item) => item.key !== key);
+      this.#persistPrefs();
+      return;
+    }
+    const nextItem: FavoriteItem = {
+      key,
+      kind: 'entry',
+      label: entry.headword,
+      id: entry.id,
+      local: null,
+      sourcePath: entry.sourcePath
+    };
+    this.favorites = [
+      nextItem,
+      ...this.favorites
+    ].slice(0, MAX_FAVORITES);
+    this.#persistPrefs();
+  }
+
+  toggleFavoriteContent(content: Pick<ContentPage, 'local' | 'title' | 'sourcePath'>) {
+    const key = `content:${content.sourcePath ?? ''}:${content.local}`;
+    if (this.favorites.some((item) => item.key === key)) {
+      this.favorites = this.favorites.filter((item) => item.key !== key);
+      this.#persistPrefs();
+      return;
+    }
+    const nextItem: FavoriteItem = {
+      key,
+      kind: 'content',
+      label: content.title,
+      id: null,
+      local: content.local,
+      sourcePath: content.sourcePath
+    };
+    this.favorites = [
+      nextItem,
+      ...this.favorites
+    ].slice(0, MAX_FAVORITES);
+    this.#persistPrefs();
+  }
+
+  toggleCurrentFavorite() {
+    if (this.detailMode === 'entry' && this.selectedEntry) {
+      this.toggleFavoriteEntry(this.selectedEntry);
+      return;
+    }
+    if (this.detailMode === 'content' && this.selectedContent) {
+      this.toggleFavoriteContent(this.selectedContent);
+    }
+  }
+
+  isCurrentFavorite(): boolean {
+    if (this.detailMode === 'entry' && this.selectedEntry) {
+      return this.isFavoriteEntry(this.selectedEntry.id);
+    }
+    if (this.detailMode === 'content' && this.selectedContent) {
+      return this.isFavoriteContent(this.selectedContent.local, this.selectedContent.sourcePath);
+    }
+    return false;
+  }
+
+  removeFavorite(key: string) {
+    this.favorites = this.favorites.filter((item) => item.key !== key);
+    this.#persistPrefs();
+  }
+
+  openFavorite(item: FavoriteItem) {
+    if (item.kind === 'entry' && item.id != null) {
+      void this.openEntry(item.id);
+      return;
+    }
+    if (item.kind === 'content' && item.local) {
+      void this.openContent(item.local, item.sourcePath);
+    }
   }
 
   async openInlineHref(
