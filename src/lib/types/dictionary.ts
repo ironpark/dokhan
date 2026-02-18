@@ -20,6 +20,7 @@ export type ContentPage = {
 export type DictionaryIndexEntry = {
   id: number;
   headword: string;
+  headwordHighlights: Array<{ start: number; end: number }>;
   aliases: string[];
   sourcePath: string;
 };

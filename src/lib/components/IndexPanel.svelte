@@ -58,31 +58,50 @@
 
   type Segment = { text: string; hit: boolean };
 
-  function escapeRegex(text: string): string {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-
-  function highlightSegments(text: string, rawQuery: string): Segment[] {
-    const terms = Array.from(
-      new Set(
-        rawQuery
-          .split(/\s+/)
-          .map((term) => term.trim())
-          .filter((term) => term.length > 0),
-      ),
-    );
-    if (!terms.length) {
+  function splitByHighlights(
+    text: string,
+    highlights: Array<{ start: number; end: number }>,
+  ): Segment[] {
+    const chars = Array.from(text);
+    if (!chars.length || !highlights.length) {
       return [{ text, hit: false }];
     }
-    terms.sort((a, b) => b.length - a.length);
-    const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
-    const parts = text.split(pattern);
-    return parts
-      .filter((part) => part.length > 0)
-      .map((part) => ({
-        text: part,
-        hit: terms.some((term) => part.localeCompare(term, undefined, { sensitivity: "accent" }) === 0)
-      }));
+
+    const ranges = highlights
+      .map(({ start, end }) => ({
+        start: Math.max(0, Math.min(chars.length, start)),
+        end: Math.max(0, Math.min(chars.length, end)),
+      }))
+      .filter((range) => range.end > range.start)
+      .sort((a, b) => a.start - b.start);
+
+    if (!ranges.length) {
+      return [{ text, hit: false }];
+    }
+
+    const merged: Array<{ start: number; end: number }> = [];
+    for (const range of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && range.start <= last.end) {
+        last.end = Math.max(last.end, range.end);
+      } else {
+        merged.push({ ...range });
+      }
+    }
+
+    const segments: Segment[] = [];
+    let cursor = 0;
+    for (const range of merged) {
+      if (range.start > cursor) {
+        segments.push({ text: chars.slice(cursor, range.start).join(""), hit: false });
+      }
+      segments.push({ text: chars.slice(range.start, range.end).join(""), hit: true });
+      cursor = range.end;
+    }
+    if (cursor < chars.length) {
+      segments.push({ text: chars.slice(cursor).join(""), hit: false });
+    }
+    return segments.length ? segments : [{ text, hit: false }];
   }
 </script>
 
@@ -112,7 +131,7 @@
                 selected={selectedId === rows[row.index].id}
                 onclick={() => onOpen(rows[row.index].id)}
               >
-                {#each highlightSegments(rows[row.index].headword, query) as seg}
+                {#each splitByHighlights(rows[row.index].headword, rows[row.index].headwordHighlights) as seg}
                   {#if seg.hit}
                     <strong>{seg.text}</strong>
                   {:else}

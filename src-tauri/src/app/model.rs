@@ -53,9 +53,17 @@ pub(crate) struct ContentItem {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct TextSpan {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct DictionaryIndexEntry {
     pub(crate) id: usize,
     pub(crate) headword: String,
+    pub(crate) headword_highlights: Vec<TextSpan>,
     pub(crate) aliases: Vec<String>,
     pub(crate) source_path: String,
 }

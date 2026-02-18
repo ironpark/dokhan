@@ -11,7 +11,7 @@ use tantivy::query::QueryParser;
 use tantivy::schema::{Field, Schema, TantivyDocument, Value, INDEXED, STORED, TEXT};
 use tantivy::{Index, IndexReader, ReloadPolicy};
 
-use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit};
+use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit, TextSpan};
 use crate::app::model::RuntimeSource;
 use crate::parsing::text::compact_ws;
 use crate::runtime::state::get_runtime;
@@ -290,6 +290,159 @@ fn fuzzy_match_score(
     None
 }
 
+fn normalize_with_char_map(value: &str) -> Vec<(char, usize)> {
+    let mut out = Vec::<(char, usize)>::new();
+    for (raw_idx, ch) in value.chars().enumerate() {
+        for lower in ch.to_lowercase() {
+            match lower {
+                'ä' => {
+                    out.push(('a', raw_idx));
+                    out.push(('e', raw_idx));
+                }
+                'ö' => {
+                    out.push(('o', raw_idx));
+                    out.push(('e', raw_idx));
+                }
+                'ü' => {
+                    out.push(('u', raw_idx));
+                    out.push(('e', raw_idx));
+                }
+                'ß' => {
+                    out.push(('s', raw_idx));
+                    out.push(('s', raw_idx));
+                }
+                _ => out.push((lower, raw_idx)),
+            }
+        }
+    }
+    out
+}
+
+fn to_loose_char_map(strict_map: &[(char, usize)]) -> Vec<(char, usize)> {
+    let mut out = Vec::<(char, usize)>::with_capacity(strict_map.len());
+    let mut i = 0usize;
+    while i < strict_map.len() {
+        if i + 1 < strict_map.len() {
+            let c0 = strict_map[i].0;
+            let c1 = strict_map[i + 1].0;
+            if (c0 == 'a' || c0 == 'o' || c0 == 'u') && c1 == 'e' {
+                out.push((c0, strict_map[i].1));
+                i += 2;
+                continue;
+            }
+        }
+        out.push(strict_map[i]);
+        i += 1;
+    }
+    out
+}
+
+fn find_subslice(haystack: &[char], needle: &[char]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    if needle.len() > haystack.len() {
+        return None;
+    }
+    (0..=haystack.len() - needle.len())
+        .find(|&start| &haystack[start..start + needle.len()] == needle)
+}
+
+fn locate_contiguous_span(value_map: &[(char, usize)], query: &str) -> Option<TextSpan> {
+    let query_chars = query.chars().collect::<Vec<_>>();
+    if query_chars.is_empty() || value_map.is_empty() {
+        return None;
+    }
+    let value_chars = value_map.iter().map(|(c, _)| *c).collect::<Vec<_>>();
+    let pos = find_subslice(&value_chars, &query_chars)?;
+    let start = value_map[pos].1;
+    let end = value_map[pos + query_chars.len() - 1].1 + 1;
+    Some(TextSpan { start, end })
+}
+
+fn locate_subsequence_spans(value_map: &[(char, usize)], query: &str) -> Vec<TextSpan> {
+    let query_chars = query.chars().collect::<Vec<_>>();
+    if query_chars.is_empty() || value_map.is_empty() {
+        return Vec::new();
+    }
+    let mut qi = 0usize;
+    let mut spans = Vec::<TextSpan>::new();
+    for (value_char, raw_idx) in value_map {
+        if qi >= query_chars.len() {
+            break;
+        }
+        if *value_char == query_chars[qi] {
+            spans.push(TextSpan {
+                start: *raw_idx,
+                end: *raw_idx + 1,
+            });
+            qi += 1;
+        }
+    }
+    if qi == query_chars.len() {
+        spans
+    } else {
+        Vec::new()
+    }
+}
+
+fn merge_spans(mut spans: Vec<TextSpan>) -> Vec<TextSpan> {
+    if spans.is_empty() {
+        return spans;
+    }
+    spans.sort_by(|a, b| a.start.cmp(&b.start).then(a.end.cmp(&b.end)));
+    let mut merged = Vec::<TextSpan>::with_capacity(spans.len());
+    for span in spans {
+        if let Some(last) = merged.last_mut() {
+            if span.start <= last.end {
+                if span.end > last.end {
+                    last.end = span.end;
+                }
+                continue;
+            }
+        }
+        merged.push(span);
+    }
+    merged
+}
+
+fn build_headword_highlights(headword: &str, query: &str) -> Vec<TextSpan> {
+    let terms = query
+        .split_whitespace()
+        .map(str::trim)
+        .filter(|term| !term.is_empty())
+        .collect::<Vec<_>>();
+    if terms.is_empty() {
+        return Vec::new();
+    }
+
+    let strict_map = normalize_with_char_map(headword);
+    let loose_map = to_loose_char_map(&strict_map);
+    let mut spans = Vec::<TextSpan>::new();
+
+    for term in terms {
+        let strict_term = normalize_search_key(term);
+        let loose_term = normalize_search_key_loose(term);
+
+        let best = locate_contiguous_span(&strict_map, &strict_term)
+            .or_else(|| locate_contiguous_span(&loose_map, &loose_term))
+            .map(|span| vec![span])
+            .or_else(|| {
+                let sub = locate_subsequence_spans(&strict_map, &strict_term);
+                if sub.is_empty() { None } else { Some(sub) }
+            })
+            .or_else(|| {
+                let sub = locate_subsequence_spans(&loose_map, &loose_term);
+                if sub.is_empty() { None } else { Some(sub) }
+            })
+            .unwrap_or_default();
+
+        spans.extend(best);
+    }
+
+    merge_spans(spans)
+}
+
 /// Check contains match against strict+loose normalized variants.
 fn contains_search_key_precomputed(
     value_key: &str,
@@ -355,6 +508,7 @@ pub(crate) fn get_index_entries_impl(
             out.push(DictionaryIndexEntry {
                 id: e.id,
                 headword: e.headword.clone(),
+                headword_highlights: Vec::new(),
                 aliases: e.aliases.clone(),
                 source_path: e.source_path.clone(),
             });
@@ -387,6 +541,7 @@ pub(crate) fn get_index_entries_impl(
         out.push(DictionaryIndexEntry {
             id: e.id,
             headword: e.headword.clone(),
+            headword_highlights: build_headword_highlights(&e.headword, &p),
             aliases: e.aliases.clone(),
             source_path: e.source_path.clone(),
         });
