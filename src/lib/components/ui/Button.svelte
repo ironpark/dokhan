@@ -35,7 +35,12 @@
         border-radius: var(--radius-sm);
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition:
+            background-color var(--motion-fast),
+            color var(--motion-fast),
+            border-color var(--motion-fast),
+            box-shadow var(--motion-fast),
+            transform var(--motion-fast);
         background: transparent;
         color: var(--color-text);
         padding: 0;
@@ -43,8 +48,13 @@
     }
 
     .btn:disabled {
-        opacity: 0.5;
+        opacity: 0.45;
         pointer-events: none;
+    }
+
+    .btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-accent-soft);
     }
 
     /* Variants */
@@ -54,6 +64,9 @@
     }
     .btn.default:hover {
         background-color: var(--color-accent-hover);
+    }
+    .btn.default:active {
+        transform: translateY(0.5px);
     }
 
     .btn.ghost {
@@ -73,6 +86,7 @@
     }
     .btn.outline:hover {
         background-color: var(--color-surface-hover);
+        border-color: var(--color-border-strong);
     }
 
     .btn.icon {

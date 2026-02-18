@@ -3,6 +3,7 @@
   import { createVirtualizer } from "@tanstack/svelte-virtual";
   import Input from "$lib/components/ui/Input.svelte";
   import ListItem from "$lib/components/ui/ListItem.svelte";
+  import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
   let {
     query,
@@ -119,11 +120,15 @@
   </div>
   <div class="entry-list" bind:this={listEl}>
     {#if loading}
-      <p class="status-message">색인을 불러오는 중입니다.</p>
+      <EmptyState title="색인을 불러오는 중입니다." compact={true} />
     {:else if !rows.length && query.trim()}
-      <p class="status-message">일치하는 색인 항목이 없습니다.</p>
+      <EmptyState
+        title="일치하는 색인 항목이 없습니다."
+        description="철자나 키워드를 바꿔 다시 시도해 보세요."
+        compact={true}
+      />
     {:else if !rows.length}
-      <p class="status-message">색인 데이터가 없습니다.</p>
+      <EmptyState title="색인 데이터가 없습니다." compact={true} />
     {:else}
       <div style="height: {totalSize}px; width: 100%; position: relative;">
         {#each virtualRows as row (row.index)}
@@ -165,11 +170,12 @@
 
   .search-line {
     margin: 0;
-    padding: 10px;
+    padding: 10px 12px;
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
     align-items: center;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .panel.input-bottom .search-line {
@@ -195,10 +201,4 @@
     order: 1;
   }
 
-  .status-message {
-    margin: 0;
-    padding: 18px 12px;
-    font-size: 13px;
-    color: var(--color-text-muted);
-  }
 </style>

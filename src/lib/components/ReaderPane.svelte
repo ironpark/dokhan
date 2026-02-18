@@ -14,6 +14,8 @@
     onResolveImageHref,
     isFavorite = false,
     onToggleFavorite = () => {},
+    preprocessEnabled = true,
+    onTogglePreprocess = () => {},
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
@@ -31,6 +33,8 @@
     ) => Promise<string | null>;
     isFavorite?: boolean;
     onToggleFavorite?: () => void;
+    preprocessEnabled?: boolean;
+    onTogglePreprocess?: () => void;
   } = $props();
 
   type RenderContext = {
@@ -38,6 +42,7 @@
     local: string | null;
     html: string;
     highlightQuery: string;
+    preprocessEnabled: boolean;
   };
 
   function escapeRegex(text: string): string {
@@ -170,6 +175,128 @@
       }
     }
 
+    function extractSenseNo(node: Node): number | null {
+      if (!(node instanceof HTMLSpanElement)) return null;
+      const text = node.textContent?.trim() ?? "";
+      const match = text.match(/^(\d+)\.$/);
+      if (!match) return null;
+      const no = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(no) || no <= 0) return null;
+      return no;
+    }
+
+    function extractAlphaSenseNo(node: Node): number | null {
+      if (!(node instanceof HTMLSpanElement)) return null;
+      const text = node.textContent?.trim() ?? "";
+      const match = text.match(/^([a-z])\)$/i);
+      if (!match) return null;
+      const code = match[1].toLowerCase().charCodeAt(0) - 96;
+      if (!Number.isFinite(code) || code <= 0) return null;
+      return code;
+    }
+
+    function collectMarkers(
+      nodes: Node[],
+      extract: (node: Node) => number | null,
+      minimum = 2,
+    ): Array<{ idx: number; no: number }> {
+      const markers = nodes
+        .map((node, idx) => ({ idx, no: extract(node) }))
+        .filter((row): row is { idx: number; no: number } => row.no !== null);
+      if (markers.length < minimum) return [];
+      for (let i = 1; i < markers.length; i += 1) {
+        if (markers[i].no <= markers[i - 1].no) return [];
+      }
+      return markers;
+    }
+
+    function buildOrderedList(
+      nodes: Node[],
+      markers: Array<{ idx: number; no: number }>,
+      options: {
+        listClassName: string;
+        itemClassName: string;
+        type?: "a";
+      },
+    ): { preface: DocumentFragment; list: HTMLOListElement } {
+      const preface = document.createDocumentFragment();
+      const first = markers[0];
+      for (let i = 0; i < first.idx; i += 1) {
+        preface.appendChild(nodes[i]);
+      }
+
+      const list = document.createElement("ol");
+      list.className = options.listClassName;
+      if (options.type) {
+        list.setAttribute("type", options.type);
+      }
+      if (first.no > 1) {
+        list.setAttribute("start", String(first.no));
+      }
+
+      for (let i = 0; i < markers.length; i += 1) {
+        const marker = markers[i];
+        const end = i + 1 < markers.length ? markers[i + 1].idx : nodes.length;
+        const li = document.createElement("li");
+        li.className = options.itemClassName;
+        for (let j = marker.idx + 1; j < end; j += 1) {
+          li.appendChild(nodes[j]);
+        }
+        list.appendChild(li);
+      }
+
+      return { preface, list };
+    }
+
+    function applyAlphaSubSenseList(listItem: HTMLElement) {
+      if (listItem.dataset.alphaSenseListApplied === "1") return;
+      const nodes = Array.from(listItem.childNodes);
+      const markers = collectMarkers(nodes, extractAlphaSenseNo);
+      if (!markers.length) return;
+      const { preface, list } = buildOrderedList(nodes, markers, {
+        listClassName: "dict-subsense-list",
+        itemClassName: "dict-subsense-item",
+        type: "a",
+      });
+      listItem.replaceChildren(preface, list);
+      listItem.dataset.alphaSenseListApplied = "1";
+    }
+
+    function applySenseList(root: HTMLElement) {
+      if (root.dataset.senseListApplied === "1") return;
+      const nodes = Array.from(root.childNodes);
+      const markers = collectMarkers(nodes, extractSenseNo);
+      if (!markers.length) return;
+
+      const { preface, list } = buildOrderedList(nodes, markers, {
+        listClassName: "dict-sense-list",
+        itemClassName: "dict-sense-item",
+      });
+
+      root.replaceChildren(preface, list);
+
+      const topLevelItems = Array.from(
+        list.querySelectorAll(":scope > li.dict-sense-item"),
+      ) as HTMLElement[];
+      for (const item of topLevelItems) {
+        applyAlphaSubSenseList(item);
+      }
+
+      root.dataset.senseListApplied = "1";
+    }
+
+    function applyBrSpacing(root: HTMLElement) {
+      const breaks = Array.from(root.querySelectorAll("br"));
+      for (const br of breaks) {
+        if ((br as HTMLElement).dataset.spaced === "1") continue;
+        const spacer = document.createElement("span");
+        spacer.className = "dict-br-spacer";
+        spacer.setAttribute("aria-hidden", "true");
+        br.insertAdjacentElement("afterend", spacer);
+        (br as HTMLElement).dataset.spaced = "1";
+      }
+    }
+
     function scheduleDecorations() {
       const currentRevision = ++revision;
       const snapshot = { ...context };
@@ -179,6 +306,20 @@
           await hydrateImages(currentRevision, snapshot);
         } catch {
           // Keep rendering stable even if media resolution fails.
+        }
+        if (currentRevision !== revision || !node.isConnected) return;
+        if (snapshot.preprocessEnabled) {
+          try {
+            applySenseList(node);
+          } catch {
+            // Keep rendering stable even if sense list transformation fails.
+          }
+          if (currentRevision !== revision || !node.isConnected) return;
+          try {
+            applyBrSpacing(node);
+          } catch {
+            // Keep rendering stable even if spacing injection fails.
+          }
         }
         if (currentRevision !== revision || !node.isConnected) return;
         try {
@@ -210,17 +351,27 @@
     <article class="body-content">
       <header class="doc-header">
         <h2>{selectedContent.title}</h2>
-        <button
-          type="button"
-          class="favorite-btn"
-          class:active={isFavorite}
-          onclick={onToggleFavorite}
-        >
-          {isFavorite ? "★ 저장됨" : "☆ 저장"}
-        </button>
+        <div class="doc-actions">
+          <button
+            type="button"
+            class="mini-btn"
+            class:active={preprocessEnabled}
+            onclick={onTogglePreprocess}
+          >
+            {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
+          </button>
+          <button
+            type="button"
+            class="favorite-btn mini-btn"
+            class:active={isFavorite}
+            onclick={onToggleFavorite}
+          >
+            {isFavorite ? "★ 저장됨" : "☆ 저장"}
+          </button>
+        </div>
       </header>
       {#if selectedContent.bodyHtml}
-        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}`}
+        {#key `${selectedContent.sourcePath}::${selectedContent.local}::${highlightQuery}::${preprocessEnabled}`}
           <div
             class="html-rendered"
             use:interceptLinksAndResolveImages={{
@@ -228,6 +379,7 @@
               local: selectedContent.local,
               html: selectedContent.bodyHtml,
               highlightQuery,
+              preprocessEnabled,
             }}
           >
             {@html selectedContent.bodyHtml}
@@ -241,18 +393,28 @@
     <article class="body-content">
       <header class="doc-header">
         <h2>{selectedEntry.headword}</h2>
-        <button
-          type="button"
-          class="favorite-btn"
-          class:active={isFavorite}
-          onclick={onToggleFavorite}
-        >
-          {isFavorite ? "★ 저장됨" : "☆ 저장"}
-        </button>
+        <div class="doc-actions">
+          <button
+            type="button"
+            class="mini-btn"
+            class:active={preprocessEnabled}
+            onclick={onTogglePreprocess}
+          >
+            {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
+          </button>
+          <button
+            type="button"
+            class="favorite-btn mini-btn"
+            class:active={isFavorite}
+            onclick={onToggleFavorite}
+          >
+            {isFavorite ? "★ 저장됨" : "☆ 저장"}
+          </button>
+        </div>
       </header>
       <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
       {#if selectedEntry.definitionHtml}
-        {#key `${selectedEntry.id}::${highlightQuery}`}
+        {#key `${selectedEntry.id}::${highlightQuery}::${preprocessEnabled}`}
           <div
             class="html-rendered"
             use:interceptLinksAndResolveImages={{
@@ -260,6 +422,7 @@
               local: null,
               html: selectedEntry.definitionHtml,
               highlightQuery,
+              preprocessEnabled,
             }}
           >
             {@html selectedEntry.definitionHtml}
@@ -287,16 +450,74 @@
     color: var(--color-text);
   }
 
-  /* .body-content styles removed as they were empty */
+  .body-content {
+    max-width: 860px;
+    margin: 0 auto;
+  }
 
   .html-rendered :global(ul),
   .html-rendered :global(ol) {
-    margin: 0 0 0.72em;
-    padding-left: 1.8em;
+    margin: 0 0 0.9em;
+    padding-left: 1.6em;
   }
 
   .html-rendered :global(li) {
-    margin-bottom: 0.3em;
+    margin-bottom: 0.42em;
+  }
+
+  .html-rendered :global(span.dict-br-spacer) {
+    display: block;
+    height: 0.52em;
+  }
+
+  .html-rendered :global(ol.dict-sense-list) {
+    margin: 0.72em 0 0.68em;
+    padding-left: 1.68em;
+  }
+
+  .html-rendered :global(li.dict-sense-item) {
+    margin: 0 0 0.64em;
+    line-height: 1.66;
+    font-size: 15px;
+  }
+
+  .html-rendered :global(ol.dict-subsense-list) {
+    margin: 0.38em 0 0.2em;
+    padding-left: 1.48em;
+  }
+
+  .html-rendered :global(li.dict-subsense-item) {
+    margin: 0 0 0.32em;
+    line-height: 1.62;
+    font-size: 15px;
+  }
+
+  .html-rendered :global(li.dict-sense-item > :first-child),
+  .html-rendered :global(li.dict-subsense-item > :first-child) {
+    margin-top: 0;
+  }
+
+  .html-rendered :global(li.dict-sense-item > :last-child),
+  .html-rendered :global(li.dict-subsense-item > :last-child) {
+    margin-bottom: 0;
+  }
+
+  .html-rendered :global(p) {
+    margin: 0 0 0.82em;
+    line-height: 1.62;
+    font-size: 15px;
+  }
+
+  .html-rendered :global(h3) {
+    margin: 1.1em 0 0.55em;
+    font-size: 18px;
+    line-height: 1.35;
+  }
+
+  .html-rendered :global(h4) {
+    margin: 0.9em 0 0.45em;
+    font-size: 16px;
+    line-height: 1.35;
   }
 
   .html-rendered :global(img) {
@@ -311,19 +532,22 @@
   }
 
   h2 {
-    margin: 8px 0;
-    font-size: 24px;
-    letter-spacing: -0.01em;
+    margin: 6px 0 4px;
+    font-size: clamp(24px, 3vw, 30px);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
   }
 
   .alias-line {
-    margin: 6px 0 10px;
-    color: #4f483c;
+    margin: 5px 0 14px;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    line-height: 1.45;
     font-family: "Alegreya Sans SC", "IBM Plex Sans", sans-serif;
   }
 
   .placeholder {
-    color: var(--muted);
+    color: var(--color-text-muted);
   }
 
   .doc-header {
@@ -333,7 +557,13 @@
     gap: 12px;
   }
 
-  .favorite-btn {
+  .doc-actions {
+    display: inline-flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .mini-btn {
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     color: var(--color-text-muted);
@@ -344,11 +574,52 @@
     cursor: pointer;
     white-space: nowrap;
     margin-top: 6px;
+    transition:
+      background-color var(--motion-fast),
+      border-color var(--motion-fast),
+      color var(--motion-fast);
+  }
+
+  .mini-btn.active {
+    color: var(--color-accent);
+    border-color: color-mix(in oklab, var(--color-accent), white 62%);
+    background: var(--color-accent-soft);
   }
 
   .favorite-btn.active {
     color: #ad7a00;
     border-color: #e8ca77;
     background: #fff8dc;
+  }
+
+  .mini-btn:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  .mini-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-accent-soft);
+  }
+
+  @media (max-width: 768px) {
+    .html-rendered :global(ol.dict-sense-list) {
+      margin: 0.58em 0 0.52em;
+      padding-left: 1.5em;
+    }
+
+    .html-rendered :global(li.dict-sense-item) {
+      margin: 0 0 0.52em;
+      line-height: 1.62;
+    }
+
+    .html-rendered :global(ol.dict-subsense-list) {
+      margin: 0.28em 0 0.14em;
+      padding-left: 1.34em;
+    }
+
+    .html-rendered :global(li.dict-subsense-item) {
+      margin: 0 0 0.26em;
+      line-height: 1.58;
+    }
   }
 </style>

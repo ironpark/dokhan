@@ -55,6 +55,7 @@ export class DictionaryStore {
   isSearching = $state(false);
   isOpeningDetail = $state(false);
   autoOpenFirstContent = $state(true);
+  preprocessEnabled = $state(true);
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
@@ -185,13 +186,19 @@ export class DictionaryStore {
     this.autoOpenFirstContent = enabled;
   }
 
+  setPreprocessEnabled(enabled: boolean) {
+    this.preprocessEnabled = enabled;
+    this.#persistPrefs();
+  }
+
   #persistPrefs() {
     if (typeof window === 'undefined') return;
     try {
       const payload = {
         recentSearches: this.recentSearches,
         recentViews: this.recentViews,
-        favorites: this.favorites
+        favorites: this.favorites,
+        preprocessEnabled: this.preprocessEnabled
       };
       window.localStorage.setItem(PREFS_KEY, JSON.stringify(payload));
     } catch {
@@ -208,6 +215,7 @@ export class DictionaryStore {
         recentSearches?: string[];
         recentViews?: RecentViewItem[];
         favorites?: FavoriteItem[];
+        preprocessEnabled?: boolean;
       };
       this.recentSearches = Array.isArray(parsed.recentSearches)
         ? parsed.recentSearches.slice(0, MAX_RECENT_SEARCHES)
@@ -218,6 +226,7 @@ export class DictionaryStore {
       this.favorites = Array.isArray(parsed.favorites)
         ? parsed.favorites.slice(0, MAX_FAVORITES)
         : [];
+      this.preprocessEnabled = parsed.preprocessEnabled ?? true;
     } catch {
       // Ignore malformed prefs.
     }

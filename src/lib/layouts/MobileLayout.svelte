@@ -85,6 +85,9 @@
                             vm.resolveInlineImageHref(href, path, local)}
                         isFavorite={vm.isCurrentFavorite()}
                         onToggleFavorite={() => vm.toggleCurrentFavorite()}
+                        preprocessEnabled={vm.preprocessEnabled}
+                        onTogglePreprocess={() =>
+                            vm.setPreprocessEnabled(!vm.preprocessEnabled)}
                     />
                 </div>
             </div>

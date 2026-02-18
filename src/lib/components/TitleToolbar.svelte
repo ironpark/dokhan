@@ -33,7 +33,7 @@
     .title-toolbar {
         height: 56px;
         border-bottom: 1px solid var(--color-border);
-        background: color-mix(in oklab, var(--color-surface), #f7f9ff 20%);
+        background: color-mix(in oklab, var(--color-surface), #f8fbff 14%);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -55,7 +55,7 @@
 
     .title-block h1 {
         margin: 0;
-        font-size: 15px;
+        font-size: 14px;
         line-height: 1.15;
         font-weight: 700;
         color: var(--color-text);
@@ -66,8 +66,10 @@
 
     .title-block p {
         margin: 0;
-        font-size: 11px;
-        color: var(--color-text-muted);
+        font-size: 10px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--color-text-subtle);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

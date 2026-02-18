@@ -7,6 +7,7 @@
     import LibraryPanel from "$lib/components/LibraryPanel.svelte";
     import TabBar from "$lib/components/TabBar.svelte";
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
+    import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
     let { vm }: { vm: DictionaryStore } = $props();
 </script>
@@ -74,10 +75,10 @@
     <main class="main-content">
         {#if !vm.selectedContent && !vm.selectedEntry}
             <div class="empty-state">
-                <div class="logo-placeholder">
-                    <h1>독한 사전</h1>
-                    <p>항목을 선택하면 본문이 표시됩니다.</p>
-                </div>
+                <EmptyState
+                    title="본문을 표시할 항목을 선택하세요."
+                    description="목차, 색인, 검색 또는 즐겨찾기에서 항목을 선택하면 여기에 표시됩니다."
+                />
             </div>
         {:else}
             <ReaderPane
@@ -91,6 +92,9 @@
                     vm.resolveInlineImageHref(href, path, local)}
                 isFavorite={vm.isCurrentFavorite()}
                 onToggleFavorite={() => vm.toggleCurrentFavorite()}
+                preprocessEnabled={vm.preprocessEnabled}
+                onTogglePreprocess={() =>
+                    vm.setPreprocessEnabled(!vm.preprocessEnabled)}
             />
         {/if}
     </main>
@@ -117,7 +121,7 @@
 
     .sidebar-content {
         overflow: hidden;
-        background: var(--color-bg);
+        background: var(--color-surface-soft);
         min-height: 0;
     }
 
@@ -136,16 +140,6 @@
         justify-content: center;
         color: var(--color-text-muted);
         user-select: none;
-    }
-
-    .logo-placeholder {
-        text-align: center;
-    }
-
-    .logo-placeholder h1 {
-        font-size: 24px;
-        color: var(--color-border);
-        margin: 0 0 10px 0;
     }
 
     .tabs-container {

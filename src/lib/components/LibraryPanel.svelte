@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FavoriteItem, RecentViewItem } from "$lib/types/dictionary";
+  import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
   let {
     favorites,
@@ -44,7 +45,11 @@
         </ul>
       </div>
     {:else}
-      <p class="empty">아직 저장된 즐겨찾기가 없습니다.</p>
+      <EmptyState
+        title="아직 저장된 즐겨찾기가 없습니다."
+        description="본문에서 '저장' 버튼을 눌러 빠르게 다시 열 수 있습니다."
+        compact={true}
+      />
     {/if}
   </div>
 
@@ -63,7 +68,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="empty">최근 열람 기록이 없습니다.</p>
+        <EmptyState title="최근 열람 기록이 없습니다." compact={true} />
       {/if}
     </div>
   </div>
@@ -86,8 +91,9 @@
     flex: 0 0 auto;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     overflow: hidden;
+    box-shadow: var(--shadow-sm);
   }
 
   .section-body {
@@ -126,8 +132,11 @@
 
   .section h3 {
     margin: 0;
-    padding: 10px 12px;
-    font-size: 13px;
+    padding: 10px 12px 9px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -141,25 +150,30 @@
     display: grid;
     grid-template-columns: 1fr auto;
     border-bottom: 1px solid var(--color-border);
-    min-height: 46px;
+    min-height: 48px;
+    transition: background-color var(--motion-fast);
   }
 
   li:last-child {
     border-bottom: none;
   }
 
+  li:hover {
+    background: var(--color-surface-hover);
+  }
+
   .item-btn {
     border: none;
     background: transparent;
     text-align: left;
-    padding: 8px 12px;
+    padding: 9px 12px;
     display: grid;
     gap: 2px;
     cursor: pointer;
   }
 
   .item-btn small {
-    color: var(--color-text-muted);
+    color: var(--color-text-subtle);
     font-size: 10px;
   }
 
@@ -176,15 +190,13 @@
     background: transparent;
     color: var(--color-text-muted);
     font-size: 12px;
-    padding: 0 10px;
+    padding: 0 12px;
     cursor: pointer;
+    transition: color var(--motion-fast);
   }
 
-  .empty {
-    margin: 0;
-    padding: 10px 12px 12px;
-    font-size: 12px;
-    color: var(--color-text-muted);
+  .remove-btn:hover {
+    color: var(--color-danger);
   }
 
   .recent-section {
