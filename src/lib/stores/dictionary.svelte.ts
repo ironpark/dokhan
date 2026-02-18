@@ -36,6 +36,7 @@ export class DictionaryStore {
   isBooting = $state(false);
   isSearching = $state(false);
   isOpeningDetail = $state(false);
+  autoOpenFirstContent = $state(true);
   error = $state('');
   zipPath = $state<string | null>(null);
   activeTab = $state<Tab>('content');
@@ -154,6 +155,10 @@ export class DictionaryStore {
     await this.#bootMasterFeaturesWithPath(this.zipPath);
   }
 
+  setAutoOpenFirstContent(enabled: boolean) {
+    this.autoOpenFirstContent = enabled;
+  }
+
   async bootFromManagedCache() {
     await this.#bootMasterFeaturesWithPath(null, true);
   }
@@ -198,7 +203,7 @@ export class DictionaryStore {
       this.searchRows = [];
       this.#clearSelection();
 
-      if (this.contents.length) {
+      if (this.autoOpenFirstContent && this.contents.length) {
         await this.openContent(this.contents[0].local);
       }
     } catch (e) {

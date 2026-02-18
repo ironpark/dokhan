@@ -17,6 +17,7 @@
     let unlistenCloseRequest: (() => void) | undefined;
 
     (async () => {
+      vm.setAutoOpenFirstContent(!platformStore.isMobile);
       await vm.bootFromManagedCache();
 
       if (platformStore.isMobile) {

@@ -3,7 +3,6 @@
   import { createVirtualizer } from "@tanstack/svelte-virtual";
   import Input from "$lib/components/ui/Input.svelte";
   import Button from "$lib/components/ui/Button.svelte";
-  import ListItem from "$lib/components/ui/ListItem.svelte";
 
   let {
     query,
@@ -28,9 +27,16 @@
   const virtualizer = createVirtualizer({
     count: 0,
     getScrollElement: () => listEl,
-    estimateSize: () => 38,
+    estimateSize: () => 56,
     overscan: 5,
   });
+
+  function normalizeSnippet(snippet: string): string {
+    return snippet
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
   let lastRowCount = $state(0);
   $effect(() => {
@@ -83,12 +89,17 @@
             style="position: absolute; top: 0; left: 0; width: 100%; height: {row.size}px; transform: translateY({row.start}px);"
           >
             {#if rows[row.index]}
-              <ListItem
-                selected={selectedId === rows[row.index].id}
+              <button
+                type="button"
+                class="result-row"
+                class:selected={selectedId === rows[row.index].id}
                 onclick={() => onOpen(rows[row.index].id)}
               >
-                {rows[row.index].headword}
-              </ListItem>
+                <strong>{rows[row.index].headword}</strong>
+                {#if rows[row.index].snippet}
+                  <small>{normalizeSnippet(rows[row.index].snippet)}</small>
+                {/if}
+              </button>
             {/if}
           </div>
         {/each}
@@ -131,5 +142,51 @@
     padding: 18px 12px;
     font-size: 13px;
     color: var(--color-text-muted);
+  }
+
+  .result-row {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent;
+    text-align: left;
+    padding: 8px 10px;
+    display: grid;
+    gap: 3px;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  .result-row:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .result-row.selected {
+    background: var(--color-surface-active);
+  }
+
+  .result-row strong {
+    font-size: 14px;
+    color: var(--color-text);
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .result-row.selected strong {
+    color: var(--color-accent);
+  }
+
+  .result-row small {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>

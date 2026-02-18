@@ -265,37 +265,109 @@
     .bottom-nav {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
         border-top: 1px solid var(--color-border);
-        background: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.88);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         padding-top: 6px;
-        padding-bottom: 8px;
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
+        padding-left: 8px;
+        padding-right: 8px;
         min-height: 60px;
         align-items: center;
     }
 
     .bottom-nav button {
+        position: relative;
         background: transparent;
         border: none;
-        padding: 0;
+        padding: 8px 8px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 4px;
         font-size: 10px;
-        min-height: 44px;
+        min-height: 52px;
         color: var(--color-text-muted);
         cursor: pointer;
+        border-radius: 14px;
+        overflow: hidden;
+        isolation: isolate;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        transition:
+            color 160ms ease,
+            transform 140ms ease;
+    }
+
+    .bottom-nav button::before {
+        content: "";
+        position: absolute;
+        inset: 3px 4px;
+        border-radius: 12px;
+        background: color-mix(in oklab, var(--color-accent), white 84%);
+        opacity: 0;
+        transform: scale(0.92);
+        transition:
+            opacity 180ms ease,
+            transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        z-index: -1;
     }
 
     .bottom-nav button.active {
         color: var(--color-accent);
     }
 
+    .bottom-nav button.active::before {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    .bottom-nav button:active {
+        transform: scale(0.97);
+    }
+
+    .bottom-nav button:focus-visible {
+        outline: 2px solid color-mix(in oklab, var(--color-accent), white 35%);
+        outline-offset: -2px;
+    }
+
+    .bottom-nav .icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .bottom-nav button span {
+        font-weight: 500;
+        transition:
+            transform 180ms ease,
+            letter-spacing 180ms ease;
+    }
+
     .bottom-nav button.active svg {
         stroke-width: 2.5;
+    }
+
+    .bottom-nav button.active .icon {
+        transform: translateY(-1px);
+    }
+
+    .bottom-nav button.active span {
+        transform: translateY(-0.5px);
+        letter-spacing: 0.01em;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .bottom-nav button,
+        .bottom-nav button::before,
+        .bottom-nav .icon,
+        .bottom-nav button span {
+            transition: none;
+        }
     }
 
     .reader-overlay {
