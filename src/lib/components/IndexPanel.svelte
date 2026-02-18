@@ -55,6 +55,35 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
+
+  type Segment = { text: string; hit: boolean };
+
+  function escapeRegex(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function highlightSegments(text: string, rawQuery: string): Segment[] {
+    const terms = Array.from(
+      new Set(
+        rawQuery
+          .split(/\s+/)
+          .map((term) => term.trim())
+          .filter((term) => term.length > 0),
+      ),
+    );
+    if (!terms.length) {
+      return [{ text, hit: false }];
+    }
+    terms.sort((a, b) => b.length - a.length);
+    const pattern = new RegExp(`(${terms.map(escapeRegex).join("|")})`, "gi");
+    const parts = text.split(pattern);
+    return parts
+      .filter((part) => part.length > 0)
+      .map((part) => ({
+        text: part,
+        hit: terms.some((term) => part.localeCompare(term, undefined, { sensitivity: "accent" }) === 0)
+      }));
+  }
 </script>
 
 <section class="panel">
@@ -62,7 +91,7 @@
     <Input
       value={query}
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
-      placeholder="색인 검색 (예: a, ab)"
+      placeholder="색인 fuzzy 검색 (예: hnd, ab)"
     />
   </div>
   <div class="entry-list" bind:this={listEl}>
@@ -83,7 +112,13 @@
                 selected={selectedId === rows[row.index].id}
                 onclick={() => onOpen(rows[row.index].id)}
               >
-                {rows[row.index].headword}
+                {#each highlightSegments(rows[row.index].headword, query) as seg}
+                  {#if seg.hit}
+                    <strong>{seg.text}</strong>
+                  {:else}
+                    {seg.text}
+                  {/if}
+                {/each}
               </ListItem>
             {/if}
           </div>

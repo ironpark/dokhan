@@ -248,6 +248,48 @@ fn starts_with_search_key_precomputed(
     value_key.starts_with(prefix_key) || value_loose.starts_with(prefix_loose)
 }
 
+/// Check whether `needle` is a fuzzy subsequence of `haystack`.
+fn is_subsequence(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    let mut n = needle.chars();
+    let mut current = match n.next() {
+        Some(c) => c,
+        None => return true,
+    };
+    for hc in haystack.chars() {
+        if hc == current {
+            match n.next() {
+                Some(next) => current = next,
+                None => return true,
+            }
+        }
+    }
+    false
+}
+
+fn fuzzy_match_score(
+    value_key: &str,
+    value_loose: &str,
+    query_key: &str,
+    query_loose: &str,
+) -> Option<usize> {
+    if query_key.is_empty() {
+        return Some(0);
+    }
+    if starts_with_search_key_precomputed(value_key, value_loose, query_key, query_loose) {
+        return Some(300);
+    }
+    if contains_search_key_precomputed(value_key, value_loose, query_key, query_loose) {
+        return Some(180);
+    }
+    if is_subsequence(value_key, query_key) || is_subsequence(value_loose, query_loose) {
+        return Some(90);
+    }
+    None
+}
+
 /// Check contains match against strict+loose normalized variants.
 fn contains_search_key_precomputed(
     value_key: &str,
@@ -289,7 +331,7 @@ pub(crate) fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearc
         .collect::<Vec<_>>()
 }
 
-/// Return index rows, optionally filtered by prefix.
+/// Return index rows, optionally filtered by fuzzy matching.
 pub(crate) fn get_index_entries_impl(
     app: &AppHandle,
     prefix: Option<String>,
@@ -307,21 +349,47 @@ pub(crate) fn get_index_entries_impl(
         limit.unwrap_or(200).clamp(1, 5_000)
     };
 
-    let mut out = Vec::new();
-    for (e, k) in runtime.entries.iter().zip(runtime.entry_keys.iter()) {
-        if p.is_empty()
-            || starts_with_search_key_precomputed(&k.headword, &k.headword_loose, &p_key, &p_loose)
-        {
+    if p.is_empty() {
+        let mut out = Vec::new();
+        for e in runtime.entries.iter().take(limit) {
             out.push(DictionaryIndexEntry {
                 id: e.id,
                 headword: e.headword.clone(),
                 aliases: e.aliases.clone(),
                 source_path: e.source_path.clone(),
             });
-            if out.len() >= limit {
-                break;
+        }
+        return Ok(out);
+    }
+
+    let mut scored = Vec::<(usize, usize, usize)>::new();
+    for (idx, (e, k)) in runtime.entries.iter().zip(runtime.entry_keys.iter()).enumerate() {
+        let mut best = fuzzy_match_score(&k.headword, &k.headword_loose, &p_key, &p_loose);
+        for (alias, alias_loose) in k.aliases.iter().zip(k.aliases_loose.iter()) {
+            if let Some(alias_score) = fuzzy_match_score(alias, alias_loose, &p_key, &p_loose) {
+                best = Some(best.map_or(alias_score, |v| v.max(alias_score)));
             }
         }
+        if let Some(score) = best {
+            scored.push((score, e.headword.len(), idx));
+        }
+    }
+
+    scored.sort_by(|(a_score, a_len, a_idx), (b_score, b_len, b_idx)| {
+        b_score
+            .cmp(a_score)
+            .then(a_len.cmp(b_len))
+            .then(a_idx.cmp(b_idx))
+    });
+    let mut out = Vec::with_capacity(limit.min(scored.len()));
+    for (_, _, idx) in scored.into_iter().take(limit) {
+        let e = &runtime.entries[idx];
+        out.push(DictionaryIndexEntry {
+            id: e.id,
+            headword: e.headword.clone(),
+            aliases: e.aliases.clone(),
+            source_path: e.source_path.clone(),
+        });
     }
     Ok(out)
 }
