@@ -36,3 +36,7 @@ ammonia = "4"
 rayon = "1"
 bincode = "1"
 zstd = "0.13"
+
+[profile.dev]
+debug = 1
+strip = "debuginfo"

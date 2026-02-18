@@ -22,6 +22,9 @@ val hasReleaseSigning = !signingKeystorePath.isNullOrBlank()
     && !signingKeystorePassword.isNullOrBlank()
     && !signingKeyAlias.isNullOrBlank()
     && !signingKeyPassword.isNullOrBlank()
+val requiresReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
 
 android {
     compileSdk = 36
@@ -51,11 +54,6 @@ android {
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
-            packaging {                jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
-                jniLibs.keepDebugSymbols.add("*/armeabi-v7a/*.so")
-                jniLibs.keepDebugSymbols.add("*/x86/*.so")
-                jniLibs.keepDebugSymbols.add("*/x86_64/*.so")
-            }
         }
         getByName("release") {
             isMinifyEnabled = true
@@ -77,17 +75,16 @@ android {
     }
     splits {
         abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
+            isEnable = requiresReleaseBuild
+            if (requiresReleaseBuild) {
+                reset()
+                include("armeabi-v7a", "arm64-v8a")
+                isUniversalApk = true
+            }
         }
     }
 }
 
-val requiresReleaseBuild = gradle.startParameter.taskNames.any {
-    it.contains("release", ignoreCase = true)
-}
 if (requiresReleaseBuild && !hasReleaseSigning) {
     throw GradleException(
         "Release signing is required. Set ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, " +
