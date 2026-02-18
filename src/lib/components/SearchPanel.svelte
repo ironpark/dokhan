@@ -8,6 +8,7 @@
     query,
     rows,
     loading = false,
+    inputAtBottom = false,
     selectedId = null,
     onQueryChange,
     onSubmit,
@@ -16,6 +17,7 @@
     query: string;
     rows: SearchHit[];
     loading?: boolean;
+    inputAtBottom?: boolean;
     selectedId?: number | null;
     onQueryChange: (value: string) => void;
     onSubmit: (event: Event) => void;
@@ -66,7 +68,7 @@
   const totalSize = $derived($virtualizer.getTotalSize());
 </script>
 
-<section class="panel">
+<section class="panel" class:input-bottom={inputAtBottom}>
   <form class="search-line" onsubmit={onSubmit}>
     <Input
       value={query}
@@ -116,6 +118,10 @@
     grid-template-rows: auto 1fr;
   }
 
+  .panel.input-bottom {
+    grid-template-rows: 1fr auto;
+  }
+
   .search-line {
     margin: 0;
     padding: 10px;
@@ -123,6 +129,13 @@
     grid-template-columns: 1fr auto;
     gap: 8px;
     align-items: center;
+  }
+
+  .panel.input-bottom .search-line {
+    order: 2;
+    border-top: 1px solid var(--color-border);
+    background: color-mix(in oklab, var(--color-surface), white 12%);
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 
   .entry-list {
@@ -135,6 +148,10 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
     position: relative;
+  }
+
+  .panel.input-bottom .entry-list {
+    order: 1;
   }
 
   .status-message {

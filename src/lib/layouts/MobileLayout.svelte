@@ -142,6 +142,7 @@
                         query={vm.searchQuery}
                         rows={vm.searchRows}
                         loading={vm.isSearching}
+                        inputAtBottom={true}
                         selectedId={vm.selectedEntryId}
                         onQueryChange={(value) => (vm.searchQuery = value)}
                         onSubmit={(e) => vm.doSearch(e)}
@@ -154,6 +155,7 @@
                         query={vm.indexPrefix}
                         rows={vm.indexRows}
                         loading={vm.indexLoading}
+                        inputAtBottom={true}
                         selectedId={vm.selectedEntryId}
                         onQueryChange={(val) => vm.handleIndexQueryChange(val)}
                         onOpen={(id) => vm.openEntry(id)}
