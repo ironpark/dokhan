@@ -70,96 +70,98 @@
   }
 </script>
 
-<header class="doc-header">
-  <h2 class="doc-title">{title}</h2>
-  <div class="doc-actions">
-    <button
-      type="button"
-      class="mini-btn"
-      class:active={preprocessEnabled}
-      onclick={onTogglePreprocess}
-    >
-      {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
-    </button>
-    <button
-      type="button"
-      class="mini-btn"
-      class:active={markerPreprocessEnabled}
-      onclick={onToggleMarkerPreprocess}
-      disabled={!preprocessEnabled}
-    >
-      {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
-    </button>
-    <button
-      type="button"
-      class="favorite-btn mini-btn"
-      class:active={isFavorite}
-      onclick={onToggleFavorite}
-    >
-      {#if isFavorite}
-        <BookmarkCheck size={14} />
-        <span>북마크됨</span>
-      {:else}
-        <Bookmark size={14} />
-        <span>북마크</span>
-      {/if}
-    </button>
-    <button
-      type="button"
-      class="mini-btn"
-      class:active={showReaderTools}
-      onclick={onToggleReaderTools}
-    >
-      보기 옵션
-    </button>
-  </div>
-</header>
-
-{#if showReaderTools}
-  <div class="doc-tools-row">
-    <div class="view-controls">
-      <label class="option-field">
-        <span class="option-label">글자 크기</span>
-        <div class="font-slider-wrap" style={`--font-slider-progress: ${fontSliderProgress};`}>
-          <span class="font-slider-percent" aria-hidden="true">
-            {normalizeFontSize(readerFontSize)}%
-          </span>
-          <input
-            type="range"
-            class="font-slider"
-            min="80"
-            max="130"
-            step="2"
-            value={normalizeFontSize(readerFontSize)}
-            oninput={handleFontSizeChange}
-            aria-label="글자 크기"
-          />
-          <div class="font-slider-labels" aria-hidden="true">
-            <span>80%</span>
-            <span>100%</span>
-            <span>130%</span>
-          </div>
-        </div>
-      </label>
-      <label class="option-field">
-        <span class="option-label">줄 간격</span>
-        <select bind:value={readerLineHeight} oninput={handleLineHeightChange}>
-          <option value="tight">좁게</option>
-          <option value="normal">보통</option>
-          <option value="loose">넓게</option>
-        </select>
-      </label>
-      <label class="option-field">
-        <span class="option-label">본문 폭</span>
-        <select bind:value={readerWidth} oninput={handleWidthChange}>
-          <option value="narrow">좁게</option>
-          <option value="normal">보통</option>
-          <option value="wide">넓게</option>
-        </select>
-      </label>
+<div class="doc-sticky-shell">
+  <header class="doc-header">
+    <h2 class="doc-title">{title}</h2>
+    <div class="doc-actions">
+      <button
+        type="button"
+        class="mini-btn"
+        class:active={preprocessEnabled}
+        onclick={onTogglePreprocess}
+      >
+        {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        class:active={markerPreprocessEnabled}
+        onclick={onToggleMarkerPreprocess}
+        disabled={!preprocessEnabled}
+      >
+        {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
+      </button>
+      <button
+        type="button"
+        class="favorite-btn mini-btn"
+        class:active={isFavorite}
+        onclick={onToggleFavorite}
+      >
+        {#if isFavorite}
+          <BookmarkCheck size={14} />
+          <span>북마크됨</span>
+        {:else}
+          <Bookmark size={14} />
+          <span>북마크</span>
+        {/if}
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        class:active={showReaderTools}
+        onclick={onToggleReaderTools}
+      >
+        보기 옵션
+      </button>
     </div>
-  </div>
-{/if}
+  </header>
+
+  {#if showReaderTools}
+    <div class="doc-tools-row">
+      <div class="view-controls">
+        <label class="option-field">
+          <span class="option-label">글자 크기</span>
+          <div class="font-slider-wrap" style={`--font-slider-progress: ${fontSliderProgress};`}>
+            <span class="font-slider-percent" aria-hidden="true">
+              {normalizeFontSize(readerFontSize)}%
+            </span>
+            <input
+              type="range"
+              class="font-slider"
+              min="80"
+              max="130"
+              step="2"
+              value={normalizeFontSize(readerFontSize)}
+              oninput={handleFontSizeChange}
+              aria-label="글자 크기"
+            />
+            <div class="font-slider-labels" aria-hidden="true">
+              <span>80%</span>
+              <span>100%</span>
+              <span>130%</span>
+            </div>
+          </div>
+        </label>
+        <label class="option-field">
+          <span class="option-label">줄 간격</span>
+          <select bind:value={readerLineHeight} oninput={handleLineHeightChange}>
+            <option value="tight">좁게</option>
+            <option value="normal">보통</option>
+            <option value="loose">넓게</option>
+          </select>
+        </label>
+        <label class="option-field">
+          <span class="option-label">본문 폭</span>
+          <select bind:value={readerWidth} oninput={handleWidthChange}>
+            <option value="narrow">좁게</option>
+            <option value="normal">보통</option>
+            <option value="wide">넓게</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  {/if}
+</div>
 
 <style>
   .doc-title {
@@ -169,11 +171,28 @@
     letter-spacing: -0.015em;
   }
 
+  .doc-sticky-shell {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--color-surface), white 2%) 0%,
+        color-mix(in oklab, var(--color-surface), white 0%) 82%,
+        rgba(255, 255, 255, 0) 100%
+      );
+    backdrop-filter: blur(2px);
+  }
+
   .doc-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+    padding: 8px 0;
   }
 
   .doc-actions {

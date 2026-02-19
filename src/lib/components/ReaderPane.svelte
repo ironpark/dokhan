@@ -672,7 +672,7 @@
     height: 100%;
     min-height: 0;
     overflow: auto;
-    padding: var(--space-5) var(--space-8);
+    padding: 0 var(--space-8) var(--space-5);
     background: var(--color-surface);
     color: var(--color-text);
   }
@@ -919,7 +919,7 @@
 
   @media (max-width: 768px) {
     .reader {
-      padding: var(--space-4) var(--space-4) var(--space-5);
+      padding: 0 var(--space-4) var(--space-5);
     }
 
     .html-rendered :global(ol.dict-sense-list) {
