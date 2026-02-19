@@ -48,8 +48,10 @@
 
   let creatingFolder = $state(false);
   let newFolderName = $state("");
+  let createFolderError = $state("");
   let renamingFolderId = $state<string | null>(null);
   let renamingFolderName = $state("");
+  let deletingFolder = $state<{ id: string; name: string } | null>(null);
   let openFolderIds = $state<string[]>([]);
 
   function toggleFolder(folderId: string) {
@@ -74,7 +76,7 @@
   function submitCreateFolder() {
     const created = onCreateFolder(newFolderName);
     if (!created) {
-      window.alert("폴더를 만들 수 없습니다. 이름 또는 최대 개수를 확인해 주세요.");
+      createFolderError = "폴더를 만들 수 없습니다. 이름 또는 최대 개수를 확인해 주세요.";
       return;
     }
     openFolderIds = [...openFolderIds, created];
@@ -105,9 +107,17 @@
   }
 
   function requestDeleteFolder(folderId: string, folderName: string) {
-    const ok = window.confirm(`'${folderName}' 폴더를 삭제할까요?\n항목은 기본 폴더로 이동됩니다.`);
-    if (!ok) return;
-    onDeleteFolder(folderId);
+    deletingFolder = { id: folderId, name: folderName };
+  }
+
+  function closeDeleteFolderDialog() {
+    deletingFolder = null;
+  }
+
+  function confirmDeleteFolder() {
+    if (!deletingFolder) return;
+    onDeleteFolder(deletingFolder.id);
+    deletingFolder = null;
   }
 
   function folderNameById(folderId: string): string {
@@ -171,6 +181,22 @@
   </Dialog>
 
   <Dialog
+    open={!!createFolderError}
+    ariaLabel="폴더 생성 오류"
+    title="폴더 생성 실패"
+    description={createFolderError}
+    onOpenChange={(next) => {
+      if (!next) createFolderError = "";
+    }}
+  >
+    {#snippet actions()}
+      <Button type="button" size="xs" variant="pill-active" onclick={() => (createFolderError = "")}
+        >확인</Button
+      >
+    {/snippet}
+  </Dialog>
+
+  <Dialog
     open={!!renamingFolderId}
     ariaLabel="폴더 이름 변경"
     onOpenChange={(next) => {
@@ -207,6 +233,25 @@
         onclick={submitRenameFolder}
         disabled={!renamingFolderName.trim()}>저장</Button
       >
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={!!deletingFolder}
+    ariaLabel="폴더 삭제 확인"
+    title="폴더 삭제"
+    description={
+      deletingFolder
+        ? `'${deletingFolder.name}' 폴더를 삭제할까요? 항목은 기본 폴더로 이동됩니다.`
+        : ""
+    }
+    onOpenChange={(next) => {
+      if (!next) closeDeleteFolderDialog();
+    }}
+  >
+    {#snippet actions()}
+      <Button type="button" size="xs" variant="soft" onclick={closeDeleteFolderDialog}>취소</Button>
+      <Button type="button" size="xs" variant="danger-soft" onclick={confirmDeleteFolder}>삭제</Button>
     {/snippet}
   </Dialog>
 
