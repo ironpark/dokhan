@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { DictionaryStore } from "$lib/stores/dictionary.svelte";
+    import type { DictionaryStore } from "$lib/stores/dictionaryStore.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
     import ContentPanel from "$lib/components/ContentPanel.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
@@ -9,10 +9,10 @@
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
     // Props
-    let { vm }: { vm: DictionaryStore } = $props();
+    let { dictionaryStore }: { dictionaryStore: DictionaryStore } = $props();
 
     let showReader = $derived(
-        !!(vm.selectedEntryId || vm.selectedContentLocal),
+        !!(dictionaryStore.selectedEntryId || dictionaryStore.selectedContentLocal),
     );
     let readerHistoryArmed = false;
 
@@ -24,12 +24,12 @@
 
     onMount(() => {
         const onPopState = () => {
-            if (vm.selectedEntryId || vm.selectedContentLocal) {
-                vm.closeDetail();
+            if (dictionaryStore.selectedEntryId || dictionaryStore.selectedContentLocal) {
+                dictionaryStore.closeDetail();
                 return;
             }
-            if (vm.mobileTab !== "home") {
-                vm.mobileTab = "home";
+            if (dictionaryStore.mobileTab !== "home") {
+                dictionaryStore.setMobileTab("home");
             }
         };
         window.addEventListener("popstate", onPopState);
@@ -75,31 +75,31 @@
                 </header>
                 <div class="reader-content">
                     <ReaderPane
-                        mode={vm.detailMode}
-                        selectedContent={vm.selectedContent}
-                        selectedEntry={vm.selectedEntry}
-                        highlightQuery={vm.committedSearchQuery}
+                        mode={dictionaryStore.detailMode}
+                        selectedContent={dictionaryStore.selectedContent}
+                        selectedEntry={dictionaryStore.selectedEntry}
+                        highlightQuery={dictionaryStore.committedSearchQuery}
                         onOpenHref={(href, path, local) =>
-                            vm.openInlineHref(href, path, local)}
+                            dictionaryStore.openInlineHref(href, path, local)}
                         onResolveImageHref={(href, path, local) =>
-                            vm.resolveInlineImageHref(href, path, local)}
-                        isFavorite={vm.isCurrentFavorite()}
-                        onToggleFavorite={() => vm.toggleCurrentFavorite()}
-                        preprocessEnabled={vm.preprocessEnabled}
+                            dictionaryStore.resolveInlineImageHref(href, path, local)}
+                        isFavorite={dictionaryStore.isCurrentFavorite()}
+                        onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
+                        preprocessEnabled={dictionaryStore.preprocessEnabled}
                         onTogglePreprocess={() =>
-                            vm.setPreprocessEnabled(!vm.preprocessEnabled)}
-                        markerPreprocessEnabled={vm.markerPreprocessEnabled}
+                            dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}
+                        markerPreprocessEnabled={dictionaryStore.markerPreprocessEnabled}
                         onToggleMarkerPreprocess={() =>
-                            vm.setMarkerPreprocessEnabled(!vm.markerPreprocessEnabled)}
-                        readerFontSize={vm.readerFontSize}
-                        readerLineHeight={vm.readerLineHeight}
-                        readerWidth={vm.readerWidth}
+                            dictionaryStore.setMarkerPreprocessEnabled(!dictionaryStore.markerPreprocessEnabled)}
+                        readerFontSize={dictionaryStore.readerFontSize}
+                        readerLineHeight={dictionaryStore.readerLineHeight}
+                        readerWidth={dictionaryStore.readerWidth}
                         onReaderFontSizeChange={(value) =>
-                            vm.setReaderFontSize(value)}
+                            dictionaryStore.setReaderFontSize(value)}
                         onReaderLineHeightChange={(value) =>
-                            vm.setReaderLineHeight(value)}
+                            dictionaryStore.setReaderLineHeight(value)}
                         onReaderWidthChange={(value) =>
-                            vm.setReaderWidth(value)}
+                            dictionaryStore.setReaderWidth(value)}
                     />
                 </div>
             </div>
@@ -109,10 +109,10 @@
                 subtitle="Dokhan Dictionary"
                 compact={true}
                 showZipAction={true}
-                onPickZip={() => vm.pickZipFile()}
+                onPickZip={() => dictionaryStore.pickZipFile()}
             />
 
-            {#if vm.mobileTab === "home"}
+            {#if dictionaryStore.mobileTab === "home"}
                 <div class="home-view">
                     <div class="hero">
                         <h1>독한 사전</h1>
@@ -123,7 +123,7 @@
                             type="button"
                             class="search-launch"
                             aria-label="검색 탭으로 이동"
-                            onclick={() => (vm.mobileTab = "search")}
+                            onclick={() => dictionaryStore.setMobileTab("search")}
                         >
                             <svg
                                 width="18"
@@ -148,48 +148,48 @@
                     <div class="content-list">
                         <h3>목차</h3>
                         <ContentPanel
-                            items={vm.contents}
-                            selectedLocal={vm.selectedContentLocal}
-                            onOpen={(local) => vm.openContent(local)}
+                            items={dictionaryStore.contents}
+                            selectedLocal={dictionaryStore.selectedContentLocal}
+                            onOpen={(local) => dictionaryStore.openContent(local)}
                         />
                     </div>
                 </div>
-            {:else if vm.mobileTab === "search"}
+            {:else if dictionaryStore.mobileTab === "search"}
                 <div class="panel-container">
                     <SearchPanel
-                        query={vm.searchQuery}
-                        rows={vm.searchRows}
-                        loading={vm.isSearching}
+                        query={dictionaryStore.searchQuery}
+                        rows={dictionaryStore.searchRows}
+                        loading={dictionaryStore.isSearching}
                         inputAtBottom={true}
                         recentUnderInput={true}
-                        recentSearches={vm.recentSearches}
-                        selectedId={vm.selectedEntryId}
-                        onQueryChange={(value) => vm.handleSearchQueryChange(value)}
-                        onSubmit={(e) => vm.doSearch(e)}
-                        onPickRecentSearch={(query) => vm.useRecentSearch(query)}
-                        onOpen={(id) => vm.openEntry(id)}
+                        recentSearches={dictionaryStore.recentSearches}
+                        selectedId={dictionaryStore.selectedEntryId}
+                        onQueryChange={(value) => dictionaryStore.setSearchQuery(value)}
+                        onSubmit={() => dictionaryStore.submitSearch()}
+                        onPickRecentSearch={(query) => dictionaryStore.useRecentSearch(query)}
+                        onOpen={(id) => dictionaryStore.openEntry(id)}
                     />
                 </div>
-            {:else if vm.mobileTab === "index"}
+            {:else if dictionaryStore.mobileTab === "index"}
                 <div class="panel-container">
                     <IndexPanel
-                        query={vm.indexPrefix}
-                        rows={vm.indexRows}
-                        loading={vm.indexLoading}
+                        query={dictionaryStore.indexPrefix}
+                        rows={dictionaryStore.indexRows}
+                        loading={dictionaryStore.indexLoading}
                         inputAtBottom={true}
-                        selectedId={vm.selectedEntryId}
-                        onQueryChange={(val) => vm.handleIndexQueryChange(val)}
-                        onOpen={(id) => vm.openEntry(id)}
+                        selectedId={dictionaryStore.selectedEntryId}
+                        onQueryChange={(value) => dictionaryStore.setIndexPrefix(value)}
+                        onOpen={(id) => dictionaryStore.openEntry(id)}
                     />
                 </div>
-            {:else if vm.mobileTab === "favorites"}
+            {:else if dictionaryStore.mobileTab === "favorites"}
                 <div class="panel-container">
                     <LibraryPanel
-                        favorites={vm.favorites}
-                        recents={vm.recentViews}
-                        onOpenFavorite={(item) => vm.openFavorite(item)}
-                        onOpenRecent={(item) => vm.openRecentView(item)}
-                        onRemoveFavorite={(key) => vm.removeFavorite(key)}
+                        favorites={dictionaryStore.favorites}
+                        recents={dictionaryStore.recentViews}
+                        onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
+                        onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
+                        onRemoveFavorite={(key) => dictionaryStore.removeFavorite(key)}
                     />
                 </div>
             {/if}
@@ -199,8 +199,8 @@
     {#if !showReader}
         <nav class="bottom-nav">
             <button
-                class:active={vm.mobileTab === "home"}
-                onclick={() => (vm.mobileTab = "home")}
+                class:active={dictionaryStore.mobileTab === "home"}
+                onclick={() => dictionaryStore.setMobileTab("home")}
             >
                 <div class="icon">
                     <svg
@@ -221,8 +221,8 @@
                 <span>홈</span>
             </button>
             <button
-                class:active={vm.mobileTab === "search"}
-                onclick={() => (vm.mobileTab = "search")}
+                class:active={dictionaryStore.mobileTab === "search"}
+                onclick={() => dictionaryStore.setMobileTab("search")}
             >
                 <div class="icon">
                     <svg
@@ -245,8 +245,8 @@
                 <span>검색</span>
             </button>
             <button
-                class:active={vm.mobileTab === "index"}
-                onclick={() => (vm.mobileTab = "index")}
+                class:active={dictionaryStore.mobileTab === "index"}
+                onclick={() => dictionaryStore.setMobileTab("index")}
             >
                 <div class="icon">
                     <svg
@@ -266,8 +266,8 @@
                 <span>색인</span>
             </button>
             <button
-                class:active={vm.mobileTab === "favorites"}
-                onclick={() => (vm.mobileTab = "favorites")}
+                class:active={dictionaryStore.mobileTab === "favorites"}
+                onclick={() => dictionaryStore.setMobileTab("favorites")}
             >
                 <div class="icon">
                     <svg

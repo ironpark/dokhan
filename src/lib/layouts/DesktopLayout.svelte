@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { DictionaryStore } from "$lib/stores/dictionary.svelte";
+    import type { DictionaryStore } from "$lib/stores/dictionaryStore.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
@@ -9,7 +9,7 @@
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
     import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
-    let { vm }: { vm: DictionaryStore } = $props();
+    let { dictionaryStore }: { dictionaryStore: DictionaryStore } = $props();
 </script>
 
 <div class="desktop-layout">
@@ -18,54 +18,54 @@
             title="독한 사전"
             subtitle="Dokhan Dictionary"
             showZipAction={true}
-            onPickZip={() => vm.pickZipFile()}
+            onPickZip={() => dictionaryStore.pickZipFile()}
         />
 
         <div class="tabs-container">
             <TabBar
-                activeTab={vm.activeTab}
+                activeTab={dictionaryStore.activeTab}
                 onChange={(tab) => {
-                    vm.activeTab = tab;
+                    dictionaryStore.setActiveTab(tab);
                 }}
             />
         </div>
 
         <div class="sidebar-content">
-            {#if vm.activeTab === "content"}
+            {#if dictionaryStore.activeTab === "content"}
                 <ContentPanel
-                    items={vm.contents}
-                    selectedLocal={vm.selectedContentLocal}
-                    onOpen={(local) => vm.openContent(local)}
+                    items={dictionaryStore.contents}
+                    selectedLocal={dictionaryStore.selectedContentLocal}
+                    onOpen={(local) => dictionaryStore.openContent(local)}
                 />
-            {:else if vm.activeTab === "index"}
+            {:else if dictionaryStore.activeTab === "index"}
                 <IndexPanel
-                    query={vm.indexPrefix}
-                    rows={vm.indexRows}
-                    loading={vm.indexLoading}
-                    selectedId={vm.selectedEntryId}
-                    onQueryChange={(val) => vm.handleIndexQueryChange(val)}
-                    onOpen={(id) => vm.openEntry(id)}
+                    query={dictionaryStore.indexPrefix}
+                    rows={dictionaryStore.indexRows}
+                    loading={dictionaryStore.indexLoading}
+                    selectedId={dictionaryStore.selectedEntryId}
+                    onQueryChange={(value) => dictionaryStore.setIndexPrefix(value)}
+                    onOpen={(id) => dictionaryStore.openEntry(id)}
                 />
             {:else}
-                {#if vm.activeTab === "search"}
+                {#if dictionaryStore.activeTab === "search"}
                     <SearchPanel
-                        query={vm.searchQuery}
-                        rows={vm.searchRows}
-                        loading={vm.isSearching}
-                        recentSearches={vm.recentSearches}
-                        selectedId={vm.selectedEntryId}
-                        onQueryChange={(value) => vm.handleSearchQueryChange(value)}
-                        onSubmit={(e) => vm.doSearch(e)}
-                        onPickRecentSearch={(query) => vm.useRecentSearch(query)}
-                        onOpen={(id) => vm.openEntry(id)}
+                        query={dictionaryStore.searchQuery}
+                        rows={dictionaryStore.searchRows}
+                        loading={dictionaryStore.isSearching}
+                        recentSearches={dictionaryStore.recentSearches}
+                        selectedId={dictionaryStore.selectedEntryId}
+                        onQueryChange={(value) => dictionaryStore.setSearchQuery(value)}
+                        onSubmit={() => dictionaryStore.submitSearch()}
+                        onPickRecentSearch={(query) => dictionaryStore.useRecentSearch(query)}
+                        onOpen={(id) => dictionaryStore.openEntry(id)}
                     />
                 {:else}
                     <LibraryPanel
-                        favorites={vm.favorites}
-                        recents={vm.recentViews}
-                        onOpenFavorite={(item) => vm.openFavorite(item)}
-                        onOpenRecent={(item) => vm.openRecentView(item)}
-                        onRemoveFavorite={(key) => vm.removeFavorite(key)}
+                        favorites={dictionaryStore.favorites}
+                        recents={dictionaryStore.recentViews}
+                        onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
+                        onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
+                        onRemoveFavorite={(key) => dictionaryStore.removeFavorite(key)}
                     />
                 {/if}
             {/if}
@@ -73,7 +73,7 @@
     </aside>
 
     <main class="main-content">
-        {#if !vm.selectedContent && !vm.selectedEntry}
+        {#if !dictionaryStore.selectedContent && !dictionaryStore.selectedEntry}
             <div class="empty-state">
                 <EmptyState
                     title="본문을 표시할 항목을 선택하세요."
@@ -82,29 +82,29 @@
             </div>
         {:else}
             <ReaderPane
-                mode={vm.detailMode}
-                selectedContent={vm.selectedContent}
-                selectedEntry={vm.selectedEntry}
-                highlightQuery={vm.committedSearchQuery}
+                mode={dictionaryStore.detailMode}
+                selectedContent={dictionaryStore.selectedContent}
+                selectedEntry={dictionaryStore.selectedEntry}
+                highlightQuery={dictionaryStore.committedSearchQuery}
                 onOpenHref={(href, path, local) =>
-                    vm.openInlineHref(href, path, local)}
+                    dictionaryStore.openInlineHref(href, path, local)}
                 onResolveImageHref={(href, path, local) =>
-                    vm.resolveInlineImageHref(href, path, local)}
-                isFavorite={vm.isCurrentFavorite()}
-                onToggleFavorite={() => vm.toggleCurrentFavorite()}
-                preprocessEnabled={vm.preprocessEnabled}
+                    dictionaryStore.resolveInlineImageHref(href, path, local)}
+                isFavorite={dictionaryStore.isCurrentFavorite()}
+                onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
+                preprocessEnabled={dictionaryStore.preprocessEnabled}
                 onTogglePreprocess={() =>
-                    vm.setPreprocessEnabled(!vm.preprocessEnabled)}
-                markerPreprocessEnabled={vm.markerPreprocessEnabled}
+                    dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}
+                markerPreprocessEnabled={dictionaryStore.markerPreprocessEnabled}
                 onToggleMarkerPreprocess={() =>
-                    vm.setMarkerPreprocessEnabled(!vm.markerPreprocessEnabled)}
-                readerFontSize={vm.readerFontSize}
-                readerLineHeight={vm.readerLineHeight}
-                readerWidth={vm.readerWidth}
-                onReaderFontSizeChange={(value) => vm.setReaderFontSize(value)}
+                    dictionaryStore.setMarkerPreprocessEnabled(!dictionaryStore.markerPreprocessEnabled)}
+                readerFontSize={dictionaryStore.readerFontSize}
+                readerLineHeight={dictionaryStore.readerLineHeight}
+                readerWidth={dictionaryStore.readerWidth}
+                onReaderFontSizeChange={(value) => dictionaryStore.setReaderFontSize(value)}
                 onReaderLineHeightChange={(value) =>
-                    vm.setReaderLineHeight(value)}
-                onReaderWidthChange={(value) => vm.setReaderWidth(value)}
+                    dictionaryStore.setReaderLineHeight(value)}
+                onReaderWidthChange={(value) => dictionaryStore.setReaderWidth(value)}
             />
         {/if}
     </main>

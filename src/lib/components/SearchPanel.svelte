@@ -26,7 +26,7 @@
     recentSearches?: string[];
     selectedId?: number | null;
     onQueryChange: (value: string) => void;
-    onSubmit: (event: Event) => void;
+    onSubmit: () => void;
     onPickRecentSearch: (query: string) => void;
     onOpen: (id: number) => void;
   } = $props();
@@ -86,7 +86,13 @@
   class:input-bottom={inputAtBottom}
 >
   <div class="search-group">
-    <form class="search-line" onsubmit={onSubmit}>
+    <form
+      class="search-line"
+      onsubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
     <Input
       value={query}
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}

@@ -6,10 +6,10 @@
   import LoadProgress from "$lib/components/LoadProgress.svelte";
   import MobileLayout from "$lib/layouts/MobileLayout.svelte";
   import DesktopLayout from "$lib/layouts/DesktopLayout.svelte";
-  import { DictionaryStore } from "$lib/stores/dictionary.svelte";
+  import { createDictionaryStore } from "$lib/stores/dictionaryStore.svelte";
   import { platformStore } from "$lib/stores/platform.svelte";
 
-  const vm = new DictionaryStore();
+  const dictionaryStore = createDictionaryStore();
   let copyMessage = $state("");
 
   onMount(() => {
@@ -17,13 +17,13 @@
     let unlistenCloseRequest: (() => void) | undefined;
 
     (async () => {
-      vm.setAutoOpenFirstContent(!platformStore.isMobile);
-      await vm.bootFromManagedCache();
+      dictionaryStore.setAutoOpenFirstContent(!platformStore.isMobile);
+      await dictionaryStore.bootFromManagedCache();
 
       if (platformStore.isMobile) {
         unlistenCloseRequest = await getCurrentWindow().onCloseRequested(
           (event) => {
-            if (vm.handleMobileBackNavigation()) {
+            if (dictionaryStore.handleMobileBackNavigation()) {
               event.preventDefault();
             }
           },
@@ -32,31 +32,31 @@
         unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
           const payload = event.payload;
           if (payload.type === "over") {
-            vm.dragOver = true;
+            dictionaryStore.setDragOver(true);
             return;
           }
           if (payload.type === "drop") {
-            vm.dragOver = false;
+            dictionaryStore.setDragOver(false);
             const first = payload.paths?.[0];
-            if (first) void vm.useZipPath(first);
+            if (first) void dictionaryStore.useZipPath(first);
             return;
           }
-          vm.dragOver = false;
+          dictionaryStore.setDragOver(false);
         });
       }
 
     })();
 
     return () => {
-      vm.dispose();
+      dictionaryStore.dispose();
       if (unlistenDragDrop) unlistenDragDrop();
       if (unlistenCloseRequest) unlistenCloseRequest();
     };
   });
 
   async function copyErrorText() {
-    if (!vm.error) return;
-    const text = vm.error;
+    if (!dictionaryStore.error) return;
+    const text = dictionaryStore.error;
     try {
       await writeText(text);
       copyMessage = "복사됨";
@@ -81,16 +81,16 @@
   }
 
   async function onPickZipClick() {
-    await vm.pickZipFile();
+    await dictionaryStore.pickZipFile();
   }
 
   async function onRetryClick() {
-    await vm.retryLastOperation();
+    await dictionaryStore.retryLastOperation();
   }
 </script>
 
 <main class="app-shell">
-  {#if vm.error}
+  {#if dictionaryStore.error}
     <div class="error-box" role="alert" aria-live="assertive">
       <strong>작업 중 오류가 발생했습니다.</strong>
       <p>다시 시도하거나 ZIP 파일을 다시 선택해 복구해 주세요.</p>
@@ -105,7 +105,7 @@
       </div>
       <details>
         <summary>기술 오류 보기</summary>
-        <pre>{vm.error}</pre>
+        <pre>{dictionaryStore.error}</pre>
       </details>
       {#if copyMessage}
         <small>{copyMessage}</small>
@@ -113,9 +113,9 @@
     </div>
   {/if}
 
-  <LoadProgress visible={vm.showProgress} progress={vm.progress} />
+  <LoadProgress visible={dictionaryStore.showProgress} progress={dictionaryStore.progress} />
 
-  {#if !vm.masterSummary}
+  {#if !dictionaryStore.masterSummary}
     {#if platformStore.isMobile}
       <section class="entry-shell mobile" aria-label="ZIP 선택">
         <div class="entry-card">
@@ -131,7 +131,7 @@
       </section>
     {:else}
       <section class="entry-shell desktop">
-        <div class:drag-over={vm.dragOver} class="entry-card drop-card">
+        <div class:drag-over={dictionaryStore.dragOver} class="entry-card drop-card">
           <p class="eyebrow">Dokhan</p>
           <h1>독한 사전</h1>
           <p class="description">
@@ -145,9 +145,9 @@
       </section>
     {/if}
   {:else if platformStore.isMobile}
-    <MobileLayout {vm} />
+    <MobileLayout {dictionaryStore} />
   {:else}
-    <DesktopLayout {vm} />
+    <DesktopLayout {dictionaryStore} />
   {/if}
 </main>
 
