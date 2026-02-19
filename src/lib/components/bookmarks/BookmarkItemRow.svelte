@@ -1,5 +1,6 @@
 <script lang="ts">
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
   import type { BookmarkFolder, FavoriteItem } from "$lib/types/dictionary";
 
   let {
@@ -16,16 +17,13 @@
     onRemove: (key: string) => void;
   } = $props();
 
-  function folderNameById(folderId: string): string {
-    return folders.find((folder) => folder.id === folderId)?.name ?? "기본";
-  }
+  const menuOptions = $derived(
+    folders.map((folder) => ({ id: folder.id, label: folder.name, active: folder.id === item.folderId })),
+  );
 
-  function moveFavoriteFromMenu(event: Event, key: string, folderId: string) {
-    onMove(key, folderId);
-    const button = event.currentTarget as HTMLElement | null;
-    const details = button?.closest("details") as HTMLDetailsElement | null;
-    if (details) details.open = false;
-  }
+  const currentFolderName = $derived(
+    folders.find((folder) => folder.id === item.folderId)?.name ?? "기본",
+  );
 </script>
 
 <li>
@@ -33,23 +31,11 @@
     <span>{item.label}</span>
   </button>
   <div class="row-actions">
-    <details class="move-dropdown">
-      <summary aria-label="폴더 이동 메뉴">
-        {folderNameById(item.folderId)}
-      </summary>
-      <div class="move-menu">
-        {#each folders as targetFolder (targetFolder.id)}
-          <button
-            type="button"
-            class="move-option"
-            class:active={targetFolder.id === item.folderId}
-            onclick={(event) => moveFavoriteFromMenu(event, item.key, targetFolder.id)}
-          >
-            {targetFolder.name}
-          </button>
-        {/each}
-      </div>
-    </details>
+    <DropdownMenu
+      label={currentFolderName}
+      options={menuOptions}
+      onSelect={(folderId) => onMove(item.key, folderId)}
+    />
     <button
       type="button"
       class="remove-btn"
@@ -99,68 +85,6 @@
     align-items: center;
     gap: 4px;
     padding: 0 6px;
-  }
-
-  .move-dropdown {
-    position: relative;
-  }
-
-  .move-dropdown summary {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 6px;
-    font-size: 9px;
-    line-height: 1.1;
-    height: 20px;
-    min-width: 44px;
-    padding: 0 5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    list-style: none;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .move-dropdown summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .move-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
-    min-width: 104px;
-    padding: 4px;
-    display: grid;
-    gap: 2px;
-    z-index: 20;
-  }
-
-  .move-option {
-    border: none;
-    background: transparent;
-    color: var(--color-text-muted);
-    border-radius: 6px;
-    font-size: 10px;
-    text-align: left;
-    padding: 5px 6px;
-    cursor: pointer;
-  }
-
-  .move-option:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-  }
-
-  .move-option.active {
-    color: var(--color-accent);
-    background: color-mix(in oklab, var(--color-accent), white 92%);
   }
 
   .remove-btn {

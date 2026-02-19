@@ -3,6 +3,7 @@
   import { createVirtualizer } from "@tanstack/svelte-virtual";
   import ListItem from "$lib/components/ui/ListItem.svelte";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
+  import SectionHeader from "$lib/components/ui/SectionHeader.svelte";
 
   let {
     items,
@@ -57,7 +58,7 @@
 </script>
 
 <section class="panel">
-  <h3 class="toc-title">목차</h3>
+  <SectionHeader title="목차" class="toc-title" />
   <div class="entry-list" bind:this={listEl}>
     <div style="height: {totalSize}px; width: 100%; position: relative;">
       {#each virtualRows as row (row.index)}
@@ -78,7 +79,7 @@
   </div>
 
   <div class="recent-box">
-    <h3>최근 열람</h3>
+    <SectionHeader title="최근 열람" class="recent-head" />
     {#if recentItems.length}
       <div class="recent-scroll">
         <ul>
@@ -121,19 +122,13 @@
     overflow: hidden;
   }
 
-  h3 {
-    margin: 0;
-    padding: 10px 12px 9px;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
-    border-bottom: 1px solid var(--color-border);
+  :global(.toc-title) {
+    padding: 0 2px;
   }
 
-  .toc-title {
-    padding: 0 2px;
-    border-bottom: none;
+  :global(.recent-head) {
+    padding: 10px 12px 9px;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .recent-scroll,

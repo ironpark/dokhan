@@ -5,8 +5,11 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import BookmarkItemRow from "$lib/components/bookmarks/BookmarkItemRow.svelte";
   import Button from "$lib/components/ui/Button.svelte";
+  import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import Dialog from "$lib/components/ui/Dialog.svelte";
   import Input from "$lib/components/ui/Input.svelte";
+  import SectionHeader from "$lib/components/ui/SectionHeader.svelte";
+  import Toast from "$lib/components/ui/Toast.svelte";
   import type { BookmarkFolder, FavoriteItem } from "$lib/types/dictionary";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
@@ -51,6 +54,7 @@
   let creatingFolder = $state(false);
   let newFolderName = $state("");
   let createFolderError = $state("");
+  let toastMessage = $state("");
   let renamingFolderId = $state<string | null>(null);
   let renamingFolderName = $state("");
   let deletingFolder = $state<{ id: string; name: string } | null>(null);
@@ -81,6 +85,7 @@
       createFolderError = "폴더를 만들 수 없습니다. 이름 또는 최대 개수를 확인해 주세요.";
       return;
     }
+    toastMessage = "폴더를 추가했습니다.";
     openFolderIds = [...openFolderIds, created];
     closeCreateFolderDialog();
   }
@@ -105,6 +110,7 @@
       return;
     }
     onRenameFolder(renamingFolderId, trimmed);
+    toastMessage = "폴더 이름을 변경했습니다.";
     closeRenameFolderDialog();
   }
 
@@ -119,21 +125,23 @@
   function confirmDeleteFolder() {
     if (!deletingFolder) return;
     onDeleteFolder(deletingFolder.id);
+    toastMessage = "폴더를 삭제했습니다.";
     deletingFolder = null;
   }
 
 </script>
 
 <section class="panel">
-  <div class="panel-head">
-    <h3>북마크 폴더</h3>
-    {#if !creatingFolder}
-      <Button type="button" size="xs" variant="soft" class="add-folder-btn" onclick={beginCreateFolder}>
-        <FolderPlus size={14} />
-        <span>폴더</span>
-      </Button>
-    {/if}
-  </div>
+  <SectionHeader title="북마크 폴더" class="panel-head">
+    {#snippet actions()}
+      {#if !creatingFolder}
+        <Button type="button" size="xs" variant="soft" class="add-folder-btn" onclick={beginCreateFolder}>
+          <FolderPlus size={14} />
+          <span>폴더</span>
+        </Button>
+      {/if}
+    {/snippet}
+  </SectionHeader>
 
   <Dialog
     open={creatingFolder}
@@ -172,21 +180,15 @@
     {/snippet}
   </Dialog>
 
-  <Dialog
+  <ConfirmDialog
     open={!!createFolderError}
-    ariaLabel="폴더 생성 오류"
     title="폴더 생성 실패"
     description={createFolderError}
-    onOpenChange={(next) => {
-      if (!next) createFolderError = "";
-    }}
-  >
-    {#snippet actions()}
-      <Button type="button" size="xs" variant="pill-active" onclick={() => (createFolderError = "")}
-        >확인</Button
-      >
-    {/snippet}
-  </Dialog>
+    confirmLabel="확인"
+    cancelLabel="닫기"
+    onCancel={() => (createFolderError = "")}
+    onConfirm={() => (createFolderError = "")}
+  />
 
   <Dialog
     open={!!renamingFolderId}
@@ -228,24 +230,20 @@
     {/snippet}
   </Dialog>
 
-  <Dialog
+  <ConfirmDialog
     open={!!deletingFolder}
-    ariaLabel="폴더 삭제 확인"
     title="폴더 삭제"
     description={
       deletingFolder
         ? `'${deletingFolder.name}' 폴더를 삭제할까요? 항목은 기본 폴더로 이동됩니다.`
         : ""
     }
-    onOpenChange={(next) => {
-      if (!next) closeDeleteFolderDialog();
-    }}
-  >
-    {#snippet actions()}
-      <Button type="button" size="xs" variant="soft" onclick={closeDeleteFolderDialog}>취소</Button>
-      <Button type="button" size="xs" variant="danger-soft" onclick={confirmDeleteFolder}>삭제</Button>
-    {/snippet}
-  </Dialog>
+    confirmLabel="삭제"
+    cancelLabel="취소"
+    danger={true}
+    onCancel={closeDeleteFolderDialog}
+    onConfirm={confirmDeleteFolder}
+  />
 
   <div class="folder-list">
     {#each folders as folder (folder.id)}
@@ -325,6 +323,13 @@
       </section>
     {/each}
   </div>
+  <Toast
+    open={!!toastMessage}
+    message={toastMessage}
+    onOpenChange={(next) => {
+      if (!next) toastMessage = "";
+    }}
+  />
 </section>
 
 <style>
@@ -339,19 +344,11 @@
     gap: 10px;
   }
 
-  .panel-head {
+  :global(.panel-head) {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 2px;
-  }
-
-  .panel-head h3 {
-    margin: 0;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
   }
 
   :global(.add-folder-btn) {
