@@ -5,6 +5,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Button from "$lib/components/ui/Button.svelte";
   import Dialog from "$lib/components/ui/Dialog.svelte";
+  import Input from "$lib/components/ui/Input.svelte";
   import type { BookmarkFolder, FavoriteItem } from "$lib/types/dictionary";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
@@ -158,12 +159,12 @@
       </h4>
     {/snippet}
     {#snippet children()}
-      <input
+      <Input
         class="folder-input"
-        type="text"
         bind:value={newFolderName}
         placeholder="폴더 이름"
-        maxlength="24"
+        maxlength={24}
+        uiSize="sm"
         onkeydown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
@@ -210,12 +211,12 @@
       </h4>
     {/snippet}
     {#snippet children()}
-      <input
+      <Input
         class="folder-input"
-        type="text"
         bind:value={renamingFolderName}
         placeholder="폴더 이름"
-        maxlength="24"
+        maxlength={24}
+        uiSize="sm"
         onkeydown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
@@ -404,7 +405,7 @@
     gap: 8px;
   }
 
-  .folder-input {
+  :global(.folder-input input) {
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: var(--color-surface);
@@ -414,7 +415,7 @@
     outline: none;
   }
 
-  .folder-input:focus-visible {
+  :global(.folder-input input:focus-visible) {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 84%);
   }

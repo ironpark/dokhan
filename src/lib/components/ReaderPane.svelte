@@ -2,6 +2,7 @@
   import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import Dialog from "$lib/components/ui/Dialog.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import type {
     BookmarkFolder,
     ContentPage,
@@ -655,11 +656,11 @@
   }}
 >
   {#snippet children()}
-    <select class="bookmark-folder-select" bind:value={bookmarkTargetFolderId}>
+    <Select class="bookmark-folder-select" bind:value={bookmarkTargetFolderId} uiSize="sm">
       {#each bookmarkFolders as folder (folder.id)}
         <option value={folder.id}>{folder.name}</option>
       {/each}
-    </select>
+    </Select>
   {/snippet}
   {#snippet actions()}
     <Button type="button" size="xs" variant="soft" onclick={cancelBookmarkFolderDialog}>취소</Button>
@@ -679,7 +680,7 @@
     color: var(--color-text);
   }
 
-  .bookmark-folder-select {
+  :global(.bookmark-folder-select) {
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: var(--color-surface);

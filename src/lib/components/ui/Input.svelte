@@ -7,6 +7,7 @@
         placeholder = "",
         readonly = false,
         clearable = false,
+        uiSize = "md",
         icon,
         onclear,
         class: className = "",
@@ -17,6 +18,7 @@
         placeholder?: string;
         readonly?: boolean;
         clearable?: boolean;
+        uiSize?: "sm" | "md";
         icon?: Snippet;
         onclear?: () => void;
         class?: string;
@@ -39,6 +41,7 @@
         bind:value
         {placeholder}
         {readonly}
+        class:sm={uiSize === "sm"}
         class:has-icon={!!icon}
         class:has-clear={clearable && !readonly && !!value}
         {oninput}
@@ -96,6 +99,12 @@
 
     input.has-icon {
         padding-left: 36px;
+    }
+
+    input.sm {
+        height: 34px;
+        font-size: 12px;
+        border-radius: 10px;
     }
 
     input.has-clear {
