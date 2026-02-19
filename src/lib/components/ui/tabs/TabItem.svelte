@@ -3,11 +3,13 @@
     id,
     label,
     active = false,
+    size = "md",
     onSelect,
   }: {
     id: string;
     label: string;
     active?: boolean;
+    size?: "sm" | "md";
     onSelect: (id: string) => void;
   } = $props();
 </script>
@@ -17,6 +19,7 @@
   role="tab"
   class="tab-item"
   class:is-active={active}
+  class:is-sm={size === "sm"}
   aria-selected={active}
   aria-controls={`panel-${id}`}
   onclick={() => onSelect(id)}
@@ -34,7 +37,7 @@
     cursor: pointer;
     height: 36px;
     padding: 0 var(--space-2);
-    font-size: 13px;
+    font-size: var(--font-size-control-sm);
     font-weight: 500;
     line-height: 1;
     display: inline-flex;
@@ -45,8 +48,14 @@
       background-color var(--motion-fast);
   }
 
+  .tab-item.is-sm {
+    height: 30px;
+    font-size: var(--font-size-control-sm);
+    padding: 0 var(--space-1);
+  }
+
   .tab-item:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-interactive-hover);
     color: var(--color-text);
   }
 
@@ -63,7 +72,7 @@
   @media (max-width: 768px) {
     .tab-item {
       height: 30px;
-      font-size: 12px;
+      font-size: var(--font-size-control-sm);
       padding: 0 var(--space-1);
     }
   }
