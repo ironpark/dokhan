@@ -26,7 +26,13 @@
 </script>
 
 <div
-  class={`tabbar ${className}`}
+  class={`tabbar relative m-0 border-b border-[var(--color-dokhan-border)] bg-transparent ${className} ${
+    scrollable
+      ? "flex overflow-x-auto [scrollbar-width:thin]"
+      : fullWidth
+        ? "grid [grid-template-columns:repeat(var(--tab-count),minmax(0,1fr))]"
+        : "inline-flex"
+  }`}
   class:is-sm={size === "sm"}
   class:full-width={fullWidth}
   class:scrollable={scrollable}
@@ -35,7 +41,13 @@
   style={`--tab-count: ${Math.max(1, items.length)}; --tab-active-index: ${activeIndex};`}
 >
   {#if showIndicator}
-    <div class="tab-indicator" class:animated={animatedIndicator} aria-hidden="true"></div>
+    <div
+      class={`tab-indicator absolute bottom-0 left-0 h-[2px] w-[calc(100%/var(--tab-count))] bg-[var(--color-dokhan-accent)] pointer-events-none ${
+        animatedIndicator ? "transition-transform duration-[220ms] ease-[cubic-bezier(0.2,0.9,0.2,1)]" : ""
+      }`}
+      style={`transform: translateX(calc(100% * var(--tab-active-index)));`}
+      aria-hidden="true"
+    ></div>
   {/if}
   {#each items as item (item.id)}
     <TabItem
@@ -49,21 +61,8 @@
 </div>
 
 <style>
-  .tabbar {
-    position: relative;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(var(--tab-count), minmax(0, 1fr));
-    gap: 0;
-    background: transparent;
-    border-bottom: 1px solid var(--color-border);
-  }
-
   .tabbar.scrollable {
-    display: flex;
-    overflow-x: auto;
-    scrollbar-width: thin;
+    gap: 0;
   }
 
   .tabbar.scrollable :global(.tab-item) {
@@ -72,30 +71,7 @@
     padding-inline: 12px;
   }
 
-  .tabbar:not(.full-width):not(.scrollable) {
-    display: inline-flex;
-  }
-
   .tabbar:not(.full-width):not(.scrollable) :global(.tab-item) {
     min-width: 84px;
-  }
-
-  .tabbar.is-sm {
-    border-bottom-width: 1px;
-  }
-
-  .tab-indicator {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: calc(100% / var(--tab-count));
-    height: 2px;
-    background: var(--color-accent);
-    transform: translateX(calc(100% * var(--tab-active-index)));
-    pointer-events: none;
-  }
-
-  .tab-indicator.animated {
-    transition: transform var(--motion-base);
   }
 </style>

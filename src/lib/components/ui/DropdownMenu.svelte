@@ -39,7 +39,7 @@
 <div class={`dropdown ${className}`} bind:this={rootEl}>
   <button
     type="button"
-    class="dropdown-trigger"
+    class="inline-flex min-h-[20px] min-w-[44px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[6px] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] px-[5px] text-[var(--font-size-control-xs)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={toggle}
@@ -48,13 +48,19 @@
   </button>
 
   {#if open}
-    <div class="dropdown-menu" role="menu">
+    <div
+      class="absolute right-0 top-[calc(100%+4px)] z-24 grid min-w-[108px] gap-[2px] rounded-[8px] border border-[var(--color-dokhan-border)] bg-[var(--color-surface-elevated)] p-1 shadow-[0_8px_18px_rgba(0,0,0,0.14)] animate-[menuIn_var(--motion-enter)]"
+      role="menu"
+    >
       {#each options as option (option.id)}
         <button
           type="button"
           role="menuitem"
-          class="dropdown-option"
-          class:active={!!option.active}
+          class={`cursor-pointer rounded-[6px] border-none bg-transparent px-[6px] py-[5px] text-left text-[var(--font-size-control-xs)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-focus-ring)] ${
+            option.active
+              ? "bg-[color-mix(in_oklab,var(--color-dokhan-accent),white_92%)] text-[var(--color-dokhan-accent)]"
+              : "text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]"
+          }`}
           onclick={() => {
             onSelect(option.id);
             close();
@@ -70,80 +76,6 @@
 <style>
   .dropdown {
     position: relative;
-  }
-
-  .dropdown-trigger {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 6px;
-    font-size: var(--font-size-control-xs);
-    line-height: 1.1;
-    min-height: 20px;
-    min-width: 44px;
-    padding: 0 5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    white-space: nowrap;
-    transition:
-      background-color var(--motion-fast),
-      border-color var(--motion-fast),
-      color var(--motion-fast);
-  }
-
-  .dropdown-trigger:hover {
-    border-color: var(--color-border-strong);
-    color: var(--color-text);
-    background: var(--color-interactive-hover);
-  }
-
-  .dropdown-trigger:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--color-focus-ring);
-  }
-
-  .dropdown-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface-elevated);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
-    min-width: 108px;
-    padding: 4px;
-    display: grid;
-    gap: 2px;
-    z-index: 24;
-    animation: menuIn var(--motion-enter);
-  }
-
-  .dropdown-option {
-    border: none;
-    background: transparent;
-    color: var(--color-text-muted);
-    border-radius: 6px;
-    font-size: 10px;
-    text-align: left;
-    padding: 5px 6px;
-    cursor: pointer;
-  }
-
-  .dropdown-option:hover {
-    background: var(--color-interactive-hover);
-    color: var(--color-text);
-  }
-
-  .dropdown-option:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--color-focus-ring);
-  }
-
-  .dropdown-option.active {
-    color: var(--color-accent);
-    background: color-mix(in oklab, var(--color-accent), white 92%);
   }
 
   @keyframes menuIn {
