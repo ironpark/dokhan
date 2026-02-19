@@ -39,7 +39,7 @@
     <button
       type="button"
       class="remove-btn"
-      aria-label="북마크 삭제"
+      aria-label="책갈피 삭제"
       onclick={() => onRemove(item.key)}
       title="삭제"
     >

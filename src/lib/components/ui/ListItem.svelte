@@ -23,11 +23,12 @@
 <style>
     .list-item {
         position: relative;
-        height: 100%;
         min-height: 38px;
         border-bottom: 1px solid var(--color-border);
         box-sizing: border-box;
         transition: background-color var(--motion-fast);
+        display: flex;
+        align-items: stretch;
     }
 
     .list-item::before {
@@ -61,11 +62,13 @@
 
     button {
         width: 100%;
-        height: 100%;
+        min-height: 38px;
         border: none;
         background: transparent;
         text-align: left;
         padding: 0 var(--space-3);
+        display: flex;
+        align-items: center;
         font-size: 14px;
         color: var(--color-text);
         cursor: pointer;

@@ -128,7 +128,7 @@
 </script>
 
 <section class="panel">
-  <SectionHeader title="북마크 폴더">
+  <SectionHeader title="책갈피 폴더">
     {#snippet actions()}
       {#if !creatingFolder}
         <Button
@@ -318,7 +318,7 @@
                 <div class="folder-empty">
                   <EmptyState
                     title={`'${folder.name}' 폴더가 비어 있습니다.`}
-                    description="본문에서 '북마크' 버튼으로 저장하거나 다른 폴더를 선택하세요."
+                    description="본문에서 '책갈피' 버튼으로 저장하거나 다른 폴더를 선택하세요."
                     compact={true}
                   />
                 </div>

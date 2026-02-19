@@ -22,7 +22,7 @@
     { id: "content", label: "목차" },
     { id: "index", label: "색인" },
     { id: "search", label: "검색" },
-    { id: "favorites", label: "북마크" },
+    { id: "favorites", label: "책갈피" },
   ];
 </script>
 

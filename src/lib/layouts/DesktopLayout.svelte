@@ -36,6 +36,7 @@
                     items={dictionaryStore.contents}
                     recents={dictionaryStore.recentViews}
                     selectedLocal={dictionaryStore.selectedContentLocal}
+                    showTocHeader={false}
                     onOpen={(local) => dictionaryStore.openContent(local)}
                     onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
                 />
@@ -88,7 +89,7 @@
             <div class="empty-state">
                 <EmptyState
                     title="본문을 표시할 항목을 선택하세요."
-                    description="목차, 색인, 검색 또는 북마크에서 항목을 선택하면 여기에 표시됩니다."
+                    description="목차, 색인, 검색 또는 책갈피에서 항목을 선택하면 여기에 표시됩니다."
                 />
             </div>
         {:else}

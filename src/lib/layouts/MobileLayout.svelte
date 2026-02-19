@@ -298,7 +298,7 @@
                         ></path></svg
                     >
                 </div>
-                <span>북마크</span>
+                <span>책갈피</span>
             </button>
         </nav>
     {/if}

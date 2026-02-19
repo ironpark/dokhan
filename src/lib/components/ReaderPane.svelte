@@ -648,8 +648,8 @@
 
 <Dialog
   open={showBookmarkFolderDialog}
-  ariaLabel="북마크 폴더 선택"
-  title="북마크 폴더 선택"
+  ariaLabel="책갈피 폴더 선택"
+  title="책갈피 폴더 선택"
   description="이 항목을 저장할 폴더를 선택하세요."
   onOpenChange={(next) => {
     showBookmarkFolderDialog = next;

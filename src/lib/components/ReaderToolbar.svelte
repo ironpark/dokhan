@@ -107,10 +107,10 @@
       >
         {#if isFavorite}
           <BookmarkCheck size={14} />
-          <span>북마크됨</span>
+          <span>책갈피됨</span>
         {:else}
           <Bookmark size={14} />
-          <span>북마크</span>
+          <span>책갈피</span>
         {/if}
       </Button>
       <Button
