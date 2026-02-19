@@ -1,6 +1,7 @@
 <script lang="ts">
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import BookmarkCheck from "@lucide/svelte/icons/bookmark-check";
+  import Button from "$lib/components/ui/Button.svelte";
   import type {
     ReaderFontSize,
     ReaderLineHeight,
@@ -74,27 +75,30 @@
   <header class="doc-header">
     <h2 class="doc-title">{title}</h2>
     <div class="doc-actions">
-      <button
+      <Button
         type="button"
-        class="mini-btn"
-        class:active={preprocessEnabled}
+        size="xs"
+        class="toolbar-btn"
+        variant={preprocessEnabled ? "pill-active" : "pill"}
         onclick={onTogglePreprocess}
       >
         {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        class="mini-btn"
-        class:active={markerPreprocessEnabled}
+        size="xs"
+        class="toolbar-btn"
+        variant={markerPreprocessEnabled ? "pill-active" : "pill"}
         onclick={onToggleMarkerPreprocess}
         disabled={!preprocessEnabled}
       >
         {markerPreprocessEnabled ? "표기 태그 ON" : "표기 태그 OFF"}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        class="favorite-btn mini-btn"
-        class:active={isFavorite}
+        size="xs"
+        class={`toolbar-btn favorite-btn ${isFavorite ? "favorite-active" : ""}`}
+        variant={isFavorite ? "pill-active" : "pill"}
         onclick={onToggleFavorite}
       >
         {#if isFavorite}
@@ -104,15 +108,16 @@
           <Bookmark size={14} />
           <span>북마크</span>
         {/if}
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        class="mini-btn"
-        class:active={showReaderTools}
+        size="xs"
+        class="toolbar-btn"
+        variant={showReaderTools ? "pill-active" : "pill"}
         onclick={onToggleReaderTools}
       >
         보기 옵션
-      </button>
+      </Button>
     </div>
   </header>
 
@@ -209,54 +214,21 @@
     margin: 8px 0 10px;
   }
 
-  .mini-btn {
-    border: 1px solid transparent;
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 999px;
-    font-size: 12px;
-    line-height: 1;
-    padding: 7px 10px;
-    cursor: pointer;
-    white-space: nowrap;
+  :global(.toolbar-btn) {
     margin-top: 6px;
-    transition:
-      background-color var(--motion-fast),
-      border-color var(--motion-fast),
-      color var(--motion-fast),
-      opacity var(--motion-fast);
+    white-space: nowrap;
   }
 
-  .mini-btn.active {
-    color: var(--color-accent);
-    border-color: color-mix(in oklab, var(--color-accent), white 62%);
-    background: var(--color-accent-soft);
-  }
-
-  .favorite-btn.active {
+  :global(.favorite-active) {
     color: #ad7a00;
     border-color: #e8ca77;
     background: #fff8dc;
   }
 
-  .favorite-btn {
+  :global(.favorite-btn) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .mini-btn:hover {
-    border-color: var(--color-border-strong);
-  }
-
-  .mini-btn:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
-
-  .mini-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--color-accent-soft);
   }
 
   .view-controls {

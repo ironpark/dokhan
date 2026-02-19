@@ -2,8 +2,16 @@
     import type { Snippet } from "svelte";
     import type { HTMLButtonAttributes } from "svelte/elements";
 
-    type Variant = "default" | "ghost" | "outline" | "icon";
-    type Size = "sm" | "md" | "lg" | "icon";
+    type Variant =
+        | "default"
+        | "ghost"
+        | "outline"
+        | "icon"
+        | "pill"
+        | "pill-active"
+        | "soft"
+        | "danger-soft";
+    type Size = "xs" | "sm" | "md" | "lg" | "icon";
 
     let {
         variant = "default",
@@ -98,7 +106,51 @@
         color: var(--color-text);
     }
 
+    .btn.pill {
+        border-radius: var(--radius-full);
+        border-color: transparent;
+        background: var(--color-surface);
+        color: var(--color-text-muted);
+    }
+    .btn.pill:hover {
+        border-color: var(--color-border-strong);
+    }
+
+    .btn.pill-active {
+        border-radius: var(--radius-full);
+        color: var(--color-accent);
+        border-color: color-mix(in oklab, var(--color-accent), white 62%);
+        background: var(--color-accent-soft);
+    }
+    .btn.pill-active:hover {
+        border-color: color-mix(in oklab, var(--color-accent), white 52%);
+    }
+
+    .btn.soft {
+        border-color: var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-text-muted);
+    }
+    .btn.soft:hover {
+        border-color: var(--color-border-strong);
+        background: var(--color-surface-hover);
+    }
+
+    .btn.danger-soft {
+        border-color: color-mix(in oklab, var(--color-danger), white 65%);
+        background: color-mix(in oklab, var(--color-danger), white 93%);
+        color: var(--color-danger);
+    }
+    .btn.danger-soft:hover {
+        border-color: color-mix(in oklab, var(--color-danger), white 50%);
+    }
+
     /* Sizes */
+    .btn.xs {
+        height: 24px;
+        padding: 0 var(--space-2);
+        font-size: 12px;
+    }
     .btn.sm {
         height: 28px;
         padding: 0 var(--space-2);

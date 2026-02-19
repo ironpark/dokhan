@@ -3,6 +3,8 @@
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Button from "$lib/components/ui/Button.svelte";
+  import Dialog from "$lib/components/ui/Dialog.svelte";
   import type { BookmarkFolder, FavoriteItem } from "$lib/types/dictionary";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
@@ -49,28 +51,6 @@
   let renamingFolderId = $state<string | null>(null);
   let renamingFolderName = $state("");
   let openFolderIds = $state<string[]>([]);
-  let createDialogEl = $state<HTMLDialogElement | null>(null);
-  let renameDialogEl = $state<HTMLDialogElement | null>(null);
-
-  $effect(() => {
-    const dialog = createDialogEl;
-    if (!dialog) return;
-    if (creatingFolder) {
-      if (!dialog.open) dialog.showModal();
-      return;
-    }
-    if (dialog.open) dialog.close();
-  });
-
-  $effect(() => {
-    const dialog = renameDialogEl;
-    if (!dialog) return;
-    if (renamingFolderId) {
-      if (!dialog.open) dialog.showModal();
-      return;
-    }
-    if (dialog.open) dialog.close();
-  });
 
   function toggleFolder(folderId: string) {
     if (openFolderIds.includes(folderId)) {
@@ -101,18 +81,6 @@
     closeCreateFolderDialog();
   }
 
-  function onCreateDialogClose() {
-    closeCreateFolderDialog();
-  }
-
-  function onCreateDialogClick(event: MouseEvent) {
-    const dialog = event.currentTarget as HTMLDialogElement | null;
-    if (!dialog) return;
-    if (event.target === dialog) {
-      dialog.close();
-    }
-  }
-
   function beginRenameFolder(folderId: string, currentName: string) {
     renamingFolderId = folderId;
     renamingFolderName = currentName;
@@ -134,18 +102,6 @@
     }
     onRenameFolder(renamingFolderId, trimmed);
     closeRenameFolderDialog();
-  }
-
-  function onRenameDialogClose() {
-    closeRenameFolderDialog();
-  }
-
-  function onRenameDialogClick(event: MouseEvent) {
-    const dialog = event.currentTarget as HTMLDialogElement | null;
-    if (!dialog) return;
-    if (event.target === dialog) {
-      dialog.close();
-    }
   }
 
   function requestDeleteFolder(folderId: string, folderName: string) {
@@ -170,78 +126,89 @@
   <div class="panel-head">
     <h3>북마크 폴더</h3>
     {#if !creatingFolder}
-      <button type="button" class="add-folder-btn" onclick={beginCreateFolder}>
+      <Button type="button" size="xs" variant="soft" class="add-folder-btn" onclick={beginCreateFolder}>
         <FolderPlus size={14} />
         <span>폴더</span>
-      </button>
+      </Button>
     {/if}
   </div>
 
-  {#if creatingFolder}
-    <dialog
-      bind:this={createDialogEl}
-      class="create-dialog"
-      onclose={onCreateDialogClose}
-      onclick={onCreateDialogClick}
-      aria-label="새 폴더 추가"
-      >
-        <form
-          class="create-dialog-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          submitCreateFolder();
+  <Dialog
+    open={creatingFolder}
+    ariaLabel="새 폴더 추가"
+    onOpenChange={(next) => {
+      creatingFolder = next;
+      if (!next) newFolderName = "";
+    }}
+  >
+    {#snippet header()}
+      <h4>
+        <FolderPlus size={16} />
+        <span>새 폴더 추가</span>
+      </h4>
+    {/snippet}
+    {#snippet children()}
+      <input
+        class="folder-input"
+        type="text"
+        bind:value={newFolderName}
+        placeholder="폴더 이름"
+        maxlength="24"
+        onkeydown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submitCreateFolder();
+          }
         }}
-        >
-        <h4>
-          <FolderPlus size={16} />
-          <span>새 폴더 추가</span>
-        </h4>
-        <input
-          type="text"
-          bind:value={newFolderName}
-          placeholder="폴더 이름"
-          maxlength="24"
-        />
-        <div class="create-dialog-actions">
-          <button type="button" class="ghost" onclick={closeCreateFolderDialog}>취소</button>
-          <button type="submit" disabled={!newFolderName.trim()}>추가</button>
-        </div>
-      </form>
-    </dialog>
-  {/if}
+      />
+    {/snippet}
+    {#snippet actions()}
+      <Button type="button" size="xs" variant="soft" onclick={closeCreateFolderDialog}>취소</Button>
+      <Button type="button" size="xs" variant="pill-active" onclick={submitCreateFolder} disabled={!newFolderName.trim()}
+        >추가</Button
+      >
+    {/snippet}
+  </Dialog>
 
-  {#if renamingFolderId}
-    <dialog
-      bind:this={renameDialogEl}
-      class="create-dialog"
-      onclose={onRenameDialogClose}
-      onclick={onRenameDialogClick}
-      aria-label="폴더 이름 변경"
-      >
-      <form
-        class="create-dialog-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          submitRenameFolder();
+  <Dialog
+    open={!!renamingFolderId}
+    ariaLabel="폴더 이름 변경"
+    onOpenChange={(next) => {
+      if (!next) closeRenameFolderDialog();
+    }}
+  >
+    {#snippet header()}
+      <h4>
+        <Pencil size={16} />
+        <span>폴더 이름 변경</span>
+      </h4>
+    {/snippet}
+    {#snippet children()}
+      <input
+        class="folder-input"
+        type="text"
+        bind:value={renamingFolderName}
+        placeholder="폴더 이름"
+        maxlength="24"
+        onkeydown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submitRenameFolder();
+          }
         }}
+      />
+    {/snippet}
+    {#snippet actions()}
+      <Button type="button" size="xs" variant="soft" onclick={closeRenameFolderDialog}>취소</Button>
+      <Button
+        type="button"
+        size="xs"
+        variant="pill-active"
+        onclick={submitRenameFolder}
+        disabled={!renamingFolderName.trim()}>저장</Button
       >
-        <h4>
-          <Pencil size={16} />
-          <span>폴더 이름 변경</span>
-        </h4>
-        <input
-          type="text"
-          bind:value={renamingFolderName}
-          placeholder="폴더 이름"
-          maxlength="24"
-        />
-        <div class="create-dialog-actions">
-          <button type="button" class="ghost" onclick={closeRenameFolderDialog}>취소</button>
-          <button type="submit" disabled={!renamingFolderName.trim()}>저장</button>
-        </div>
-      </form>
-    </dialog>
-  {/if}
+    {/snippet}
+  </Dialog>
 
   <div class="folder-list">
     {#each folders as folder (folder.id)}
@@ -377,48 +344,13 @@
     color: var(--color-text-muted);
   }
 
-  .add-folder-btn {
-    border: 1px solid var(--color-border);
-    background: color-mix(in oklab, var(--color-surface), white 10%);
-    color: var(--color-text);
+  :global(.add-folder-btn) {
     font-size: 12px;
-    border-radius: 8px;
     padding: 5px 9px;
-    display: inline-flex;
-    align-items: center;
     gap: 6px;
-    cursor: pointer;
-    transition: border-color var(--motion-fast), background-color var(--motion-fast);
   }
 
-  .add-folder-btn:hover {
-    border-color: var(--color-border-strong);
-    background: var(--color-surface-hover);
-  }
-
-  .create-dialog {
-    width: min(420px, calc(100vw - 24px));
-    max-width: none;
-    border: 1px solid color-mix(in oklab, var(--color-border), white 12%);
-    border-radius: 14px;
-    background: var(--color-surface);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-    padding: 0;
-    z-index: 1400;
-  }
-
-  .create-dialog::backdrop {
-    background: rgba(8, 10, 14, 0.28);
-    backdrop-filter: blur(2px);
-  }
-
-  .create-dialog-form {
-    padding: 14px;
-    display: grid;
-    gap: 10px;
-  }
-
-  .create-dialog-form h4 {
+  .panel :global(.ui-dialog-header h4) {
     margin: 0;
     font-size: 15px;
     color: var(--color-text);
@@ -427,7 +359,7 @@
     gap: 8px;
   }
 
-  .create-dialog-form input {
+  .folder-input {
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: var(--color-surface);
@@ -437,31 +369,9 @@
     outline: none;
   }
 
-  .create-dialog-form input:focus-visible {
+  .folder-input:focus-visible {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 84%);
-  }
-
-  .create-dialog-actions {
-    display: inline-flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .create-dialog-form button {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .create-dialog-form button:not(.ghost) {
-    color: var(--color-accent);
-    border-color: color-mix(in oklab, var(--color-accent), white 65%);
-    background: color-mix(in oklab, var(--color-accent), white 92%);
   }
 
   .folder-list {

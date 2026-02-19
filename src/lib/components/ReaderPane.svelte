@@ -1,5 +1,7 @@
 <script lang="ts">
   import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
+  import Button from "$lib/components/ui/Button.svelte";
+  import Dialog from "$lib/components/ui/Dialog.svelte";
   import type {
     BookmarkFolder,
     ContentPage,
@@ -643,29 +645,29 @@
   {/if}
 </section>
 
-{#if showBookmarkFolderDialog}
-  <dialog class="bookmark-folder-dialog" open aria-label="북마크 폴더 선택">
-    <form
-      class="bookmark-folder-dialog-form"
-      onsubmit={(event) => {
-        event.preventDefault();
-        confirmBookmarkFolderDialog();
-      }}
+<Dialog
+  open={showBookmarkFolderDialog}
+  ariaLabel="북마크 폴더 선택"
+  title="북마크 폴더 선택"
+  description="이 항목을 저장할 폴더를 선택하세요."
+  onOpenChange={(next) => {
+    showBookmarkFolderDialog = next;
+  }}
+>
+  {#snippet children()}
+    <select class="bookmark-folder-select" bind:value={bookmarkTargetFolderId}>
+      {#each bookmarkFolders as folder (folder.id)}
+        <option value={folder.id}>{folder.name}</option>
+      {/each}
+    </select>
+  {/snippet}
+  {#snippet actions()}
+    <Button type="button" size="xs" variant="soft" onclick={cancelBookmarkFolderDialog}>취소</Button>
+    <Button type="button" size="xs" variant="pill-active" onclick={confirmBookmarkFolderDialog}
+      >추가</Button
     >
-      <h4>북마크 폴더 선택</h4>
-      <p>이 항목을 저장할 폴더를 선택하세요.</p>
-      <select bind:value={bookmarkTargetFolderId}>
-        {#each bookmarkFolders as folder (folder.id)}
-          <option value={folder.id}>{folder.name}</option>
-        {/each}
-      </select>
-      <div class="bookmark-folder-dialog-actions">
-        <button type="button" class="ghost" onclick={cancelBookmarkFolderDialog}>취소</button>
-        <button type="submit">추가</button>
-      </div>
-    </form>
-  </dialog>
-{/if}
+  {/snippet}
+</Dialog>
 
 <style>
   .reader {
@@ -677,68 +679,13 @@
     color: var(--color-text);
   }
 
-  .bookmark-folder-dialog {
-    width: min(380px, calc(100vw - 24px));
-    border: 1px solid color-mix(in oklab, var(--color-border), white 12%);
-    border-radius: 14px;
-    background: var(--color-surface);
-    color: var(--color-text);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-    padding: 0;
-    z-index: 1400;
-  }
-
-  .bookmark-folder-dialog::backdrop {
-    background: rgba(8, 10, 14, 0.28);
-    backdrop-filter: blur(2px);
-  }
-
-  .bookmark-folder-dialog-form {
-    display: grid;
-    gap: 10px;
-    padding: 14px;
-  }
-
-  .bookmark-folder-dialog-form h4 {
-    margin: 0;
-    font-size: 15px;
-  }
-
-  .bookmark-folder-dialog-form p {
-    margin: 0;
-    font-size: 12px;
-    color: var(--color-text-muted);
-  }
-
-  .bookmark-folder-dialog-form select {
+  .bookmark-folder-select {
     border: 1px solid var(--color-border);
     border-radius: 10px;
     background: var(--color-surface);
     color: var(--color-text);
     font-size: 12px;
     padding: 8px 10px;
-  }
-
-  .bookmark-folder-dialog-actions {
-    display: inline-flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .bookmark-folder-dialog-actions button {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .bookmark-folder-dialog-actions button:not(.ghost) {
-    color: var(--color-accent);
-    border-color: color-mix(in oklab, var(--color-accent), white 65%);
-    background: color-mix(in oklab, var(--color-accent), white 92%);
   }
 
   .body-content {
