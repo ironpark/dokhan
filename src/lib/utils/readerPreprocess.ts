@@ -135,6 +135,22 @@ function applySenseList(root: HTMLElement) {
   root.dataset.senseListApplied = "1";
 }
 
+function applyTopLevelAlphaSenseList(root: HTMLElement) {
+  if (root.dataset.alphaSenseListApplied === "1") return;
+  const nodes = Array.from(root.childNodes);
+  const markers = collectMarkers(nodes, extractAlphaSenseNo);
+  if (!markers.length) return;
+
+  const { preface, list } = buildOrderedList(nodes, markers, {
+    listClassName: "dict-sense-list",
+    itemClassName: "dict-sense-item",
+    type: "a",
+  });
+
+  root.replaceChildren(preface, list);
+  root.dataset.alphaSenseListApplied = "1";
+}
+
 function applyBrSpacing(root: HTMLElement) {
   const breaks = Array.from(root.querySelectorAll("br"));
   for (const br of breaks) {
@@ -415,6 +431,9 @@ export function applyDictionaryPreprocess(
   const { markerTagging = true } = options;
   splitCombinedSenseMarkers(root);
   applySenseList(root);
+  if (root.dataset.senseListApplied !== "1") {
+    applyTopLevelAlphaSenseList(root);
+  }
   applyBrSpacing(root);
   if (markerTagging) {
     annotateInlineMarkers(root);

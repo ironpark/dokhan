@@ -286,6 +286,13 @@
       ].join("\u0001");
     }
 
+    function resetPreprocessFlags() {
+      delete node.dataset.combinedSenseSplit;
+      delete node.dataset.senseListApplied;
+      delete node.dataset.alphaSenseListApplied;
+      delete node.dataset.inlineMarkersApplied;
+    }
+
     function scheduleDecorations() {
       const currentRevision = ++revision;
       const snapshot = { ...context };
@@ -298,6 +305,10 @@
         if (currentRevision !== revision || !node.isConnected) return;
         if (needsStructureWork) {
           revokeObjectUrls();
+          // Always restore the original HTML before optional preprocess.
+          // Without this, toggling preprocess off leaves previously transformed DOM intact.
+          node.innerHTML = snapshot.html;
+          resetPreprocessFlags();
           if (snapshot.preprocessEnabled) {
             try {
               applyDictionaryPreprocess(node, {
@@ -339,6 +350,143 @@
       },
     };
   }
+
+  function smartMarkerTooltip(node: HTMLElement) {
+    let activeMarker: HTMLElement | null = null;
+    let tooltipEl: HTMLDivElement | null = null;
+
+    function ensureTooltip(): HTMLDivElement {
+      if (tooltipEl && document.body.contains(tooltipEl)) return tooltipEl;
+      tooltipEl = document.createElement("div");
+      tooltipEl.className = "marker-tooltip";
+      tooltipEl.setAttribute("role", "tooltip");
+      tooltipEl.setAttribute("aria-hidden", "true");
+      document.body.appendChild(tooltipEl);
+      return tooltipEl;
+    }
+
+    function getMarkerFromTarget(target: EventTarget | null): HTMLElement | null {
+      if (!(target instanceof HTMLElement)) return null;
+      const marker = target.closest("span.dict-marker[data-tooltip]");
+      return marker instanceof HTMLElement ? marker : null;
+    }
+
+    function hideTooltip() {
+      activeMarker = null;
+      if (!tooltipEl) return;
+      tooltipEl.classList.remove("visible");
+      tooltipEl.setAttribute("aria-hidden", "true");
+      tooltipEl.textContent = "";
+    }
+
+    function positionTooltip(marker: HTMLElement, tip: HTMLDivElement) {
+      const gap = 10;
+      const viewportPadding = 8;
+      const markerRect = marker.getBoundingClientRect();
+      const tipRect = tip.getBoundingClientRect();
+
+      let left = markerRect.left + markerRect.width / 2 - tipRect.width / 2;
+      left = Math.max(
+        viewportPadding,
+        Math.min(left, window.innerWidth - tipRect.width - viewportPadding),
+      );
+
+      let top = markerRect.top - tipRect.height - gap;
+      let place = "top";
+      if (top < viewportPadding) {
+        top = markerRect.bottom + gap;
+        place = "bottom";
+      }
+      if (top + tipRect.height > window.innerHeight - viewportPadding) {
+        top = Math.max(
+          viewportPadding,
+          window.innerHeight - tipRect.height - viewportPadding,
+        );
+      }
+
+      tip.style.left = `${Math.round(left)}px`;
+      tip.style.top = `${Math.round(top)}px`;
+      tip.dataset.place = place;
+    }
+
+    function showTooltip(marker: HTMLElement) {
+      const text = marker.dataset.tooltip?.trim();
+      if (!text) {
+        hideTooltip();
+        return;
+      }
+
+      const tip = ensureTooltip();
+      activeMarker = marker;
+      tip.textContent = text;
+      tip.setAttribute("aria-hidden", "false");
+      tip.dataset.place = "top";
+      tip.classList.add("visible");
+      positionTooltip(marker, tip);
+    }
+
+    function onMouseOver(event: MouseEvent) {
+      const marker = getMarkerFromTarget(event.target);
+      if (!marker || marker === activeMarker) return;
+      showTooltip(marker);
+    }
+
+    function onMouseOut(event: MouseEvent) {
+      if (!activeMarker) return;
+      const related = event.relatedTarget as Node | null;
+      if (related && activeMarker.contains(related)) return;
+      const nextMarker = getMarkerFromTarget(related);
+      if (nextMarker) {
+        showTooltip(nextMarker);
+        return;
+      }
+      hideTooltip();
+    }
+
+    function onFocusIn(event: FocusEvent) {
+      const marker = getMarkerFromTarget(event.target);
+      if (!marker) return;
+      showTooltip(marker);
+    }
+
+    function onFocusOut(event: FocusEvent) {
+      if (!activeMarker) return;
+      const nextMarker = getMarkerFromTarget(event.relatedTarget);
+      if (nextMarker) {
+        showTooltip(nextMarker);
+        return;
+      }
+      hideTooltip();
+    }
+
+    function onViewportChange() {
+      if (!activeMarker || !tooltipEl) return;
+      positionTooltip(activeMarker, tooltipEl);
+    }
+
+    node.addEventListener("mouseover", onMouseOver);
+    node.addEventListener("mouseout", onMouseOut);
+    node.addEventListener("focusin", onFocusIn);
+    node.addEventListener("focusout", onFocusOut);
+    window.addEventListener("scroll", onViewportChange, true);
+    window.addEventListener("resize", onViewportChange);
+
+    return {
+      destroy() {
+        node.removeEventListener("mouseover", onMouseOver);
+        node.removeEventListener("mouseout", onMouseOut);
+        node.removeEventListener("focusin", onFocusIn);
+        node.removeEventListener("focusout", onFocusOut);
+        window.removeEventListener("scroll", onViewportChange, true);
+        window.removeEventListener("resize", onViewportChange);
+        hideTooltip();
+        if (tooltipEl?.parentNode) {
+          tooltipEl.parentNode.removeChild(tooltipEl);
+        }
+        tooltipEl = null;
+      },
+    };
+  }
 </script>
 
 <section class="reader" style={readerStyleVars}>
@@ -377,6 +525,7 @@
               preprocessEnabled,
               markerPreprocessEnabled,
             }}
+            use:smartMarkerTooltip
           >
             {@html selectedContent.bodyHtml}
           </div>
@@ -421,6 +570,7 @@
               preprocessEnabled,
               markerPreprocessEnabled,
             }}
+            use:smartMarkerTooltip
           >
             {@html selectedEntry.definitionHtml}
           </div>
@@ -542,14 +692,10 @@
     cursor: help;
   }
 
-  .html-rendered :global(span.dict-marker[data-tooltip]::before) {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 10px);
-    transform: translateX(-50%) translateY(2px);
-    z-index: 30;
-    max-width: min(340px, 72vw);
+  :global(.marker-tooltip) {
+    position: fixed;
+    z-index: 1200;
+    max-width: min(340px, calc(100vw - 16px));
     width: max-content;
     padding: 7px 9px;
     border-radius: 8px;
@@ -561,39 +707,20 @@
     letter-spacing: 0;
     white-space: normal;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    pointer-events: none;
+    transform: translateY(2px);
     transition:
       opacity 80ms ease,
       transform 80ms ease,
       visibility 80ms ease;
   }
 
-  .html-rendered :global(span.dict-marker[data-tooltip]::after) {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: calc(100% + 4px);
-    transform: translateX(-50%) translateY(2px);
-    border: 6px solid transparent;
-    border-top-color: rgba(18, 21, 28, 0.96);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      opacity 80ms ease,
-      transform 80ms ease,
-      visibility 80ms ease;
-  }
-
-  .html-rendered :global(span.dict-marker[data-tooltip]:hover::before),
-  .html-rendered :global(span.dict-marker[data-tooltip]:hover::after),
-  .html-rendered :global(span.dict-marker[data-tooltip]:focus-visible::before),
-  .html-rendered :global(span.dict-marker[data-tooltip]:focus-visible::after) {
+  :global(.marker-tooltip.visible) {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 
   .html-rendered :global(span.dict-marker-round.dict-marker-register) {
