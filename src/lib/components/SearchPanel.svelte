@@ -7,6 +7,7 @@
 
   let {
     query,
+    committedQuery = "",
     rows,
     loading = false,
     inputAtBottom = false,
@@ -19,6 +20,7 @@
     onOpen,
   }: {
     query: string;
+    committedQuery?: string;
     rows: SearchHit[];
     loading?: boolean;
     inputAtBottom?: boolean;
@@ -73,6 +75,11 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
+  const trimmedQuery = $derived(query.trim());
+  const trimmedCommittedQuery = $derived(committedQuery.trim());
+  const hasCommittedCurrentQuery = $derived(
+    !!trimmedQuery && trimmedQuery === trimmedCommittedQuery,
+  );
   const submitDisabled = $derived(loading || !query.trim());
   const showRecentInline = $derived(
     recentUnderInput && recentSearches.length > 0 && !query.trim(),
@@ -125,10 +132,16 @@
   <div class="entry-list" bind:this={listEl}>
     {#if loading}
       <EmptyState title="검색 결과를 불러오는 중입니다." compact={true} />
-    {:else if !rows.length && query.trim()}
+    {:else if !rows.length && hasCommittedCurrentQuery}
       <EmptyState
         title="검색 결과가 없습니다."
         description="다른 검색어 또는 더 짧은 키워드로 시도해 보세요."
+        compact={true}
+      />
+    {:else if !rows.length && trimmedQuery}
+      <EmptyState
+        title="검색어를 입력 중입니다."
+        description="검색 버튼을 누르거나 엔터를 눌러 결과를 확인하세요."
         compact={true}
       />
     {:else if !rows.length}

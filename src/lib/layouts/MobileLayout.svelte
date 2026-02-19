@@ -163,6 +163,7 @@
                 <div class="panel-container">
                     <SearchPanel
                         query={dictionaryStore.searchQuery}
+                        committedQuery={dictionaryStore.committedSearchQuery}
                         rows={dictionaryStore.searchRows}
                         loading={dictionaryStore.isSearching}
                         inputAtBottom={true}

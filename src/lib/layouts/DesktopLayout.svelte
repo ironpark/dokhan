@@ -52,6 +52,7 @@
                 {#if dictionaryStore.activeTab === "search"}
                     <SearchPanel
                         query={dictionaryStore.searchQuery}
+                        committedQuery={dictionaryStore.committedSearchQuery}
                         rows={dictionaryStore.searchRows}
                         loading={dictionaryStore.isSearching}
                         recentSearches={dictionaryStore.recentSearches}
