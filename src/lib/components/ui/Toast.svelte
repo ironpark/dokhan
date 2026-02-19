@@ -23,35 +23,21 @@
 </script>
 
 {#if open && message}
-  <div class={`toast ${tone}`} role="status" aria-live="polite">
+  <div
+    class={`fixed left-1/2 z-[1450] min-w-[220px] max-w-[min(90vw,420px)] -translate-x-1/2 rounded-[10px] border px-3 py-[9px] text-[var(--font-size-control-sm)] shadow-[0_10px_24px_rgba(0,0,0,0.28)] animate-[toastIn_var(--motion-enter)] ${
+      tone === "error"
+        ? "border-[var(--color-danger-soft-border)] bg-[color-mix(in_oklab,var(--color-danger),#15181f_78%)] text-[#f4f7fb]"
+        : "border-[var(--color-dokhan-border)] bg-[rgba(17,20,25,0.95)] text-[#f4f7fb]"
+    }`}
+    style="bottom: max(20px, calc(12px + env(safe-area-inset-bottom)));"
+    role="status"
+    aria-live="polite"
+  >
     {message}
   </div>
 {/if}
 
 <style>
-  .toast {
-    position: fixed;
-    left: 50%;
-    bottom: max(20px, calc(12px + env(safe-area-inset-bottom)));
-    transform: translateX(-50%);
-    z-index: 1450;
-    min-width: 220px;
-    max-width: min(90vw, 420px);
-    padding: 9px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: rgba(17, 20, 25, 0.95);
-    color: #f4f7fb;
-    font-size: var(--font-size-control-sm);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-    animation: toastIn var(--motion-enter);
-  }
-
-  .toast.error {
-    border-color: var(--color-danger-soft-border);
-    background: color-mix(in oklab, var(--color-danger), #15181f 78%);
-  }
-
   @keyframes toastIn {
     from {
       opacity: 0;

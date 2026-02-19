@@ -73,6 +73,7 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
+  const submitDisabled = $derived(loading || !query.trim());
   const showRecentInline = $derived(
     recentUnderInput && recentSearches.length > 0 && !query.trim(),
   );
@@ -100,7 +101,13 @@
       clearable={true}
       placeholder="독일어/한국어 검색"
     />
-      <Button type="submit" disabled={loading || !query.trim()}>검색</Button>
+      <Button
+        type="submit"
+        variant="default"
+        size="sm"
+        class="search-submit"
+        disabled={submitDisabled}>검색</Button
+      >
     </form>
     {#if showRecentInline}
       <div class="search-recent">
@@ -229,6 +236,10 @@
     padding: 6px 12px 10px;
     border-top: none;
     background: transparent;
+  }
+
+  :global(.search-submit) {
+    min-width: 56px;
   }
 
   .search-recent p {

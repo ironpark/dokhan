@@ -23,7 +23,8 @@
 <style>
     .list-item {
         position: relative;
-        height: 42px;
+        height: 100%;
+        min-height: 38px;
         border-bottom: 1px solid var(--color-border);
         box-sizing: border-box;
         transition: background-color var(--motion-fast);

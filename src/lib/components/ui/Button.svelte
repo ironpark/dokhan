@@ -1,174 +1,104 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
-    import type { HTMLButtonAttributes } from "svelte/elements";
+  import type { Snippet } from "svelte";
+  import type { HTMLAnchorAttributes, HTMLButtonAttributes } from "svelte/elements";
 
-    type Variant =
-        | "default"
-        | "ghost"
-        | "outline"
-        | "icon"
-        | "pill"
-        | "pill-active"
-        | "soft"
-        | "danger-soft";
-    type Size = "xs" | "sm" | "md" | "lg" | "icon";
+  type Variant =
+    | "default"
+    | "destructive"
+    | "outline"
+    | "secondary"
+    | "ghost"
+    | "link"
+    | "icon"
+    | "pill"
+    | "pill-active"
+    | "soft"
+    | "danger-soft";
 
-    let {
-        variant = "default",
-        size = "md",
-        class: className = "",
-        children,
-        onclick,
-        disabled = false,
-        ...rest
-    }: HTMLButtonAttributes & {
-        variant?: Variant;
-        size?: Size;
-        class?: string;
-        children?: Snippet;
-        disabled?: boolean;
-    } = $props();
+  type Size = "default" | "xs" | "sm" | "md" | "lg" | "icon" | "icon-sm" | "icon-lg";
+
+  type ButtonProps = (HTMLButtonAttributes & HTMLAnchorAttributes) & {
+    variant?: Variant;
+    size?: Size;
+    class?: string;
+    children?: Snippet;
+    href?: string | undefined;
+    disabled?: boolean;
+  };
+
+  let {
+    class: className = "",
+    variant = "default",
+    size = "default",
+    href = undefined,
+    type = "button",
+    disabled = false,
+    children,
+    onclick,
+    ...restProps
+  }: ButtonProps = $props();
+
+  const baseClass =
+    "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap font-medium outline-none " +
+    "transition-all focus-visible:ring-[3px] focus-visible:ring-[var(--color-focus-ring)] " +
+    "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 " +
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+  const variantClassMap: Record<Variant, string> = {
+    default: "bg-[var(--color-dokhan-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-xs",
+    destructive:
+      "bg-[var(--color-danger)] text-white hover:bg-[color-mix(in_oklab,var(--color-danger),black_10%)] shadow-xs",
+    outline:
+      "border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] hover:bg-[var(--color-interactive-hover)] shadow-xs",
+    secondary:
+      "bg-[var(--color-surface-soft)] text-[var(--color-dokhan-text)] hover:bg-[var(--color-interactive-hover)] shadow-xs",
+    ghost: "hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]",
+    link: "text-[var(--color-dokhan-accent)] underline-offset-4 hover:underline",
+    icon:
+      "rounded-[var(--radius-full)] border border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]",
+    pill:
+      "!rounded-[var(--radius-full)] border border-transparent bg-[var(--color-dokhan-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)]",
+    "pill-active":
+      "!rounded-[var(--radius-full)] border border-[color-mix(in_oklab,var(--color-dokhan-accent),white_62%)] bg-[var(--color-accent-soft)] text-[var(--color-dokhan-accent)] hover:border-[color-mix(in_oklab,var(--color-dokhan-accent),white_52%)]",
+    soft:
+      "rounded-[var(--radius-sm)] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)]",
+    "danger-soft":
+      "rounded-[var(--radius-sm)] border border-[var(--color-danger-soft-border)] bg-[var(--color-danger-soft-bg)] text-[var(--color-danger)] hover:border-[var(--color-danger-soft-border-hover)]",
+  };
+
+  const sizeClassMap: Record<Size, string> = {
+    default: "h-9 px-4 py-2 text-[var(--font-size-control-md)] has-[>svg]:px-3 rounded-[var(--radius-sm)]",
+    xs: "h-6 px-2 text-[var(--font-size-control-sm)] rounded-[var(--radius-sm)]",
+    sm: "h-8 gap-1.5 px-3 text-[var(--font-size-control-sm)] has-[>svg]:px-2.5 rounded-[var(--radius-sm)]",
+    md: "h-9 px-4 text-[var(--font-size-control-md)] rounded-[var(--radius-sm)]",
+    lg: "h-10 px-6 text-[var(--font-size-control-md)] has-[>svg]:px-4 rounded-[var(--radius-sm)]",
+    icon: "size-9 rounded-[var(--radius-sm)]",
+    "icon-sm": "size-8 rounded-[var(--radius-sm)]",
+    "icon-lg": "size-10 rounded-[var(--radius-sm)]",
+  };
+
+  function cn(...parts: Array<string | false | null | undefined>): string {
+    return parts.filter(Boolean).join(" ");
+  }
+
+  const classes = $derived(cn(baseClass, sizeClassMap[size], variantClassMap[variant], className));
 </script>
 
-<button class="btn {variant} {size} {className}" {onclick} {disabled} {...rest}>
+{#if href}
+  <a
+    data-slot="button"
+    class={classes}
+    href={disabled ? undefined : href}
+    aria-disabled={disabled}
+    role={disabled ? "link" : undefined}
+    tabindex={disabled ? -1 : undefined}
+    {onclick}
+    {...restProps}
+  >
     {@render children?.()}
-</button>
-
-<style>
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid transparent;
-        border-radius: var(--radius-sm);
-        font-weight: 500;
-        cursor: pointer;
-        transition:
-            background-color var(--motion-fast),
-            color var(--motion-fast),
-            border-color var(--motion-fast),
-            box-shadow var(--motion-fast),
-            transform var(--motion-fast);
-        background: transparent;
-        color: var(--color-text);
-        padding: 0;
-        line-height: 1;
-    }
-
-    .btn:disabled {
-        opacity: 0.45;
-        pointer-events: none;
-    }
-
-    .btn:focus-visible {
-        outline: none;
-        box-shadow: 0 0 0 2px var(--color-focus-ring);
-    }
-
-    /* Variants */
-    .btn.default {
-        background-color: var(--color-accent);
-        color: white;
-    }
-    .btn.default:hover {
-        background-color: var(--color-accent-hover);
-    }
-    .btn.default:active {
-        transform: translateY(0.5px);
-    }
-
-    .btn.ghost {
-        background-color: transparent;
-    }
-    .btn.ghost:hover {
-        background-color: var(--color-interactive-hover);
-    }
-    .btn.ghost.active {
-        background-color: var(--color-interactive-active);
-        color: var(--color-accent);
-    }
-
-    .btn.outline {
-        border-color: var(--color-border);
-        background-color: var(--color-surface);
-    }
-    .btn.outline:hover {
-        background-color: var(--color-interactive-hover);
-        border-color: var(--color-border-strong);
-    }
-
-    .btn.icon {
-        border-radius: var(--radius-full);
-        color: var(--color-text-muted);
-    }
-    .btn.icon:hover {
-        background-color: var(--color-interactive-hover);
-        color: var(--color-text);
-    }
-
-    .btn.pill {
-        border-radius: var(--radius-full);
-        border-color: transparent;
-        background: var(--color-surface);
-        color: var(--color-text-muted);
-    }
-    .btn.pill:hover {
-        border-color: var(--color-border-strong);
-    }
-
-    .btn.pill-active {
-        border-radius: var(--radius-full);
-        color: var(--color-accent);
-        border-color: color-mix(in oklab, var(--color-accent), white 62%);
-        background: var(--color-accent-soft);
-    }
-    .btn.pill-active:hover {
-        border-color: color-mix(in oklab, var(--color-accent), white 52%);
-    }
-
-    .btn.soft {
-        border-color: var(--color-border);
-        background: var(--color-surface);
-        color: var(--color-text-muted);
-    }
-    .btn.soft:hover {
-        border-color: var(--color-border-strong);
-        background: var(--color-interactive-hover);
-    }
-
-    .btn.danger-soft {
-        border-color: var(--color-danger-soft-border);
-        background: var(--color-danger-soft-bg);
-        color: var(--color-danger);
-    }
-    .btn.danger-soft:hover {
-        border-color: var(--color-danger-soft-border-hover);
-    }
-
-    /* Sizes */
-    .btn.xs {
-        height: 24px;
-        padding: 0 var(--space-2);
-        font-size: var(--font-size-control-sm);
-    }
-    .btn.sm {
-        height: 28px;
-        padding: 0 var(--space-2);
-        font-size: var(--font-size-control-sm);
-    }
-    .btn.md {
-        height: 36px;
-        padding: 0 var(--space-4);
-        font-size: var(--font-size-control-md);
-    }
-    .btn.lg {
-        height: 44px;
-        padding: 0 var(--space-6);
-        font-size: 16px;
-    }
-    .btn.icon {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-    }
-</style>
+  </a>
+{:else}
+  <button data-slot="button" class={classes} {type} {disabled} {onclick} {...restProps}>
+    {@render children?.()}
+  </button>
+{/if}

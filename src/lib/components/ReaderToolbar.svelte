@@ -79,7 +79,8 @@
       <Button
         type="button"
         size="xs"
-        class="toolbar-btn"
+        class="toolbar-action"
+        aria-pressed={preprocessEnabled}
         variant={preprocessEnabled ? "pill-active" : "pill"}
         onclick={onTogglePreprocess}
       >
@@ -88,7 +89,8 @@
       <Button
         type="button"
         size="xs"
-        class="toolbar-btn"
+        class="toolbar-action"
+        aria-pressed={markerPreprocessEnabled}
         variant={markerPreprocessEnabled ? "pill-active" : "pill"}
         onclick={onToggleMarkerPreprocess}
         disabled={!preprocessEnabled}
@@ -98,7 +100,8 @@
       <Button
         type="button"
         size="xs"
-        class={`toolbar-btn favorite-btn ${isFavorite ? "favorite-active" : ""}`}
+        class={`toolbar-action favorite-btn ${isFavorite ? "favorite-active" : ""}`}
+        aria-pressed={isFavorite}
         variant={isFavorite ? "pill-active" : "pill"}
         onclick={onToggleFavorite}
       >
@@ -113,7 +116,8 @@
       <Button
         type="button"
         size="xs"
-        class="toolbar-btn"
+        class="toolbar-action"
+        aria-pressed={showReaderTools}
         variant={showReaderTools ? "pill-active" : "pill"}
         onclick={onToggleReaderTools}
       >
@@ -215,9 +219,29 @@
     margin: 8px 0 10px;
   }
 
-  :global(.toolbar-btn) {
+  :global(.toolbar-action) {
     margin-top: 6px;
     white-space: nowrap;
+    font-size: 12px;
+    min-height: 28px;
+    padding-inline: 10px;
+    color: var(--color-text-muted);
+  }
+
+  :global(.toolbar-action:hover) {
+    color: var(--color-text);
+  }
+
+  :global(.toolbar-action[aria-pressed="true"]) {
+    color: var(--color-accent);
+  }
+
+  :global(.toolbar-action[disabled]) {
+    color: var(--color-text-muted);
+  }
+
+  :global(.toolbar-action.favorite-active) {
+    color: #ad7a00;
   }
 
   :global(.favorite-active) {

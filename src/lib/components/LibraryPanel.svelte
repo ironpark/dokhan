@@ -47,10 +47,6 @@
     return map;
   });
 
-  const activeFolderName = $derived(
-    folders.find((folder) => folder.id === activeFolderId)?.name ?? "기본",
-  );
-
   let creatingFolder = $state(false);
   let newFolderName = $state("");
   let createFolderError = $state("");
@@ -132,10 +128,16 @@
 </script>
 
 <section class="panel">
-  <SectionHeader title="북마크 폴더" class="panel-head">
+  <SectionHeader title="북마크 폴더">
     {#snippet actions()}
       {#if !creatingFolder}
-        <Button type="button" size="xs" variant="soft" class="add-folder-btn" onclick={beginCreateFolder}>
+        <Button
+          type="button"
+          size="xs"
+          variant="soft"
+          class="text-[var(--font-size-control-sm)] px-[9px] py-[5px] gap-1.5"
+          onclick={beginCreateFolder}
+        >
           <FolderPlus size={14} />
           <span>폴더</span>
         </Button>
@@ -152,7 +154,7 @@
     }}
   >
     {#snippet header()}
-      <h4>
+      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
         <FolderPlus size={16} />
         <span>새 폴더 추가</span>
       </h4>
@@ -198,7 +200,7 @@
     }}
   >
     {#snippet header()}
-      <h4>
+      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
         <Pencil size={16} />
         <span>폴더 이름 변경</span>
       </h4>
@@ -268,9 +270,11 @@
 
           {#if folder.id !== "default"}
             <div class="folder-actions">
-              <button
+              <Button
                 type="button"
-                class="icon-btn"
+                size="icon-sm"
+                variant="soft"
+                class="folder-icon-btn"
                 onclick={(event) => {
                   event.stopPropagation();
                   beginRenameFolder(folder.id, folder.name);
@@ -279,16 +283,18 @@
                 title="이름 변경"
               >
                 <Pencil size={13} />
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                class="icon-btn danger"
+                size="icon-sm"
+                variant="soft"
+                class="folder-icon-btn danger"
                 onclick={() => requestDeleteFolder(folder.id, folder.name)}
                 aria-label="폴더 삭제"
                 title="삭제"
               >
                 <Trash2 size={13} />
-              </button>
+              </Button>
             </div>
           {/if}
         </header>
@@ -342,28 +348,6 @@
     display: grid;
     grid-template-rows: auto 1fr;
     gap: 10px;
-  }
-
-  :global(.panel-head) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 2px;
-  }
-
-  :global(.add-folder-btn) {
-    font-size: 12px;
-    padding: 5px 9px;
-    gap: 6px;
-  }
-
-  .panel :global(.ui-dialog-header h4) {
-    margin: 0;
-    font-size: 15px;
-    color: var(--color-text);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
   }
 
   :global(.folder-input input) {
@@ -463,22 +447,12 @@
     flex: 0 0 auto;
   }
 
-  .icon-btn {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
-    color: var(--color-text-muted);
+  :global(.folder-icon-btn) {
     line-height: 0;
-    border-radius: 8px;
-    width: 26px;
-    height: 24px;
-    padding: 0;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    color: var(--color-text-muted);
   }
 
-  .icon-btn.danger:hover {
+  :global(.folder-icon-btn.danger:hover) {
     color: var(--color-danger);
     border-color: color-mix(in oklab, var(--color-danger), white 62%);
   }

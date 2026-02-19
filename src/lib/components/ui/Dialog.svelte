@@ -55,84 +55,45 @@
 {#if open}
   <dialog
     bind:this={dialogEl}
-    class={`ui-dialog ${className}`}
+    class={`ui-dialog w-[min(420px,calc(100vw-24px))] max-w-none rounded-[14px] border border-[color-mix(in_oklab,var(--color-dokhan-border),white_12%)] bg-[var(--color-surface-elevated)] p-0 text-[var(--color-dokhan-text)] shadow-[0_16px_40px_rgba(0,0,0,0.2)] z-[1400] animate-[dialogIn_var(--motion-enter)] ${className}`}
     onclose={onDialogClose}
     onclick={onDialogClick}
     aria-label={ariaLabel}
   >
-    <div class="ui-dialog-surface">
+    <div class="grid gap-2.5 p-3.5">
       {#if header}
-        <div class="ui-dialog-header custom">{@render header()}</div>
+        <div class="grid gap-1.5">{@render header()}</div>
       {:else if title}
-        <div class="ui-dialog-header">
-          <h4>{title}</h4>
-          {#if description}<p>{description}</p>{/if}
+        <div class="grid gap-1.5">
+          <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
+            {title}
+          </h4>
+          {#if description}
+            <p class="m-0 text-[var(--font-size-control-sm)] text-[var(--color-text-muted)]">{description}</p>
+          {/if}
         </div>
       {/if}
       {#if children}
-        <div class="ui-dialog-body">{@render children()}</div>
+        <div class="grid gap-2.5">{@render children()}</div>
       {/if}
       {#if actions}
-        <div class="ui-dialog-actions">{@render actions()}</div>
+        <div class="inline-flex justify-end gap-2">{@render actions()}</div>
       {/if}
     </div>
   </dialog>
 {/if}
 
 <style>
-  .ui-dialog {
-    width: min(420px, calc(100vw - 24px));
-    max-width: none;
-    border: 1px solid color-mix(in oklab, var(--color-border), white 12%);
-    border-radius: 14px;
-    background: var(--color-surface-elevated);
-    color: var(--color-text);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
-    padding: 0;
-    z-index: 1400;
-    animation: dialogIn var(--motion-enter);
+  .ui-dialog[open] {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
   }
 
   .ui-dialog::backdrop {
     background: var(--color-overlay);
     backdrop-filter: blur(2px);
-  }
-
-  .ui-dialog-surface {
-    display: grid;
-    gap: 10px;
-    padding: 14px;
-  }
-
-  .ui-dialog-header {
-    display: grid;
-    gap: 6px;
-  }
-
-  .ui-dialog-header h4 {
-    margin: 0;
-    font-size: 15px;
-    color: var(--color-text);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .ui-dialog-header p {
-    margin: 0;
-    font-size: var(--font-size-control-sm);
-    color: var(--color-text-muted);
-  }
-
-  .ui-dialog-body {
-    display: grid;
-    gap: 10px;
-  }
-
-  .ui-dialog-actions {
-    display: inline-flex;
-    justify-content: flex-end;
-    gap: 8px;
   }
 
   @keyframes dialogIn {
