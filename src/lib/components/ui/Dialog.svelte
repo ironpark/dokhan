@@ -85,7 +85,7 @@
     max-width: none;
     border: 1px solid color-mix(in oklab, var(--color-border), white 12%);
     border-radius: 14px;
-    background: var(--color-surface);
+    background: var(--color-surface-elevated);
     color: var(--color-text);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
     padding: 0;
@@ -93,7 +93,7 @@
   }
 
   .ui-dialog::backdrop {
-    background: rgba(8, 10, 14, 0.28);
+    background: var(--color-overlay);
     backdrop-filter: blur(2px);
   }
 

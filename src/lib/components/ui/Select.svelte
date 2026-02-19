@@ -66,6 +66,6 @@
 
   .ui-select:focus-visible {
     border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 80%);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
   }
 </style>

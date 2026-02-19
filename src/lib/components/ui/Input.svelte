@@ -114,7 +114,7 @@
     input:focus {
         outline: none;
         border-color: var(--color-accent);
-        box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+        box-shadow: 0 0 0 2px var(--color-focus-ring);
     }
 
     input:read-only {

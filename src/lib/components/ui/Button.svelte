@@ -137,12 +137,12 @@
     }
 
     .btn.danger-soft {
-        border-color: color-mix(in oklab, var(--color-danger), white 65%);
-        background: color-mix(in oklab, var(--color-danger), white 93%);
+        border-color: var(--color-danger-soft-border);
+        background: var(--color-danger-soft-bg);
         color: var(--color-danger);
     }
     .btn.danger-soft:hover {
-        border-color: color-mix(in oklab, var(--color-danger), white 50%);
+        border-color: var(--color-danger-soft-border-hover);
     }
 
     /* Sizes */

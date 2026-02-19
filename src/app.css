@@ -18,6 +18,12 @@
   --color-border: rgba(0, 0, 0, 0.1);
   --color-divider: #d1d1d6;
   --color-border-strong: rgba(0, 0, 0, 0.16);
+  --color-surface-elevated: color-mix(in oklab, var(--color-surface), white 8%);
+  --color-overlay: rgba(8, 10, 14, 0.28);
+  --color-focus-ring: color-mix(in oklab, var(--color-accent), white 80%);
+  --color-danger-soft-bg: color-mix(in oklab, var(--color-danger), white 93%);
+  --color-danger-soft-border: color-mix(in oklab, var(--color-danger), white 65%);
+  --color-danger-soft-border-hover: color-mix(in oklab, var(--color-danger), white 50%);
 
   /* Spacing */
   --space-1: 4px;
