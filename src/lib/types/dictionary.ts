@@ -61,7 +61,7 @@ export type EntryDetail = {
   definitionHtml: string;
 };
 
-export type ReaderFontSize = 'sm' | 'md' | 'lg';
+export type ReaderFontSize = number;
 export type ReaderLineHeight = 'tight' | 'normal' | 'loose';
 export type ReaderWidth = 'narrow' | 'normal' | 'wide';
 

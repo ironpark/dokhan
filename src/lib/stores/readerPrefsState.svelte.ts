@@ -11,7 +11,7 @@ export type ReaderPrefsSnapshot = {
 export function createReaderPrefsState(onChange: () => void) {
   let preprocessEnabled = $state(true);
   let markerPreprocessEnabled = $state(true);
-  let readerFontSize = $state<ReaderFontSize>('md');
+  let readerFontSize = $state<ReaderFontSize>(100);
   let readerLineHeight = $state<ReaderLineHeight>('normal');
   let readerWidth = $state<ReaderWidth>('normal');
 
@@ -56,7 +56,8 @@ export function createReaderPrefsState(onChange: () => void) {
       onChange();
     },
     setReaderFontSize(value: ReaderFontSize) {
-      readerFontSize = value;
+      const rounded = Math.round(value);
+      readerFontSize = Math.min(130, Math.max(80, rounded));
       onChange();
     },
     setReaderLineHeight(value: ReaderLineHeight) {

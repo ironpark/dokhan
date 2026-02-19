@@ -11,7 +11,6 @@ export const MAX_RECENT_VIEWS = 20;
 export const MAX_FAVORITES = 100;
 
 const PREFS_KEY = "dokhan:user-prefs";
-const READER_FONT_SIZES: ReaderFontSize[] = ["sm", "md", "lg"];
 const READER_LINE_HEIGHTS: ReaderLineHeight[] = ["tight", "normal", "loose"];
 const READER_WIDTHS: ReaderWidth[] = ["narrow", "normal", "wide"];
 
@@ -32,7 +31,7 @@ const DEFAULT_PREFS: DictionaryPrefsPayload = {
   favorites: [],
   preprocessEnabled: true,
   markerPreprocessEnabled: true,
-  readerFontSize: "md",
+  readerFontSize: 100,
   readerLineHeight: "normal",
   readerWidth: "normal",
 };
@@ -94,7 +93,14 @@ function sanitizeFavorites(value: unknown): FavoriteItem[] {
 }
 
 function sanitizeFontSize(value: unknown): ReaderFontSize {
-  return READER_FONT_SIZES.includes(value as ReaderFontSize) ? (value as ReaderFontSize) : "md";
+  // Backward compatibility: previously persisted as "sm" | "md" | "lg".
+  if (value === "sm") return 92;
+  if (value === "md") return 100;
+  if (value === "lg") return 112;
+
+  if (typeof value !== "number" || !Number.isFinite(value)) return 100;
+  const rounded = Math.round(value);
+  return Math.min(130, Math.max(80, rounded));
 }
 
 function sanitizeLineHeight(value: unknown): ReaderLineHeight {

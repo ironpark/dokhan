@@ -11,7 +11,7 @@
     markerPreprocessEnabled = true,
     isFavorite = false,
     showReaderTools = false,
-    readerFontSize = "md",
+    readerFontSize = 100,
     readerLineHeight = "normal",
     readerWidth = "normal",
     onTogglePreprocess = () => {},
@@ -39,16 +39,32 @@
     onReaderWidthChange?: (value: ReaderWidth) => void;
   } = $props();
 
+  function normalizeFontSize(value: number): number {
+    const rounded = Math.round(value);
+    return Math.min(130, Math.max(80, rounded));
+  }
+
+  const fontSliderProgress = $derived(
+    `${((normalizeFontSize(readerFontSize) - 80) / 50) * 100}%`,
+  );
+
   function handleFontSizeChange(event: Event) {
-    onReaderFontSizeChange((event.currentTarget as HTMLSelectElement).value as ReaderFontSize);
+    const target = event.target as HTMLInputElement | null;
+    if (!target) return;
+    const next = normalizeFontSize(Number.parseInt(target.value, 10));
+    onReaderFontSizeChange(next);
   }
 
   function handleLineHeightChange(event: Event) {
-    onReaderLineHeightChange((event.currentTarget as HTMLSelectElement).value as ReaderLineHeight);
+    const target = event.target as HTMLSelectElement | null;
+    if (!target) return;
+    onReaderLineHeightChange(target.value as ReaderLineHeight);
   }
 
   function handleWidthChange(event: Event) {
-    onReaderWidthChange((event.currentTarget as HTMLSelectElement).value as ReaderWidth);
+    const target = event.target as HTMLSelectElement | null;
+    if (!target) return;
+    onReaderWidthChange(target.value as ReaderWidth);
   }
 </script>
 
@@ -96,15 +112,30 @@
     <div class="view-controls">
       <label class="option-field">
         <span class="option-label">글자 크기</span>
-        <select value={readerFontSize} onchange={handleFontSizeChange}>
-          <option value="sm">작게</option>
-          <option value="md">보통</option>
-          <option value="lg">크게</option>
-        </select>
+        <div class="font-slider-wrap" style={`--font-slider-progress: ${fontSliderProgress};`}>
+          <span class="font-slider-percent" aria-hidden="true">
+            {normalizeFontSize(readerFontSize)}%
+          </span>
+          <input
+            type="range"
+            class="font-slider"
+            min="80"
+            max="130"
+            step="2"
+            value={normalizeFontSize(readerFontSize)}
+            oninput={handleFontSizeChange}
+            aria-label="글자 크기"
+          />
+          <div class="font-slider-labels" aria-hidden="true">
+            <span>80%</span>
+            <span>100%</span>
+            <span>130%</span>
+          </div>
+        </div>
       </label>
       <label class="option-field">
         <span class="option-label">줄 간격</span>
-        <select value={readerLineHeight} onchange={handleLineHeightChange}>
+        <select bind:value={readerLineHeight} oninput={handleLineHeightChange}>
           <option value="tight">좁게</option>
           <option value="normal">보통</option>
           <option value="loose">넓게</option>
@@ -112,7 +143,7 @@
       </label>
       <label class="option-field">
         <span class="option-label">본문 폭</span>
-        <select value={readerWidth} onchange={handleWidthChange}>
+        <select bind:value={readerWidth} oninput={handleWidthChange}>
           <option value="narrow">좁게</option>
           <option value="normal">보통</option>
           <option value="wide">넓게</option>
@@ -261,6 +292,84 @@
   .view-controls select:focus-visible {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 80%);
+  }
+
+  .font-slider-wrap {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    padding-top: 2px;
+  }
+
+  .font-slider-percent {
+    position: absolute;
+    top: -26px;
+    left: clamp(10px, var(--font-slider-progress), calc(100% - 10px));
+    transform: translateX(-50%);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--motion-fast),
+      transform var(--motion-fast),
+      visibility var(--motion-fast);
+    color: var(--color-accent);
+    font-size: 12px;
+    padding: 2px 8px;
+    line-height: 1.2;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-accent), white 88%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 1;
+  }
+
+  .font-slider-wrap:hover .font-slider-percent,
+  .font-slider-wrap:focus-within .font-slider-percent {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(-2px);
+  }
+
+  .font-slider {
+    width: 100%;
+    margin: 0;
+    cursor: pointer;
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      var(--color-accent) 0%,
+      var(--color-accent) var(--font-slider-progress),
+      color-mix(in oklab, var(--color-border), white 18%) var(--font-slider-progress),
+      color-mix(in oklab, var(--color-border), white 18%) 100%
+    );
+  }
+
+  .font-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--color-accent);
+    background: var(--color-surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+
+  .font-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--color-accent);
+    background: var(--color-surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  }
+
+  .font-slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--color-text-muted);
   }
 
   @media (max-width: 768px) {

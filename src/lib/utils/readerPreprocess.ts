@@ -1,12 +1,17 @@
 import {
-  ANGLE_MARKER_ALIASES,
-  ANGLE_MARKER_META,
-  ROUND_MARKER_META,
-  ROUND_MARKER_GROUPS,
-  SQUARE_MARKER_META,
-  SQUARE_MARKER_GROUPS,
-  type MarkerGroup,
-} from "$lib/constants/dictionaryMarkers";
+  classifyMarkerToken,
+  tokenizeMarkerText,
+  type MarkerKind,
+  type MarkerToken,
+} from "$lib/utils/readerMarkerParser";
+
+/**
+ * Dictionary HTML preprocessor package.
+ * - Rewrites raw dictionary markup into readable structural lists.
+ * - Applies optional marker tagging with semantic classes/tooltips.
+ * - Runs idempotently via dataset flags/versioning.
+ */
+const PREPROCESS_VERSION = "2026-02-19.1";
 
 function extractSenseNo(node: Node): number | null {
   if (!(node instanceof HTMLSpanElement)) return null;
@@ -163,67 +168,6 @@ function applyBrSpacing(root: HTMLElement) {
   }
 }
 
-function classifyRoundMarker(raw: string): MarkerGroup {
-  return ROUND_MARKER_META[raw]?.group
-    ?? ROUND_MARKER_GROUPS[raw]
-    ?? SQUARE_MARKER_GROUPS[raw]
-    ?? "misc";
-}
-
-function classifySquareMarker(raw: string): MarkerGroup {
-  return SQUARE_MARKER_META[raw]?.group ?? SQUARE_MARKER_GROUPS[raw] ?? "misc";
-}
-
-function markerGroupHint(group: MarkerGroup): string {
-  if (group === "register" || group === "usage") return "문체/용법 정보";
-  if (group === "region") return "사용 지역 정보";
-  if (group === "time") return "시대 구분 정보";
-  if (group === "domain") return "전문 분야 정보";
-  if (group === "meaning") return "의미/용법 정보";
-  if (group === "orthography") return "맞춤법 병기 정보";
-  if (group === "grammar") return "문법 정보";
-  return "표기 정보";
-}
-
-function normalizeAngleMarker(raw: string): string {
-  return ANGLE_MARKER_ALIASES[raw] ?? raw;
-}
-
-function buildRoundTooltip(label: string): string | null {
-  const meta = ROUND_MARKER_META[label];
-  if (meta) return meta.tooltip;
-  return markerGroupHint(classifyRoundMarker(label));
-}
-
-function isPartOfSpeechMarker(label: string): boolean {
-  return /^(adj|adv|verb|subst|pron|praep|prep|konj|interj|part|num)\.?$/i.test(label);
-}
-
-function isNumberInfoMarker(label: string): boolean {
-  return /(복수|단수|pl\.|sg\.)/i.test(label);
-}
-
-function isVerbInflectionMarker(label: string): boolean {
-  return /(;|,|\bhat\b|\bist\b|\bsind\b|\bhaben\b|\bdu\b|\ber\b|\bsie\b|\bwir\b|\bihr\b)/i.test(
-    label,
-  );
-}
-
-function buildAngleTooltip(label: string): string {
-  const direct = ANGLE_MARKER_META[label];
-  if (direct) return direct;
-  if (isPartOfSpeechMarker(label)) {
-    return `품사 표시: ${label}`;
-  }
-  if (isNumberInfoMarker(label)) {
-    return `문법 수(數) 정보: ${label}`;
-  }
-  if (isVerbInflectionMarker(label)) {
-    return "동사 활용/완료조동사 정보";
-  }
-  return markerGroupHint("grammar");
-}
-
 function applyTooltip(span: HTMLSpanElement, tooltip: string | null) {
   if (!tooltip) {
     delete span.dataset.tooltip;
@@ -234,125 +178,39 @@ function applyTooltip(span: HTMLSpanElement, tooltip: string | null) {
   span.setAttribute("aria-label", tooltip);
 }
 
-function isLikelyReplacementBracket(
-  label: string,
-  prevChar: string,
-  nextChar: string,
-): boolean {
-  const trimmed = label.trim();
-  const attachedToPrevWord = /[0-9A-Za-z가-힣)]/.test(prevChar);
-  const attachedToNextWord = /[0-9A-Za-z가-힣(]/.test(nextChar);
-
-  // 설명형/정의형 대괄호는 대체괄호로 보지 않는다.
-  if (trimmed.includes(":")) return false;
-  if (
-    /(표현|뜻함|의미|용법|결합|관련|경우|드물게|또한|새 맞춤법|구맞춤법)/.test(
-      trimmed,
-    )
-  ) {
-    return false;
-  }
-
-  // 대체괄호는 대체로 앞/뒤 단어에 붙어서 등장한다.
-  if (!(attachedToPrevWord || attachedToNextWord)) return false;
-
-  // 치환 후보는 짧은 명사구/표현인 경우가 많다.
-  if (trimmed.length > 40) return false;
-  return true;
+function markerText(kind: MarkerKind, label: string): string {
+  if (kind === "round") return `((${label}))`;
+  if (kind === "square") return `[${label}]`;
+  return `<${label}>`;
 }
 
-function resolveSquareMarkerMeta(
-  label: string,
-  prevChar: string,
-  nextChar: string,
-): { group: MarkerGroup; tooltip: string } {
-  const exact = SQUARE_MARKER_META[label];
-  if (exact) {
-    return { group: exact.group, tooltip: exact.tooltip };
-  }
-
-  const normalizedLabel = label.replace(/\(\([^)]+\)\)\s*/g, "").trim();
-  const orthographyMatch = normalizedLabel.match(/^(새 맞춤법|구맞춤법)\s*:/);
-  if (orthographyMatch) {
-    const kind = orthographyMatch[1];
-    return {
-      group: "orthography",
-      tooltip:
-        kind === "구맞춤법"
-          ? "맞춤법 병기 정보: 구맞춤법 표기 (과거 문헌 참조용)"
-          : "맞춤법 병기 정보: 새 맞춤법 표기",
-    };
-  }
-  if (/(새 맞춤법|구맞춤법)/.test(normalizedLabel)) {
-    return {
-      group: "orthography",
-      tooltip: "맞춤법 병기 정보: 새/구 맞춤법 병행 표기",
-    };
-  }
-
-  if (isLikelyReplacementBracket(label, prevChar, nextChar)) {
-    return {
-      group: "meaning",
-      tooltip: "대체괄호: 앞 어구를 괄호 안 표현으로 바꿔 쓸 수 있음",
-    };
-  }
-  const fallbackGroup = classifySquareMarker(label);
-  return {
-    group: fallbackGroup,
-    tooltip: markerGroupHint(fallbackGroup),
-  };
-}
-
-function createMarkerSpan(
-  kind: "round" | "square" | "angle",
-  rawLabel: string,
-  context?: {
-    prevChar?: string;
-    nextChar?: string;
-  },
-): HTMLSpanElement {
+function createMarkerSpan(token: MarkerToken): HTMLSpanElement {
   const span = document.createElement("span");
-  span.classList.add("dict-marker", `dict-marker-${kind}`);
-  const trimmed = rawLabel.trim();
-
-  if (kind === "round") {
-    const group = classifyRoundMarker(trimmed);
-    span.classList.add(`dict-marker-${group}`);
-    span.dataset.markerGroup = group;
-    span.dataset.markerKind = "round";
-    span.dataset.markerLabel = trimmed;
-    applyTooltip(span, buildRoundTooltip(trimmed));
-    span.textContent = `((${trimmed}))`;
-    return span;
+  const info = classifyMarkerToken(token);
+  span.classList.add("dict-marker", `dict-marker-${token.kind}`);
+  span.classList.add(`dict-marker-${info.primaryGroup}`);
+  if (info.groups.length > 1) {
+    span.dataset.markerGroups = info.groups.join(",");
   }
-
-  if (kind === "square") {
-    const { group, tooltip } = resolveSquareMarkerMeta(
-      trimmed,
-      context?.prevChar ?? "",
-      context?.nextChar ?? "",
-    );
-    span.classList.add(`dict-marker-${group}`);
-    span.dataset.markerGroup = group;
-    span.dataset.markerKind = "square";
-    span.dataset.markerLabel = trimmed;
-    applyTooltip(span, tooltip);
-    span.textContent = `[${trimmed}]`;
-    return span;
-  }
-
-  const normalized = normalizeAngleMarker(trimmed);
-  span.classList.add("dict-marker-grammar");
-  span.dataset.markerGroup = "grammar";
-  span.dataset.markerKind = "angle";
-  span.dataset.markerLabel = normalized;
-  applyTooltip(span, buildAngleTooltip(normalized));
-  span.textContent = `<${normalized}>`;
+  span.dataset.markerGroup = info.primaryGroup;
+  span.dataset.markerKind = token.kind;
+  span.dataset.markerLabel = info.normalizedLabel;
+  applyTooltip(span, info.tooltip);
+  span.textContent = markerText(token.kind, info.normalizedLabel);
   return span;
 }
 
 function annotateInlineMarkers(root: HTMLElement) {
   if (root.dataset.inlineMarkersApplied === "1") return;
+  const rootText = root.textContent ?? "";
+  if (
+    !rootText.includes("((") &&
+    !rootText.includes("[") &&
+    !rootText.includes("<")
+  ) {
+    root.dataset.inlineMarkersApplied = "1";
+    return;
+  }
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const textNodes: Text[] = [];
   let current = walker.nextNode();
@@ -369,66 +227,65 @@ function annotateInlineMarkers(root: HTMLElement) {
     current = walker.nextNode();
   }
 
-  const markerPattern = /\(\(([^()]+?)\)\)|\[([^[\]]+?)[\]}]|<([^<>]+?)>/g;
   for (const textNode of textNodes) {
     const text = textNode.nodeValue ?? "";
-    markerPattern.lastIndex = 0;
-    if (!markerPattern.test(text)) continue;
-    markerPattern.lastIndex = 0;
+    if (!text.includes("((") && !text.includes("[") && !text.includes("<")) {
+      continue;
+    }
+    const segments = tokenizeMarkerText(text);
+    const hasMarker = segments.some((segment) => segment.type === "marker");
+    if (!hasMarker) continue;
 
     const fragment = document.createDocumentFragment();
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = markerPattern.exec(text)) !== null) {
-      const matchIndex = match.index;
-      if (matchIndex > lastIndex) {
-        fragment.appendChild(
-          document.createTextNode(text.slice(lastIndex, matchIndex)),
-        );
-      }
-
-      const roundLabel = match[1]?.trim();
-      const squareLabel = match[2]?.trim();
-      const angleLabel = match[3]?.trim();
-      const afterIndex = matchIndex + match[0].length;
-      const prevChar = matchIndex > 0 ? text[matchIndex - 1] : "";
-      const nextChar = afterIndex < text.length ? text[afterIndex] : "";
-      if (roundLabel) {
-        fragment.appendChild(createMarkerSpan("round", roundLabel));
-      } else if (squareLabel) {
-        fragment.appendChild(
-          createMarkerSpan("square", squareLabel, { prevChar, nextChar }),
-        );
-      } else if (angleLabel) {
-        fragment.appendChild(createMarkerSpan("angle", angleLabel));
+    for (const segment of segments) {
+      if (segment.type === "text") {
+        if (segment.value) {
+          fragment.appendChild(document.createTextNode(segment.value));
+        }
       } else {
-        fragment.appendChild(document.createTextNode(match[0]));
-      }
-
-      lastIndex = matchIndex + match[0].length;
-      if (markerPattern.lastIndex === matchIndex) {
-        markerPattern.lastIndex += 1;
+        fragment.appendChild(createMarkerSpan(segment.token));
       }
     }
-    if (lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
-    }
-
     textNode.parentNode?.replaceChild(fragment, textNode);
   }
 
   root.dataset.inlineMarkersApplied = "1";
 }
 
+function stripInlineMarkers(root: HTMLElement) {
+  const markers = Array.from(root.querySelectorAll("span.dict-marker"));
+  for (const marker of markers) {
+    marker.replaceWith(document.createTextNode(marker.textContent ?? ""));
+  }
+  root.normalize();
+  delete root.dataset.inlineMarkersApplied;
+}
+
 type PreprocessOptions = {
   markerTagging?: boolean;
 };
 
+/**
+ * Applies structural + inline marker preprocessing to a rendered dictionary node.
+ *
+ * Safe to call repeatedly for the same root. Work is skipped when the target
+ * preprocess version/options match the last applied state.
+ */
 export function applyDictionaryPreprocess(
   root: HTMLElement,
   options: PreprocessOptions = {},
 ) {
   const { markerTagging = true } = options;
+  const targetVersion = `${PREPROCESS_VERSION}:${markerTagging ? "1" : "0"}`;
+  if (root.dataset.preprocessVersion === targetVersion) return;
+  if (
+    root.dataset.preprocessVersion &&
+    root.dataset.preprocessVersion !== targetVersion &&
+    !markerTagging &&
+    root.querySelector("span.dict-marker")
+  ) {
+    stripInlineMarkers(root);
+  }
   splitCombinedSenseMarkers(root);
   applySenseList(root);
   if (root.dataset.senseListApplied !== "1") {
@@ -438,4 +295,5 @@ export function applyDictionaryPreprocess(
   if (markerTagging) {
     annotateInlineMarkers(root);
   }
+  root.dataset.preprocessVersion = targetVersion;
 }

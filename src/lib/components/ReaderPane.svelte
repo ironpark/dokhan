@@ -23,7 +23,7 @@
     onTogglePreprocess = () => {},
     markerPreprocessEnabled = true,
     onToggleMarkerPreprocess = () => {},
-    readerFontSize = "md",
+    readerFontSize = 100,
     readerLineHeight = "normal",
     readerWidth = "normal",
     onReaderFontSizeChange = () => {},
@@ -67,11 +67,6 @@
     markerPreprocessEnabled: boolean;
   };
 
-  const readerFontSizeMap: Record<ReaderFontSize, string> = {
-    sm: "14px",
-    md: "15px",
-    lg: "17px",
-  };
   const readerLineHeightMap: Record<ReaderLineHeight, string> = {
     tight: "1.5",
     normal: "1.62",
@@ -85,8 +80,13 @@
 
   let showReaderTools = $state(false);
 
+  function normalizeFontScale(value: ReaderFontSize): number {
+    const rounded = Math.round(value);
+    return Math.min(130, Math.max(80, rounded));
+  }
+
   const readerStyleVars = $derived(
-    `--reader-font-size: ${readerFontSizeMap[readerFontSize] ?? readerFontSizeMap.md};` +
+    `--reader-font-size: ${(15 * normalizeFontScale(readerFontSize)) / 100}px;` +
       ` --reader-line-height: ${readerLineHeightMap[readerLineHeight] ?? readerLineHeightMap.normal};` +
       ` --reader-max-width: ${readerWidthMap[readerWidth] ?? readerWidthMap.normal};`,
   );
@@ -291,6 +291,7 @@
       delete node.dataset.senseListApplied;
       delete node.dataset.alphaSenseListApplied;
       delete node.dataset.inlineMarkersApplied;
+      delete node.dataset.preprocessVersion;
     }
 
     function scheduleDecorations() {
@@ -376,7 +377,6 @@
       if (!tooltipEl) return;
       tooltipEl.classList.remove("visible");
       tooltipEl.setAttribute("aria-hidden", "true");
-      tooltipEl.textContent = "";
     }
 
     function positionTooltip(marker: HTMLElement, tip: HTMLDivElement) {
@@ -409,6 +409,24 @@
       tip.dataset.place = place;
     }
 
+    function applyTooltipTypography(marker: HTMLElement, tip: HTMLDivElement) {
+      const readerHost = marker.closest(".reader") as HTMLElement | null;
+      const source = readerHost ?? node;
+      const readerFontSizeRaw = getComputedStyle(source)
+        .getPropertyValue("--reader-font-size")
+        .trim();
+      const readerFontSize = Number.parseFloat(readerFontSizeRaw);
+      if (Number.isFinite(readerFontSize)) {
+        const tooltipFontSize = Math.min(
+          14,
+          Math.max(11, Math.round(readerFontSize * 0.82)),
+        );
+        tip.style.fontSize = `${tooltipFontSize}px`;
+      } else {
+        tip.style.fontSize = "";
+      }
+    }
+
     function showTooltip(marker: HTMLElement) {
       const text = marker.dataset.tooltip?.trim();
       if (!text) {
@@ -421,6 +439,7 @@
       tip.textContent = text;
       tip.setAttribute("aria-hidden", "false");
       tip.dataset.place = "top";
+      applyTooltipTypography(marker, tip);
       tip.classList.add("visible");
       positionTooltip(marker, tip);
     }
@@ -600,6 +619,13 @@
   .body-content {
     max-width: var(--reader-max-width);
     margin: 0 auto;
+    font-size: var(--reader-font-size);
+    line-height: var(--reader-line-height);
+  }
+
+  .html-rendered {
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .html-rendered :global(ul),
@@ -651,8 +677,8 @@
 
   .html-rendered :global(p) {
     margin: 0 0 0.82em;
-    line-height: var(--reader-line-height);
-    font-size: var(--reader-font-size);
+    line-height: inherit;
+    font-size: inherit;
   }
 
   .html-rendered :global(h3) {
@@ -757,8 +783,8 @@
   .alias-line {
     margin: 5px 0 14px;
     color: var(--color-text-muted);
-    font-size: 13px;
-    line-height: 1.45;
+    font-size: calc(var(--reader-font-size) * 0.92);
+    line-height: inherit;
     font-family: "Alegreya Sans SC", "IBM Plex Sans", sans-serif;
   }
 
@@ -778,7 +804,7 @@
 
     .html-rendered :global(li.dict-sense-item) {
       margin: 0 0 0.52em;
-      line-height: 1.62;
+      line-height: inherit;
     }
 
     .html-rendered :global(ol.dict-subsense-list) {
@@ -788,7 +814,7 @@
 
     .html-rendered :global(li.dict-subsense-item) {
       margin: 0 0 0.26em;
-      line-height: 1.58;
+      line-height: inherit;
     }
   }
 </style>
