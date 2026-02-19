@@ -272,8 +272,8 @@
             <div class="folder-actions">
               <Button
                 type="button"
-                size="icon-sm"
-                variant="soft"
+                size="icon-xs"
+                variant="ghost"
                 class="folder-icon-btn"
                 onclick={(event) => {
                   event.stopPropagation();
@@ -286,9 +286,9 @@
               </Button>
               <Button
                 type="button"
-                size="icon-sm"
-                variant="soft"
-                class="folder-icon-btn danger"
+                size="icon-xs"
+                variant="ghost-danger"
+                class="folder-icon-btn"
                 onclick={() => requestDeleteFolder(folder.id, folder.name)}
                 aria-label="폴더 삭제"
                 title="삭제"
@@ -450,11 +450,6 @@
   :global(.folder-icon-btn) {
     line-height: 0;
     color: var(--color-text-muted);
-  }
-
-  :global(.folder-icon-btn.danger:hover) {
-    color: var(--color-danger);
-    border-color: color-mix(in oklab, var(--color-danger), white 62%);
   }
 
   .folder-card-body {

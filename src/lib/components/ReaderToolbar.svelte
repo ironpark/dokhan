@@ -81,7 +81,7 @@
         size="xs"
         class="toolbar-action"
         aria-pressed={preprocessEnabled}
-        variant={preprocessEnabled ? "pill-active" : "pill"}
+        variant={preprocessEnabled ? "toolbar-pill-active" : "toolbar-pill"}
         onclick={onTogglePreprocess}
       >
         {preprocessEnabled ? "전처리 ON" : "전처리 OFF"}
@@ -91,7 +91,7 @@
         size="xs"
         class="toolbar-action"
         aria-pressed={markerPreprocessEnabled}
-        variant={markerPreprocessEnabled ? "pill-active" : "pill"}
+        variant={markerPreprocessEnabled ? "toolbar-pill-active" : "toolbar-pill"}
         onclick={onToggleMarkerPreprocess}
         disabled={!preprocessEnabled}
       >
@@ -100,9 +100,9 @@
       <Button
         type="button"
         size="xs"
-        class={`toolbar-action favorite-btn ${isFavorite ? "favorite-active" : ""}`}
+        class="toolbar-action favorite-btn"
         aria-pressed={isFavorite}
-        variant={isFavorite ? "pill-active" : "pill"}
+        variant={isFavorite ? "toolbar-pill-warn-active" : "toolbar-pill"}
         onclick={onToggleFavorite}
       >
         {#if isFavorite}
@@ -118,7 +118,7 @@
         size="xs"
         class="toolbar-action"
         aria-pressed={showReaderTools}
-        variant={showReaderTools ? "pill-active" : "pill"}
+        variant={showReaderTools ? "toolbar-pill-active" : "toolbar-pill"}
         onclick={onToggleReaderTools}
       >
         보기 옵션
@@ -199,7 +199,7 @@
 
   .doc-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 8px 0;
@@ -208,6 +208,8 @@
   .doc-actions {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
     justify-content: flex-end;
     gap: 6px;
     flex-shrink: 0;
@@ -220,34 +222,28 @@
   }
 
   :global(.toolbar-action) {
-    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
     white-space: nowrap;
     font-size: 12px;
-    min-height: 28px;
+    height: 28px;
+    line-height: 1;
     padding-inline: 10px;
-    color: var(--color-text-muted);
+    color: var(--color-text-muted) !important;
   }
 
   :global(.toolbar-action:hover) {
-    color: var(--color-text);
+    color: var(--color-text) !important;
   }
 
   :global(.toolbar-action[aria-pressed="true"]) {
-    color: var(--color-accent);
+    color: var(--color-accent) !important;
   }
 
-  :global(.toolbar-action[disabled]) {
-    color: var(--color-text-muted);
-  }
-
-  :global(.toolbar-action.favorite-active) {
-    color: #ad7a00;
-  }
-
-  :global(.favorite-active) {
-    color: #ad7a00;
-    border-color: #e8ca77;
-    background: #fff8dc;
+  :global(.toolbar-action.favorite-btn[aria-pressed="true"]) {
+    color: #ad7a00 !important;
   }
 
   :global(.favorite-btn) {

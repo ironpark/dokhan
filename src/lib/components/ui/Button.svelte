@@ -8,14 +8,27 @@
     | "outline"
     | "secondary"
     | "ghost"
+    | "ghost-danger"
     | "link"
     | "icon"
     | "pill"
     | "pill-active"
+    | "toolbar-pill"
+    | "toolbar-pill-active"
+    | "toolbar-pill-warn-active"
     | "soft"
     | "danger-soft";
 
-  type Size = "default" | "xs" | "sm" | "md" | "lg" | "icon" | "icon-sm" | "icon-lg";
+  type Size =
+    | "default"
+    | "xs"
+    | "sm"
+    | "md"
+    | "lg"
+    | "icon"
+    | "icon-xs"
+    | "icon-sm"
+    | "icon-lg";
 
   type ButtonProps = (HTMLButtonAttributes & HTMLAnchorAttributes) & {
     variant?: Variant;
@@ -53,6 +66,8 @@
     secondary:
       "bg-[var(--color-surface-soft)] text-[var(--color-dokhan-text)] hover:bg-[var(--color-interactive-hover)] shadow-xs",
     ghost: "hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]",
+    "ghost-danger":
+      "text-[var(--color-text-muted)] hover:bg-[color-mix(in_oklab,var(--color-danger),white_94%)] hover:text-[var(--color-danger)]",
     link: "text-[var(--color-dokhan-accent)] underline-offset-4 hover:underline",
     icon:
       "rounded-[var(--radius-full)] border border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]",
@@ -60,6 +75,12 @@
       "!rounded-[var(--radius-full)] border border-transparent bg-[var(--color-dokhan-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)]",
     "pill-active":
       "!rounded-[var(--radius-full)] border border-[color-mix(in_oklab,var(--color-dokhan-accent),white_62%)] bg-[var(--color-accent-soft)] text-[var(--color-dokhan-accent)] hover:border-[color-mix(in_oklab,var(--color-dokhan-accent),white_52%)]",
+    "toolbar-pill":
+      "!rounded-[var(--radius-full)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)]",
+    "toolbar-pill-active":
+      "!rounded-[var(--radius-full)] border border-[color-mix(in_oklab,var(--color-accent),white_62%)] bg-[var(--color-accent-soft)] text-[var(--color-accent)] hover:border-[color-mix(in_oklab,var(--color-accent),white_52%)]",
+    "toolbar-pill-warn-active":
+      "!rounded-[var(--radius-full)] border border-[#e8ca77] bg-[#fff8dc] text-[#ad7a00] hover:border-[#ddb95a]",
     soft:
       "rounded-[var(--radius-sm)] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)]",
     "danger-soft":
@@ -73,6 +94,7 @@
     md: "h-9 px-4 text-[var(--font-size-control-md)] rounded-[var(--radius-sm)]",
     lg: "h-10 px-6 text-[var(--font-size-control-md)] has-[>svg]:px-4 rounded-[var(--radius-sm)]",
     icon: "size-9 rounded-[var(--radius-sm)]",
+    "icon-xs": "size-7 rounded-[var(--radius-sm)]",
     "icon-sm": "size-8 rounded-[var(--radius-sm)]",
     "icon-lg": "size-10 rounded-[var(--radius-sm)]",
   };
