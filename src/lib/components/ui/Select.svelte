@@ -47,7 +47,7 @@
   }
 
   .ui-select.sm {
-    font-size: 12px;
+    font-size: var(--font-size-control-sm);
     font-weight: 600;
     line-height: 1;
     padding: 8px 30px 8px 10px;
@@ -55,7 +55,7 @@
   }
 
   .ui-select.md {
-    font-size: 14px;
+    font-size: var(--font-size-control-md);
     padding: 9px 30px 9px 10px;
     min-height: 36px;
   }

@@ -62,7 +62,7 @@
 
     .btn:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 2px var(--color-accent-soft);
+        box-shadow: 0 0 0 2px var(--color-focus-ring);
     }
 
     /* Variants */
@@ -81,10 +81,10 @@
         background-color: transparent;
     }
     .btn.ghost:hover {
-        background-color: var(--color-surface-hover);
+        background-color: var(--color-interactive-hover);
     }
     .btn.ghost.active {
-        background-color: var(--color-surface-active);
+        background-color: var(--color-interactive-active);
         color: var(--color-accent);
     }
 
@@ -93,7 +93,7 @@
         background-color: var(--color-surface);
     }
     .btn.outline:hover {
-        background-color: var(--color-surface-hover);
+        background-color: var(--color-interactive-hover);
         border-color: var(--color-border-strong);
     }
 
@@ -102,7 +102,7 @@
         color: var(--color-text-muted);
     }
     .btn.icon:hover {
-        background-color: var(--color-surface-hover);
+        background-color: var(--color-interactive-hover);
         color: var(--color-text);
     }
 
@@ -133,7 +133,7 @@
     }
     .btn.soft:hover {
         border-color: var(--color-border-strong);
-        background: var(--color-surface-hover);
+        background: var(--color-interactive-hover);
     }
 
     .btn.danger-soft {
@@ -149,17 +149,17 @@
     .btn.xs {
         height: 24px;
         padding: 0 var(--space-2);
-        font-size: 12px;
+        font-size: var(--font-size-control-sm);
     }
     .btn.sm {
         height: 28px;
         padding: 0 var(--space-2);
-        font-size: 13px;
+        font-size: var(--font-size-control-sm);
     }
     .btn.md {
         height: 36px;
         padding: 0 var(--space-4);
-        font-size: 14px;
+        font-size: var(--font-size-control-md);
     }
     .btn.lg {
         height: 44px;

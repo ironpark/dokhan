@@ -90,10 +90,12 @@
         background-color: var(--color-surface);
         color: inherit;
         font-family: inherit;
-        font-size: 14px;
+        font-size: var(--font-size-control-md);
+        line-height: var(--line-height-normal);
         transition:
-            border-color 0.2s ease,
-            box-shadow 0.2s ease;
+            border-color var(--motion-fast),
+            box-shadow var(--motion-fast),
+            background-color var(--motion-fast);
         box-sizing: border-box;
     }
 
@@ -103,7 +105,7 @@
 
     input.sm {
         height: 34px;
-        font-size: 12px;
+        font-size: var(--font-size-control-sm);
         border-radius: 10px;
     }
 
@@ -118,7 +120,7 @@
     }
 
     input:read-only {
-        background-color: var(--color-surface-hover);
+        background-color: var(--color-interactive-hover);
         cursor: default;
     }
 

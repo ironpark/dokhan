@@ -90,6 +90,7 @@
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
     padding: 0;
     z-index: 1400;
+    animation: dialogIn var(--motion-enter);
   }
 
   .ui-dialog::backdrop {
@@ -119,7 +120,7 @@
 
   .ui-dialog-header p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--font-size-control-sm);
     color: var(--color-text-muted);
   }
 
@@ -132,5 +133,16 @@
     display: inline-flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  @keyframes dialogIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 </style>
