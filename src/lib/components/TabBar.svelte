@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from "$lib/components/ui/Button.svelte";
   import type { Tab } from "$lib/types/dictionary";
 
   let {
@@ -11,25 +12,33 @@
 </script>
 
 <div class="tabbar" role="tablist" aria-label="사전 탭">
-  <button
+  <Button
     type="button"
-    class:active={activeTab === "content"}
-    onclick={() => onChange("content")}>목차</button
+    variant="ghost"
+    size="sm"
+    class={`tab-btn ${activeTab === "content" ? "active" : ""}`}
+    onclick={() => onChange("content")}>목차</Button
   >
-  <button
+  <Button
     type="button"
-    class:active={activeTab === "index"}
-    onclick={() => onChange("index")}>색인</button
+    variant="ghost"
+    size="sm"
+    class={`tab-btn ${activeTab === "index" ? "active" : ""}`}
+    onclick={() => onChange("index")}>색인</Button
   >
-  <button
+  <Button
     type="button"
-    class:active={activeTab === "search"}
-    onclick={() => onChange("search")}>검색</button
+    variant="ghost"
+    size="sm"
+    class={`tab-btn ${activeTab === "search" ? "active" : ""}`}
+    onclick={() => onChange("search")}>검색</Button
   >
-  <button
+  <Button
     type="button"
-    class:active={activeTab === "favorites"}
-    onclick={() => onChange("favorites")}>북마크</button
+    variant="ghost"
+    size="sm"
+    class={`tab-btn ${activeTab === "favorites" ? "active" : ""}`}
+    onclick={() => onChange("favorites")}>북마크</Button
   >
 </div>
 
@@ -41,24 +50,22 @@
     border-bottom: 1px solid var(--color-border);
   }
 
-  button {
-    border: none;
-    background: none;
+  :global(.tab-btn) {
+    border-radius: 0;
+    height: 36px;
     padding: var(--space-2);
-    cursor: pointer;
     font-size: 13px;
     font-weight: 500;
     color: var(--color-text-muted);
-    transition: all 0.2s;
     border-bottom: 2px solid transparent;
   }
 
-  button:hover {
+  :global(.tab-btn:hover) {
     background: var(--color-surface-hover);
     color: var(--color-text);
   }
 
-  button.active {
+  :global(.tab-btn.active) {
     color: var(--color-accent);
     border-bottom-color: var(--color-accent);
   }
