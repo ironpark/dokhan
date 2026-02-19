@@ -20,6 +20,7 @@ import { createReaderPrefsState, type ReaderPrefsState } from '$lib/stores/reade
 import { createSearchIndexState, type SearchIndexState } from '$lib/stores/searchIndexState.svelte';
 import { createDetailState, type DetailState } from '$lib/stores/detailState.svelte';
 import type {
+  BookmarkFolder,
   BuildProgress,
   ContentItem,
   ContentPage,
@@ -61,6 +62,9 @@ export interface DictionaryStore {
   readonly recentSearches: string[];
   readonly recentViews: RecentViewItem[];
   readonly favorites: FavoriteItem[];
+  readonly allFavorites: FavoriteItem[];
+  readonly bookmarkFolders: BookmarkFolder[];
+  readonly activeBookmarkFolderId: string;
   readonly preprocessEnabled: boolean;
   readonly markerPreprocessEnabled: boolean;
   readonly readerFontSize: ReaderFontSize;
@@ -109,6 +113,12 @@ export interface DictionaryStore {
   toggleCurrentFavorite(): void;
   isCurrentFavorite(): boolean;
   removeFavorite(key: string): void;
+  setActiveBookmarkFolder(folderId: string): void;
+  createBookmarkFolder(name: string): string | null;
+  renameBookmarkFolder(folderId: string, name: string): void;
+  deleteBookmarkFolder(folderId: string): void;
+  moveFavoriteToFolder(key: string, folderId: string): void;
+  addCurrentFavoriteToFolder(folderId: string): void;
   openFavorite(item: FavoriteItem): void;
   openInlineHref(href: string, currentSourcePath: string | null, currentLocal: string | null): Promise<void>;
   resolveInlineImageHref(href: string, currentSourcePath: string | null, currentLocal: string | null): Promise<string | null>;
@@ -150,7 +160,9 @@ export function createDictionaryStore(): DictionaryStore {
   libraryState.applySnapshot({
     recentSearches: prefs.recentSearches,
     recentViews: prefs.recentViews,
-    favorites: prefs.favorites
+    favorites: prefs.favorites,
+    bookmarkFolders: prefs.bookmarkFolders,
+    activeBookmarkFolderId: prefs.activeBookmarkFolderId
   });
   readerPrefsState.applySnapshot({
     preprocessEnabled: prefs.preprocessEnabled,
@@ -565,6 +577,37 @@ export function createDictionaryStore(): DictionaryStore {
     libraryState.removeFavorite(key);
   }
 
+  function setActiveBookmarkFolder(folderId: string) {
+    libraryState.setActiveBookmarkFolder(folderId);
+  }
+
+  function createBookmarkFolder(name: string): string | null {
+    return libraryState.createBookmarkFolder(name);
+  }
+
+  function renameBookmarkFolder(folderId: string, name: string) {
+    libraryState.renameBookmarkFolder(folderId, name);
+  }
+
+  function deleteBookmarkFolder(folderId: string) {
+    libraryState.deleteBookmarkFolder(folderId);
+  }
+
+  function moveFavoriteToFolder(key: string, folderId: string) {
+    libraryState.moveFavoriteToFolder(key, folderId);
+  }
+
+  function addCurrentFavoriteToFolder(folderId: string) {
+    if (!libraryState.bookmarkFolders.some((folder) => folder.id === folderId)) return;
+    if (detailState.detailMode === 'entry' && detailState.selectedEntry) {
+      libraryState.addFavoriteEntry(detailState.selectedEntry, folderId);
+      return;
+    }
+    if (detailState.detailMode === 'content' && detailState.selectedContent) {
+      libraryState.addFavoriteContent(detailState.selectedContent, folderId);
+    }
+  }
+
   function openFavorite(item: FavoriteItem) {
     if (item.kind === 'entry' && item.id != null) {
       void openEntry(item.id);
@@ -625,7 +668,10 @@ export function createDictionaryStore(): DictionaryStore {
     get dragOver() { return dragOver; },
     get recentSearches() { return libraryState.recentSearches; },
     get recentViews() { return libraryState.recentViews; },
-    get favorites() { return libraryState.favorites; },
+    get favorites() { return libraryState.visibleFavorites; },
+    get allFavorites() { return libraryState.favorites; },
+    get bookmarkFolders() { return libraryState.bookmarkFolders; },
+    get activeBookmarkFolderId() { return libraryState.activeBookmarkFolderId; },
     get preprocessEnabled() { return readerPrefsState.preprocessEnabled; },
     get markerPreprocessEnabled() { return readerPrefsState.markerPreprocessEnabled; },
     get readerFontSize() { return readerPrefsState.readerFontSize; },
@@ -673,6 +719,12 @@ export function createDictionaryStore(): DictionaryStore {
     toggleCurrentFavorite,
     isCurrentFavorite,
     removeFavorite,
+    setActiveBookmarkFolder,
+    createBookmarkFolder,
+    renameBookmarkFolder,
+    deleteBookmarkFolder,
+    moveFavoriteToFolder,
+    addCurrentFavoriteToFolder,
     openFavorite,
     openInlineHref,
     resolveInlineImageHref

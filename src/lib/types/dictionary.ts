@@ -32,6 +32,13 @@ export type FavoriteItem = {
   id: number | null;
   local: string | null;
   sourcePath: string | null;
+  folderId: string;
+};
+
+export type BookmarkFolder = {
+  id: string;
+  name: string;
+  createdAt: number;
 };
 
 export type RecentViewItem = {

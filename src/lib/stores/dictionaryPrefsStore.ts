@@ -1,4 +1,5 @@
 import type {
+  BookmarkFolder,
   FavoriteItem,
   ReaderFontSize,
   ReaderLineHeight,
@@ -9,6 +10,8 @@ import type {
 export const MAX_RECENT_SEARCHES = 10;
 export const MAX_RECENT_VIEWS = 20;
 export const MAX_FAVORITES = 100;
+export const MAX_BOOKMARK_FOLDERS = 20;
+export const DEFAULT_BOOKMARK_FOLDER_ID = "default";
 
 const PREFS_KEY = "dokhan:user-prefs";
 const READER_LINE_HEIGHTS: ReaderLineHeight[] = ["tight", "normal", "loose"];
@@ -18,6 +21,8 @@ type DictionaryPrefsPayload = {
   recentSearches: string[];
   recentViews: RecentViewItem[];
   favorites: FavoriteItem[];
+  bookmarkFolders: BookmarkFolder[];
+  activeBookmarkFolderId: string;
   preprocessEnabled: boolean;
   markerPreprocessEnabled: boolean;
   readerFontSize: ReaderFontSize;
@@ -29,6 +34,8 @@ const DEFAULT_PREFS: DictionaryPrefsPayload = {
   recentSearches: [],
   recentViews: [],
   favorites: [],
+  bookmarkFolders: [{ id: DEFAULT_BOOKMARK_FOLDER_ID, name: "기본", createdAt: 0 }],
+  activeBookmarkFolderId: DEFAULT_BOOKMARK_FOLDER_ID,
   preprocessEnabled: true,
   markerPreprocessEnabled: true,
   readerFontSize: 100,
@@ -62,6 +69,16 @@ function isFavoriteItem(value: unknown): value is FavoriteItem {
     && (value.id === null || typeof value.id === "number")
     && (value.local === null || typeof value.local === "string")
     && (value.sourcePath === null || typeof value.sourcePath === "string")
+    && (typeof value.folderId === "string" || value.folderId === undefined)
+  );
+}
+
+function isBookmarkFolder(value: unknown): value is BookmarkFolder {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string"
+    && typeof value.name === "string"
+    && typeof value.createdAt === "number"
   );
 }
 
@@ -89,7 +106,28 @@ function sanitizeRecentViews(value: unknown): RecentViewItem[] {
 
 function sanitizeFavorites(value: unknown): FavoriteItem[] {
   if (!Array.isArray(value)) return [];
-  return value.filter(isFavoriteItem).slice(0, MAX_FAVORITES);
+  return value
+    .filter(isFavoriteItem)
+    .slice(0, MAX_FAVORITES)
+    .map((item) => ({
+      ...item,
+      folderId: item.folderId ?? DEFAULT_BOOKMARK_FOLDER_ID,
+    }));
+}
+
+function sanitizeBookmarkFolders(value: unknown): BookmarkFolder[] {
+  const folders = Array.isArray(value)
+    ? value.filter(isBookmarkFolder).slice(0, MAX_BOOKMARK_FOLDERS)
+    : [];
+  const hasDefault = folders.some((folder) => folder.id === DEFAULT_BOOKMARK_FOLDER_ID);
+  if (!hasDefault) {
+    folders.unshift({
+      id: DEFAULT_BOOKMARK_FOLDER_ID,
+      name: "기본",
+      createdAt: 0,
+    });
+  }
+  return folders;
 }
 
 function sanitizeFontSize(value: unknown): ReaderFontSize {
@@ -125,6 +163,11 @@ export function loadDictionaryPrefs(): DictionaryPrefsPayload {
       recentSearches: sanitizeRecentSearches(parsed.recentSearches),
       recentViews: sanitizeRecentViews(parsed.recentViews),
       favorites: sanitizeFavorites(parsed.favorites),
+      bookmarkFolders: sanitizeBookmarkFolders(parsed.bookmarkFolders),
+      activeBookmarkFolderId:
+        typeof parsed.activeBookmarkFolderId === "string" && parsed.activeBookmarkFolderId
+          ? parsed.activeBookmarkFolderId
+          : DEFAULT_PREFS.activeBookmarkFolderId,
       preprocessEnabled:
         typeof parsed.preprocessEnabled === "boolean"
           ? parsed.preprocessEnabled

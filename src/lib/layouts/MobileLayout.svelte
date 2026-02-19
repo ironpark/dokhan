@@ -85,6 +85,10 @@
                             dictionaryStore.resolveInlineImageHref(href, path, local)}
                         isFavorite={dictionaryStore.isCurrentFavorite()}
                         onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
+                        bookmarkFolders={dictionaryStore.bookmarkFolders}
+                        activeBookmarkFolderId={dictionaryStore.activeBookmarkFolderId}
+                        onAddBookmarkToFolder={(folderId) =>
+                            dictionaryStore.addCurrentFavoriteToFolder(folderId)}
                         preprocessEnabled={dictionaryStore.preprocessEnabled}
                         onTogglePreprocess={() =>
                             dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}
@@ -146,11 +150,12 @@
                     </div>
 
                     <div class="content-list">
-                        <h3>목차</h3>
                         <ContentPanel
                             items={dictionaryStore.contents}
+                            recents={dictionaryStore.recentViews}
                             selectedLocal={dictionaryStore.selectedContentLocal}
                             onOpen={(local) => dictionaryStore.openContent(local)}
+                            onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
                         />
                     </div>
                 </div>
@@ -186,9 +191,17 @@
                 <div class="panel-container">
                     <LibraryPanel
                         favorites={dictionaryStore.favorites}
-                        recents={dictionaryStore.recentViews}
+                        allFavorites={dictionaryStore.allFavorites}
+                        folders={dictionaryStore.bookmarkFolders}
+                        activeFolderId={dictionaryStore.activeBookmarkFolderId}
                         onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
-                        onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
+                        onSelectFolder={(folderId) => dictionaryStore.setActiveBookmarkFolder(folderId)}
+                        onCreateFolder={(name) => dictionaryStore.createBookmarkFolder(name)}
+                        onRenameFolder={(folderId, name) =>
+                            dictionaryStore.renameBookmarkFolder(folderId, name)}
+                        onDeleteFolder={(folderId) => dictionaryStore.deleteBookmarkFolder(folderId)}
+                        onMoveFavorite={(key, folderId) =>
+                            dictionaryStore.moveFavoriteToFolder(key, folderId)}
                         onRemoveFavorite={(key) => dictionaryStore.removeFavorite(key)}
                     />
                 </div>
@@ -284,7 +297,7 @@
                         ></path></svg
                     >
                 </div>
-                <span>저장</span>
+                <span>북마크</span>
             </button>
         </nav>
     {/if}
@@ -529,9 +542,4 @@
         background: var(--color-surface-hover);
     }
 
-    .content-list h3 {
-        font-size: 20px;
-        margin: 0 0 10px 0;
-        color: var(--color-text);
-    }
 </style>

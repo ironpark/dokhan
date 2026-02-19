@@ -34,8 +34,10 @@
             {#if dictionaryStore.activeTab === "content"}
                 <ContentPanel
                     items={dictionaryStore.contents}
+                    recents={dictionaryStore.recentViews}
                     selectedLocal={dictionaryStore.selectedContentLocal}
                     onOpen={(local) => dictionaryStore.openContent(local)}
+                    onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
                 />
             {:else if dictionaryStore.activeTab === "index"}
                 <IndexPanel
@@ -62,9 +64,17 @@
                 {:else}
                     <LibraryPanel
                         favorites={dictionaryStore.favorites}
-                        recents={dictionaryStore.recentViews}
+                        allFavorites={dictionaryStore.allFavorites}
+                        folders={dictionaryStore.bookmarkFolders}
+                        activeFolderId={dictionaryStore.activeBookmarkFolderId}
                         onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
-                        onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
+                        onSelectFolder={(folderId) => dictionaryStore.setActiveBookmarkFolder(folderId)}
+                        onCreateFolder={(name) => dictionaryStore.createBookmarkFolder(name)}
+                        onRenameFolder={(folderId, name) =>
+                            dictionaryStore.renameBookmarkFolder(folderId, name)}
+                        onDeleteFolder={(folderId) => dictionaryStore.deleteBookmarkFolder(folderId)}
+                        onMoveFavorite={(key, folderId) =>
+                            dictionaryStore.moveFavoriteToFolder(key, folderId)}
                         onRemoveFavorite={(key) => dictionaryStore.removeFavorite(key)}
                     />
                 {/if}
@@ -77,7 +87,7 @@
             <div class="empty-state">
                 <EmptyState
                     title="본문을 표시할 항목을 선택하세요."
-                    description="목차, 색인, 검색 또는 즐겨찾기에서 항목을 선택하면 여기에 표시됩니다."
+                    description="목차, 색인, 검색 또는 북마크에서 항목을 선택하면 여기에 표시됩니다."
                 />
             </div>
         {:else}
@@ -92,6 +102,9 @@
                     dictionaryStore.resolveInlineImageHref(href, path, local)}
                 isFavorite={dictionaryStore.isCurrentFavorite()}
                 onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
+                bookmarkFolders={dictionaryStore.bookmarkFolders}
+                activeBookmarkFolderId={dictionaryStore.activeBookmarkFolderId}
+                onAddBookmarkToFolder={(folderId) => dictionaryStore.addCurrentFavoriteToFolder(folderId)}
                 preprocessEnabled={dictionaryStore.preprocessEnabled}
                 onTogglePreprocess={() =>
                     dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}

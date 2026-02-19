@@ -14,7 +14,7 @@
   <button
     type="button"
     class:active={activeTab === "content"}
-    onclick={() => onChange("content")}>내용</button
+    onclick={() => onChange("content")}>목차</button
   >
   <button
     type="button"
@@ -29,7 +29,7 @@
   <button
     type="button"
     class:active={activeTab === "favorites"}
-    onclick={() => onChange("favorites")}>즐겨찾기</button
+    onclick={() => onChange("favorites")}>북마크</button
   >
 </div>
 

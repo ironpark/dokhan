@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Bookmark from "@lucide/svelte/icons/bookmark";
+  import BookmarkCheck from "@lucide/svelte/icons/bookmark-check";
   import type {
     ReaderFontSize,
     ReaderLineHeight,
@@ -94,7 +96,13 @@
       class:active={isFavorite}
       onclick={onToggleFavorite}
     >
-      {isFavorite ? "★ 저장됨" : "☆ 저장"}
+      {#if isFavorite}
+        <BookmarkCheck size={14} />
+        <span>북마크됨</span>
+      {:else}
+        <Bookmark size={14} />
+        <span>북마크</span>
+      {/if}
     </button>
     <button
       type="button"
@@ -210,6 +218,12 @@
     color: #ad7a00;
     border-color: #e8ca77;
     background: #fff8dc;
+  }
+
+  .favorite-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .mini-btn:hover {
