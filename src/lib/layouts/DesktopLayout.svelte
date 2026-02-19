@@ -166,6 +166,7 @@
     }
 
     .tabs-container {
-        padding: 0 10px 10px;
+        padding: 0;
+        background: var(--color-surface-soft);
     }
 </style>

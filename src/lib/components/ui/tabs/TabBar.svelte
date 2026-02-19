@@ -26,7 +26,7 @@
 </script>
 
 <div
-  class={`tabbar relative m-0 border-b border-[var(--color-dokhan-border)] bg-transparent ${className} ${
+  class={`tabbar relative m-0 border-b border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface-soft)] ${className} ${
     scrollable
       ? "flex overflow-x-auto [scrollbar-width:thin]"
       : fullWidth
@@ -42,7 +42,7 @@
 >
   {#if showIndicator}
     <div
-      class={`tab-indicator absolute bottom-0 left-0 h-[2px] w-[calc(100%/var(--tab-count))] bg-[var(--color-dokhan-accent)] pointer-events-none ${
+      class={`tab-indicator absolute bottom-0 left-0 z-10 h-[2px] w-[calc(100%/var(--tab-count))] bg-[var(--color-dokhan-accent)] pointer-events-none ${
         animatedIndicator ? "transition-transform duration-[220ms] ease-[cubic-bezier(0.2,0.9,0.2,1)]" : ""
       }`}
       style={`transform: translateX(calc(100% * var(--tab-active-index)));`}
