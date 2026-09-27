@@ -14,7 +14,8 @@ use crate::chm;
 use crate::app::model::{BuildProgress, ContentItem, ContentPage, EntryDetail, RuntimeIndex};
 use crate::parsing::index::{extract_index_entries_from_open_chm, parse_master_hhc_text};
 use crate::parsing::text::{
-    compact_ws, decode_euc_kr, extract_first_bold_text, extract_html_fragments,
+    compact_html_text, compact_ws, decode_euc_kr, extract_first_bold_text,
+    extract_first_bold_text_from_paragraph, extract_html_fragments,
     sanitize_html_fragment, strip_html_tags,
 };
 use crate::runtime::cache::{keyed_slot, BoundedCache, KeyedSlots};
@@ -374,29 +375,30 @@ fn hydrate_entries_from_open_chm(chm: &mut chm::ChmArchive, entries: &mut [Entry
         let html_text = decode_euc_kr(&html_bytes);
         let fragments = extract_html_fragments(&html_text);
         let paragraph_html = fragments.first_paragraph_html.unwrap_or_default();
-        let paragraph_text = compact_ws(&strip_html_tags(&paragraph_html));
+        let paragraph_text = compact_html_text(&paragraph_html);
         let body = fragments.body_html.unwrap_or_default();
-        let body_text = compact_ws(&strip_html_tags(&body));
 
         // Search needs plain text now; HTML is sanitized when a detail is opened.
         if !paragraph_text.is_empty() {
             entry.definition_text = paragraph_text;
-        } else if !body_text.is_empty() {
-            entry.definition_text = body_text;
+        } else if !body.is_empty() {
+            let body_text = compact_html_text(&body);
+            if !body_text.is_empty() {
+                entry.definition_text = body_text;
+            }
         }
 
         if let Some(title_alias) = fragments
             .title
             .as_ref()
-            .map(|x| compact_ws(&strip_html_tags(x)))
+            .map(|x| compact_html_text(x))
             .filter(|x| !x.is_empty())
         {
             if !entry.aliases.contains(&title_alias) {
                 entry.aliases.push(title_alias);
             }
         }
-        if let Some(bold) = extract_first_bold_text(&html_text) {
-            let bold = compact_ws(&bold);
+        if let Some(bold) = extract_first_bold_text_from_paragraph(&paragraph_html) {
             if !bold.is_empty() && !entry.aliases.contains(&bold) {
                 entry.aliases.push(bold);
             }
@@ -508,7 +510,6 @@ pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) 
         }
     }
     if let Some(bold) = extract_first_bold_text(&html_text) {
-        let bold = compact_ws(&bold);
         if !bold.is_empty() && !entry.aliases.contains(&bold) {
             entry.aliases.push(bold);
         }

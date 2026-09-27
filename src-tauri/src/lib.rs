@@ -124,8 +124,20 @@ mod tests {
 
         let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
         let start = std::time::Instant::now();
-        let runtime = runtime::zip::parse_runtime_from_zip_with_progress(Path::new(&path), None)
-            .expect("benchmark dictionary should parse");
+        let mut parse_start = None;
+        let mut parse_end = None;
+        let mut on_progress = |p: app::model::BuildProgress| {
+            if p.phase == "parse" && p.current == 0 {
+                parse_start = Some(start.elapsed());
+            } else if p.message == "Completed multithreaded parse" {
+                parse_end = Some(start.elapsed());
+            }
+        };
+        let runtime = runtime::zip::parse_runtime_from_zip_with_progress(
+            Path::new(&path),
+            Some(&mut on_progress),
+        )
+        .expect("benchmark dictionary should parse");
         let elapsed = start.elapsed();
         let targets = runtime
             .entries
@@ -148,6 +160,13 @@ mod tests {
             runtime.entries.len(),
             targets.len()
         );
+        if let (Some(scan), Some(parsed)) = (parse_start, parse_end) {
+            eprintln!(
+                "CHM build phases: scan={scan:?}, parallel_parse={:?}, finalize_and_keys={:?}",
+                parsed - scan,
+                elapsed - parsed
+            );
+        }
         let sample = runtime.entries.iter()
             .filter(|entry| entry.source_path == "merge17.chm" && !entry.definition_text.is_empty())
             .take(100)
