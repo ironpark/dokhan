@@ -18,6 +18,8 @@ export type LibrarySnapshot = {
   activeBookmarkFolderId: string;
 };
 
+const SCOPE_KEY_PREFIX = 'scope:';
+
 export function createLibraryState(onChange: () => void) {
   let recentSearches = $state<string[]>([]);
   let recentViews = $state<RecentViewItem[]>([]);
@@ -40,13 +42,26 @@ export function createLibraryState(onChange: () => void) {
 
   // A source path identifies a CHM inside a ZIP, so the managed ZIP path is
   // required to distinguish entries whose numeric IDs overlap across ZIPs.
+  const scopePrefix = $derived(
+    sourceScope ? `${SCOPE_KEY_PREFIX}${encodeURIComponent(sourceScope)}::` : null
+  );
+
   function activeKey(key: string): string | null {
-    return sourceScope ? `scope:${encodeURIComponent(sourceScope)}::${key}` : null;
+    return scopePrefix ? `${scopePrefix}${key}` : null;
   }
 
   function belongsToActiveSource(key: string): boolean {
-    return sourceScope !== null && key.startsWith(`scope:${encodeURIComponent(sourceScope)}::`);
+    return scopePrefix !== null && key.startsWith(scopePrefix);
   }
+
+  const activeRecentViews = $derived(recentViews.filter((item) => belongsToActiveSource(item.key)));
+  const activeFavorites = $derived(favorites.filter((item) => belongsToActiveSource(item.key)));
+  const visibleFavorites = $derived(
+    activeFavorites.filter((item) => item.folderId === activeBookmarkFolderId)
+  );
+  const legacyFavoriteCount = $derived(
+    favorites.filter((item) => !item.key.startsWith(SCOPE_KEY_PREFIX)).length
+  );
 
   function trimActiveFavorites(rows: FavoriteItem[]): FavoriteItem[] {
     let activeCount = 0;
@@ -70,13 +85,13 @@ export function createLibraryState(onChange: () => void) {
       return recentSearches;
     },
     get recentViews() {
-      return recentViews.filter((item) => belongsToActiveSource(item.key));
+      return activeRecentViews;
     },
     get favorites() {
-      return favorites.filter((item) => belongsToActiveSource(item.key));
+      return activeFavorites;
     },
     get legacyFavoriteCount() {
-      return favorites.filter((item) => !item.key.startsWith('scope:')).length;
+      return legacyFavoriteCount;
     },
     get bookmarkFolders() {
       return bookmarkFolders;
@@ -85,9 +100,7 @@ export function createLibraryState(onChange: () => void) {
       return activeBookmarkFolderId;
     },
     get visibleFavorites() {
-      return favorites.filter(
-        (item) => belongsToActiveSource(item.key) && item.folderId === activeBookmarkFolderId
-      );
+      return visibleFavorites;
     },
     applySnapshot(snapshot: LibrarySnapshot) {
       recentSearches = snapshot.recentSearches;

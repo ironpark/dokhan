@@ -33,6 +33,7 @@
   <div class="row-actions">
     <DropdownMenu
       label={currentFolderName}
+      ariaLabel={`책갈피 폴더 선택, 현재 ${currentFolderName}`}
       options={menuOptions}
       onSelect={(folderId) => onMove(item.key, folderId)}
     />

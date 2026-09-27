@@ -43,7 +43,6 @@
                     items={dictionaryStore.contents}
                     recents={dictionaryStore.recentViews}
                     selectedLocal={dictionaryStore.selectedContentLocal}
-                    showTocHeader={false}
                     onOpen={(local) => dictionaryStore.openContent(local)}
                     onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
                 />

@@ -1,5 +1,5 @@
 //! In-memory index and full-text search utilities.
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -16,12 +16,12 @@ use crate::app::model::{
     TextSpan,
 };
 use crate::parsing::text::compact_ws;
+use crate::runtime::cache::{keyed_slot, KeyedSlots};
 use crate::runtime::state::get_runtime;
 use crate::runtime::storage::search_index_dir;
 use crate::resolve_runtime_source;
 
-type SearchIndexSlot = Arc<Mutex<Option<Arc<TantivySearchIndex>>>>;
-static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, SearchIndexSlot>>> = OnceLock::new();
+static SEARCH_CACHE: KeyedSlots<Option<Arc<TantivySearchIndex>>> = OnceLock::new();
 static NORMALIZE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static NORMALIZE_LOOSE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 const NORMALIZE_CACHE_MAX: usize = 65_536;
@@ -140,17 +140,7 @@ fn get_or_build_tantivy_index(
     source: &RuntimeSource,
     entries: &[EntryDetail],
 ) -> Result<Arc<TantivySearchIndex>, String> {
-    let key = source.cache_key();
-    let cache = SEARCH_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    let slot = {
-        let mut guard = cache
-            .lock()
-            .map_err(|_| "search cache lock poisoned".to_string())?;
-        guard
-            .entry(key)
-            .or_insert_with(|| Arc::new(Mutex::new(None)))
-            .clone()
-    };
+    let slot = keyed_slot(&SEARCH_CACHE, &source.cache_key())?;
 
     let mut current = slot
         .lock()

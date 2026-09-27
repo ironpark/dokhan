@@ -36,7 +36,7 @@
 
     (async () => {
       const tauri = isTauri();
-      if (tauri) await platformStore.init();
+      if (tauri) await platformStore.ready;
       if (disposed) return;
       dictionaryStore.setAutoOpenFirstContent(!platformStore.isMobile);
 

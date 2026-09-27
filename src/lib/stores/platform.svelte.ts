@@ -4,10 +4,11 @@ export class PlatformStore {
     isMobile = $state(false);
     platformName = $state<string | null>(null);
     #onResize: (() => void) | null = null;
+    readonly ready: Promise<void>;
 
     constructor() {
         this.checkMedia();
-        this.init();
+        this.ready = this.init();
     }
 
     async init() {

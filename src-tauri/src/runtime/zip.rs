@@ -17,7 +17,7 @@ use crate::parsing::text::{
     compact_ws, decode_euc_kr, extract_first_bold_text, extract_html_fragments,
     sanitize_html_fragment, strip_html_tags,
 };
-use crate::runtime::cache::BoundedCache;
+use crate::runtime::cache::{keyed_slot, BoundedCache, KeyedSlots};
 use crate::runtime::link_media::read_chm_binary_object;
 use crate::runtime::search::normalize_search_key;
 use crate::runtime::state::build_runtime_index;
@@ -27,6 +27,7 @@ type ZipBytes = Arc<[u8]>;
 
 static CHM_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ChmBytes>>> = OnceLock::new();
 static ZIP_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ZipBytes>>> = OnceLock::new();
+static ZIP_LOAD_LOCKS: KeyedSlots<()> = OnceLock::new();
 static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BoundedCache<Arc<chm::ChmArchive>>>> = OnceLock::new();
 const MAX_CHM_BYTES_CACHE_ITEMS: usize = 24;
 const MAX_CHM_ARCHIVE_CACHE_ITEMS: usize = 16;
@@ -169,18 +170,37 @@ fn cache_chm_archive(zip_path: &Path, chm_name: &str, archive: chm::ChmArchive) 
     Ok(())
 }
 
-fn get_zip_bytes(zip_path: &Path) -> Result<ZipBytes, String> {
-    let key = zip_cache_prefix(zip_path);
+fn cached_zip_bytes(key: &str) -> Result<Option<ZipBytes>, String> {
     let cache = ZIP_BYTES_CACHE
         .get_or_init(|| Mutex::new(BoundedCache::new(MAX_ZIP_BYTES_CACHE_ITEMS)));
     let mut guard = cache.lock().map_err(|_| "zip cache lock poisoned".to_string())?;
-    if let Some(found) = guard.get(&key) {
-        return Ok(Arc::clone(found));
+    Ok(guard.get(key).map(Arc::clone))
+}
+
+fn get_zip_bytes(zip_path: &Path) -> Result<ZipBytes, String> {
+    let key = zip_cache_prefix(zip_path);
+    if let Some(found) = cached_zip_bytes(&key)? {
+        return Ok(found);
+    }
+
+    // Serialize loads per ZIP so concurrent misses read the file once,
+    // without holding the shared cache lock during the read.
+    let load_lock = keyed_slot(&ZIP_LOAD_LOCKS, &key)?;
+    let _load_guard = load_lock
+        .lock()
+        .map_err(|_| "zip load lock poisoned".to_string())?;
+    if let Some(found) = cached_zip_bytes(&key)? {
+        return Ok(found);
     }
 
     let bytes = fs::read(zip_path).map_err(|e| format!("failed to read zip file: {e}"))?;
     let shared: ZipBytes = Arc::from(bytes.into_boxed_slice());
-    guard.insert(key, Arc::clone(&shared));
+    let cache = ZIP_BYTES_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_ZIP_BYTES_CACHE_ITEMS)));
+    cache
+        .lock()
+        .map_err(|_| "zip cache lock poisoned".to_string())?
+        .insert(key, Arc::clone(&shared));
     Ok(shared)
 }
 

@@ -8,14 +8,12 @@
     items,
     recents = [],
     selectedLocal = "",
-    showTocHeader = true,
     onOpen,
     onOpenRecent,
   }: {
     items: ContentItem[];
     recents?: RecentViewItem[];
     selectedLocal?: string;
-    showTocHeader?: boolean;
     onOpen: (local: string) => void;
     onOpenRecent: (item: RecentViewItem) => void;
   } = $props();
@@ -45,13 +43,7 @@
   }
 </script>
 
-<section class="panel" class:without-header={!showTocHeader} class:has-recents={recentItems.length > 0}>
-  {#if showTocHeader}
-    <div class="section-heading">
-      <SectionHeader title="목차" class="toc-title" />
-      <span class="item-count" aria-label={`목차 ${items.length}개`}>{items.length}</span>
-    </div>
-  {/if}
+<section class="panel" class:has-recents={recentItems.length > 0}>
   <div class="entry-list">
     {#if items.length}
       <ul>
@@ -100,22 +92,14 @@
     min-height: 0;
     height: 100%;
     display: grid;
-    grid-template-rows: auto minmax(0, 1.35fr) auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
     gap: 9px;
     padding: 13px 12px 14px;
     box-sizing: border-box;
   }
 
-  .panel.without-header {
+  .panel.has-recents {
     grid-template-rows: minmax(0, 1.35fr) auto minmax(0, 1fr);
-  }
-
-  .panel:not(.has-recents) {
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-  }
-
-  .panel.without-header:not(.has-recents) {
-    grid-template-rows: minmax(0, 1fr) auto auto;
   }
 
   .section-heading {
@@ -135,10 +119,6 @@
     padding: 2px 6px;
     border-radius: var(--radius-full);
     background: var(--color-surface-hover);
-  }
-
-  :global(.toc-title) {
-    padding: 0;
   }
 
   :global(.recent-head) {

@@ -1,5 +1,23 @@
 //! Small in-memory caches for ZIP and CHM data.
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::{Arc, Mutex, OnceLock};
+
+/// Per-key slots, so work for one key can be serialized without blocking other keys.
+pub(crate) type KeyedSlots<T> = OnceLock<Mutex<BTreeMap<String, Arc<Mutex<T>>>>>;
+
+/// Return the slot for `key`, creating it on first use.
+///
+/// # Errors
+///
+/// Returns an error when the slot map mutex is poisoned.
+pub(crate) fn keyed_slot<T: Default>(
+    slots: &KeyedSlots<T>,
+    key: &str,
+) -> Result<Arc<Mutex<T>>, String> {
+    let map = slots.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let mut guard = map.lock().map_err(|_| "keyed slot map poisoned".to_string())?;
+    Ok(guard.entry(key.to_string()).or_default().clone())
+}
 
 pub(crate) struct BoundedCache<V> {
     values: HashMap<String, V>,

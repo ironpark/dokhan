@@ -4,6 +4,7 @@
   import Input from "$lib/components/ui/Input.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
+  import { SEARCH_RESULT_LIMIT } from "$lib/stores/dictionaryStore.svelte";
 
   let {
     query,
@@ -143,7 +144,7 @@
       </div>
     {/if}
     {#if !loading && rows.length > 0 && hasCommittedCurrentQuery}
-      <p class="result-summary" role="status">{rows.length >= 200 ? '상위 200개 검색 결과' : `검색 결과 ${rows.length}개`}</p>
+      <p class="result-summary" role="status">{rows.length >= SEARCH_RESULT_LIMIT ? `상위 ${SEARCH_RESULT_LIMIT}개 검색 결과` : `검색 결과 ${rows.length}개`}</p>
     {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>

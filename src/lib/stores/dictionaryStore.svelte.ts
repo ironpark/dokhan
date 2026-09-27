@@ -39,7 +39,8 @@ import type {
 
 const BUILD_POLL_MS = 80;
 const INDEX_DEBOUNCE_MS = 120;
-const INDEX_PAGE_LIMIT = 500;
+export const INDEX_PAGE_LIMIT = 500;
+export const SEARCH_RESULT_LIMIT = 200;
 
 function toErrorMessage(errorValue: unknown): string {
   return typeof errorValue === 'string' ? errorValue : String(errorValue);
@@ -160,8 +161,6 @@ export function createDictionaryStore(): DictionaryStore {
   let bootBusyCount = 0;
   let searchBusyCount = 0;
   let detailBusyCount = 0;
-  let searchBusyGeneration = 0;
-  let detailBusyGeneration = 0;
   let lastRetryAction: (() => Promise<void>) | null = null;
 
   const libraryState: LibraryState = createLibraryState(() => persistPrefs());
@@ -193,17 +192,13 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   function beginBusy(kind: 'boot' | 'search' | 'detail') {
-    const generation = kind === 'search' ? searchBusyGeneration : detailBusyGeneration;
     if (kind === 'boot') bootBusyCount += 1;
     if (kind === 'search') searchBusyCount += 1;
     if (kind === 'detail') detailBusyCount += 1;
     syncLoadingState();
-    return generation;
   }
 
-  function endBusy(kind: 'boot' | 'search' | 'detail', generation = 0) {
-    if (kind === 'search' && generation !== searchBusyGeneration) return;
-    if (kind === 'detail' && generation !== detailBusyGeneration) return;
+  function endBusy(kind: 'boot' | 'search' | 'detail') {
     if (kind === 'boot') bootBusyCount = Math.max(0, bootBusyCount - 1);
     if (kind === 'search') searchBusyCount = Math.max(0, searchBusyCount - 1);
     if (kind === 'detail') detailBusyCount = Math.max(0, detailBusyCount - 1);
@@ -225,20 +220,34 @@ export function createDictionaryStore(): DictionaryStore {
     detailState.clearSelection();
   }
 
+  function startRequest(kind: 'search' | 'detail'): number {
+    if (kind === 'search') {
+      invalidateSearchRequests();
+      return searchRequestSeq;
+    }
+    invalidateDetailRequests();
+    return detailRequestSeq;
+  }
+
+  function isCurrentRequest(kind: 'search' | 'detail', requestId: number): boolean {
+    return requestId === (kind === 'search' ? searchRequestSeq : detailRequestSeq);
+  }
+
   async function withBusy<T>(
     kind: 'search' | 'detail',
-    task: () => Promise<T>,
-    isCurrent: () => boolean = () => true
+    requestId: number,
+    task: () => Promise<T>
   ): Promise<T | undefined> {
-    const generation = beginBusy(kind);
+    beginBusy(kind);
     error = '';
     try {
       return await task();
     } catch (e) {
-      if (isCurrent()) error = toErrorMessage(e);
+      if (isCurrentRequest(kind, requestId)) error = toErrorMessage(e);
       return undefined;
     } finally {
-      endBusy(kind, generation);
+      // Invalidation already reset the busy count for superseded requests.
+      if (isCurrentRequest(kind, requestId)) endBusy(kind);
     }
   }
 
@@ -285,14 +294,12 @@ export function createDictionaryStore(): DictionaryStore {
 
   function invalidateSearchRequests() {
     searchRequestSeq += 1;
-    searchBusyGeneration += 1;
     searchBusyCount = 0;
     syncLoadingState();
   }
 
   function invalidateDetailRequests() {
     detailRequestSeq += 1;
-    detailBusyGeneration += 1;
     detailBusyCount = 0;
     syncLoadingState();
   }
@@ -320,26 +327,22 @@ export function createDictionaryStore(): DictionaryStore {
 
   async function runSearch(rawQuery: string, recordRecent: boolean) {
     const searchTerm = rawQuery.trim();
+    const requestId = startRequest('search');
     if (!searchTerm) {
-      invalidateSearchRequests();
       searchIndexState.clearSearch();
       return;
     }
-    invalidateSearchRequests();
     searchIndexState.setCommittedSearchQuery(searchTerm);
     searchIndexState.setSearchRows([]);
-    const requestId = searchRequestSeq;
     const activeZipPath = zipPath;
     setRetryAction(async () => {
       searchIndexState.setSearchQuery(searchTerm);
       await runSearch(searchTerm, false);
     });
-    const rows = await withBusy(
-      'search',
-      () => searchEntries(activeZipPath, searchTerm, 200),
-      () => requestId === searchRequestSeq
+    const rows = await withBusy('search', requestId, () =>
+      searchEntries(activeZipPath, searchTerm, SEARCH_RESULT_LIMIT)
     );
-    if (rows && requestId === searchRequestSeq) {
+    if (rows && isCurrentRequest('search', requestId)) {
       searchIndexState.setSearchRows(rows);
       if (recordRecent && rows.length > 0) {
         pushRecentSearch(searchTerm);
@@ -538,16 +541,13 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openContent(local, sourcePath);
     });
-    invalidateDetailRequests();
-    const requestId = detailRequestSeq;
+    const requestId = startRequest('detail');
     const activeZipPath = zipPath;
     detailState.beginContentSelection(local);
-    const page = await withBusy(
-      'detail',
-      () => getContentPage(activeZipPath, local, sourcePath),
-      () => requestId === detailRequestSeq
+    const page = await withBusy('detail', requestId, () =>
+      getContentPage(activeZipPath, local, sourcePath)
     );
-    if (requestId !== detailRequestSeq) return;
+    if (!isCurrentRequest('detail', requestId)) return;
     if (!page) {
       clearSelection();
       return;
@@ -568,16 +568,11 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openEntry(id);
     });
-    invalidateDetailRequests();
-    const requestId = detailRequestSeq;
+    const requestId = startRequest('detail');
     const activeZipPath = zipPath;
     detailState.beginEntrySelection(id);
-    const entry = await withBusy(
-      'detail',
-      () => getEntryDetail(activeZipPath, id),
-      () => requestId === detailRequestSeq
-    );
-    if (requestId !== detailRequestSeq) return;
+    const entry = await withBusy('detail', requestId, () => getEntryDetail(activeZipPath, id));
+    if (!isCurrentRequest('detail', requestId)) return;
     if (!entry) {
       clearSelection();
       return;
@@ -719,14 +714,12 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openInlineHref(href, currentSourcePath, currentLocal);
     });
-    invalidateDetailRequests();
-    const requestId = detailRequestSeq;
+    const requestId = startRequest('detail');
     const activeZipPath = zipPath;
-    const target = await withBusy('detail', () =>
-      resolveLinkTarget(activeZipPath, href, currentSourcePath, currentLocal),
-      () => requestId === detailRequestSeq
+    const target = await withBusy('detail', requestId, () =>
+      resolveLinkTarget(activeZipPath, href, currentSourcePath, currentLocal)
     );
-    if (!target || requestId !== detailRequestSeq) return;
+    if (!target || !isCurrentRequest('detail', requestId)) return;
     if (target.kind === 'content') {
       await openContent(target.local, target.sourcePath);
       return;

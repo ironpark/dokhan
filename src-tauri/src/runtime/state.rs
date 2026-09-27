@@ -9,6 +9,7 @@ use crate::app::model::{
     RuntimeIndex, RuntimeSource,
 };
 use crate::resolve_runtime_source;
+use crate::runtime::cache::{keyed_slot, KeyedSlots};
 use crate::runtime::search::{build_entry_search_keys, warm_search_index};
 use crate::runtime::storage::{
     load_runtime_cache, remember_failed_managed_zip, remember_successful_managed_zip,
@@ -19,7 +20,7 @@ use crate::runtime::zip::{
 };
 
 static RUNTIME_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<RuntimeIndex>>>> = OnceLock::new();
-static RUNTIME_BUILD_LOCKS: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+static RUNTIME_BUILD_LOCKS: KeyedSlots<()> = OnceLock::new();
 static BUILD_STATUS: OnceLock<Mutex<BTreeMap<String, BuildStatus>>> = OnceLock::new();
 
 /// Human-readable source label exposed in API summaries.
@@ -123,16 +124,7 @@ fn get_or_build_runtime(
     source: &RuntimeSource,
     key: &str,
 ) -> Result<Arc<RuntimeIndex>, String> {
-    let locks = RUNTIME_BUILD_LOCKS.get_or_init(|| Mutex::new(BTreeMap::new()));
-    let source_lock = {
-        let mut guard = locks
-            .lock()
-            .map_err(|_| "runtime build locks poisoned".to_string())?;
-        guard
-            .entry(key.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    };
+    let source_lock = keyed_slot(&RUNTIME_BUILD_LOCKS, key)?;
     let _guard = source_lock
         .lock()
         .map_err(|_| "runtime build lock poisoned".to_string())?;

@@ -33,5 +33,7 @@
   {fullWidth}
   {scrollable}
   {animatedIndicator}
+  panelId="dictionary-tab-panel"
+  ariaLabel="사전 탭"
   onChange={(id) => onChange(id as Tab)}
 />

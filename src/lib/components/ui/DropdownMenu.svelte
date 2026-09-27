@@ -1,13 +1,16 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import { nextRovingIndex } from "$lib/utils/rovingFocus";
 
   let {
     label,
+    ariaLabel = label,
     options,
     onSelect,
     class: className = "",
   }: {
     label: string;
+    ariaLabel?: string;
     options: Array<{ id: string; label: string; active?: boolean }>;
     onSelect: (id: string) => void;
     class?: string;
@@ -30,9 +33,13 @@
     open = true;
     await tick();
     if (!open) return;
-    const items = menuEl?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']");
+    const items = menuItems();
     const target = focusLast ? items?.[items.length - 1] : items?.[0];
     target?.focus();
+  }
+
+  function menuItems() {
+    return menuEl?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']");
   }
 
   function close(restoreFocus = false) {
@@ -76,26 +83,11 @@
       return;
     }
 
-    const items = menuEl?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']");
+    const items = menuItems();
     if (!items?.length) return;
     const index = Array.from(items).indexOf(document.activeElement as HTMLButtonElement);
-    let nextIndex: number;
-    switch (event.key) {
-      case "ArrowDown":
-        nextIndex = (index + 1) % items.length;
-        break;
-      case "ArrowUp":
-        nextIndex = (index - 1 + items.length) % items.length;
-        break;
-      case "Home":
-        nextIndex = 0;
-        break;
-      case "End":
-        nextIndex = items.length - 1;
-        break;
-      default:
-        return;
-    }
+    const nextIndex = nextRovingIndex(event.key, index, items.length, "vertical");
+    if (nextIndex === null) return;
     event.preventDefault();
     items[nextIndex].focus();
   }
@@ -117,7 +109,7 @@
     class="inline-flex min-h-[32px] min-w-[52px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] px-2 text-[var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
     aria-haspopup="menu"
     aria-expanded={open}
-    aria-label={`책갈피 폴더 선택, 현재 ${label}`}
+    aria-label={ariaLabel}
     onclick={toggle}
     onkeydown={handleTriggerKeydown}
   >

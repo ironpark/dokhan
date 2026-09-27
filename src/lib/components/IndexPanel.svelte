@@ -4,6 +4,7 @@
   import Input from "$lib/components/ui/Input.svelte";
   import ListItem from "$lib/components/ui/ListItem.svelte";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
+  import { INDEX_PAGE_LIMIT } from "$lib/stores/dictionaryStore.svelte";
 
   let {
     query,
@@ -33,7 +34,7 @@
   });
 
   let lastRows: DictionaryIndexEntry[] | null = null;
-  let lastVirtualizerCount = $state(-1);
+  let lastVirtualizerCount = -1;
   let highlightCacheToken = $state("");
   const highlightSegmentCache = new Map<string, Segment[]>();
 
@@ -155,13 +156,13 @@
       clearable={true}
       placeholder="색인 검색 (예: hnd, ab)"
     />
-    {#if !loading && !query.trim() && rows.length >= 500}
+    {#if !loading && !query.trim() && rows.length >= INDEX_PAGE_LIMIT}
       <p class="index-limit-notice" role="status">
-        최대 500개를 표시합니다. 단어를 입력하면 전체 색인에서 찾습니다.
+        최대 {INDEX_PAGE_LIMIT}개를 표시합니다. 단어를 입력하면 전체 색인에서 찾습니다.
       </p>
     {/if}
     {#if !loading && query.trim() && rows.length > 0}
-      <p class="index-result-summary" role="status">{rows.length >= 500 ? '상위 500개 색인 항목' : `색인 항목 ${rows.length}개`}</p>
+      <p class="index-result-summary" role="status">{rows.length >= INDEX_PAGE_LIMIT ? `상위 ${INDEX_PAGE_LIMIT}개 색인 항목` : `색인 항목 ${rows.length}개`}</p>
     {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>

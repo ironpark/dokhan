@@ -16,26 +16,23 @@
 
   const percent = $derived(progressPercent(progress));
 
+  const PHASES: Record<string, { label: string; message?: string }> = {
+    'source-prepare': { label: 'ZIP 파일 준비', message: '선택한 ZIP 파일을 준비하고 있습니다.' },
+    scan: { label: '데이터 스캔', message: '사전 파일을 확인하고 있습니다.' },
+    parse: { label: '사전 파싱', message: '표제어와 본문을 분석하고 있습니다.' },
+    'search-index': { label: '검색 인덱스', message: '검색 기능을 준비하고 있습니다.' },
+    cache: { label: '저장된 데이터 불러오기', message: '저장된 사전 데이터를 불러오고 있습니다.' },
+    start: { label: '사전 준비', message: '사전 데이터를 준비하고 있습니다.' },
+    done: { label: '완료' },
+    error: { label: '오류' }
+  };
+
   function phaseLabel(phase: string): string {
-    if (phase === 'scan') return '데이터 스캔';
-    if (phase === 'parse') return '사전 파싱';
-    if (phase === 'search-index') return '검색 인덱스';
-    if (phase === 'source-prepare') return 'ZIP 파일 준비';
-    if (phase === 'start') return '사전 준비';
-    if (phase === 'cache') return '저장된 데이터 불러오기';
-    if (phase === 'done') return '완료';
-    if (phase === 'error') return '오류';
-    return phase;
+    return PHASES[phase]?.label ?? phase;
   }
 
   function progressMessage(p: BuildProgress): string {
-    if (p.phase === 'source-prepare') return '선택한 ZIP 파일을 준비하고 있습니다.';
-    if (p.phase === 'scan') return '사전 파일을 확인하고 있습니다.';
-    if (p.phase === 'parse') return '표제어와 본문을 분석하고 있습니다.';
-    if (p.phase === 'search-index') return '검색 기능을 준비하고 있습니다.';
-    if (p.phase === 'cache') return '저장된 사전 데이터를 불러오고 있습니다.';
-    if (p.phase === 'start') return '사전 데이터를 준비하고 있습니다.';
-    return p.message;
+    return PHASES[p.phase]?.message ?? p.message;
   }
 </script>
 
@@ -74,7 +71,6 @@
     box-sizing: border-box;
     background: var(--color-overlay);
     backdrop-filter: blur(3px);
-    pointer-events: auto;
   }
 
   .progress-panel {

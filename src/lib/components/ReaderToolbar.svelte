@@ -86,6 +86,8 @@
     onReaderLineHeightChange("normal");
     onReaderWidthChange("normal");
   }
+
+  const markerActive = $derived(markerPreprocessEnabled && preprocessEnabled);
 </script>
 
 <div class="doc-sticky-shell" class:compact={isScrolled}>
@@ -211,12 +213,12 @@
             type="button"
             size="sm"
             class="toolbar-action"
-            aria-pressed={markerPreprocessEnabled && preprocessEnabled}
-            variant={markerPreprocessEnabled && preprocessEnabled ? "toolbar-pill-active" : "toolbar-pill"}
+            aria-pressed={markerActive}
+            variant={markerActive ? "toolbar-pill-active" : "toolbar-pill"}
             onclick={onToggleMarkerPreprocess}
             disabled={!preprocessEnabled}
           >
-            표기 설명 {markerPreprocessEnabled && preprocessEnabled ? "켬" : "끔"}
+            표기 설명 {markerActive ? "켬" : "끔"}
           </Button>
         </div>
       </div>

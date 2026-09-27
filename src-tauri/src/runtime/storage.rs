@@ -90,19 +90,24 @@ fn managed_zip_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+fn has_zip_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+}
+
+/// `root` must already be canonical.
+fn is_zip_file_in_root(root: &Path, path: &Path) -> bool {
+    path.is_file()
+        && has_zip_extension(path)
+        && path
+            .canonicalize()
+            .is_ok_and(|file| file.parent() == Some(root))
+}
+
 fn is_managed_zip_file(dir: &Path, path: &Path) -> bool {
-    if !path.is_file()
-        || !path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
-    {
-        return false;
-    }
-    match (dir.canonicalize(), path.canonicalize()) {
-        (Ok(root), Ok(file)) => file.parent() == Some(root.as_path()),
-        _ => false,
-    }
+    dir.canonicalize()
+        .is_ok_and(|root| is_zip_file_in_root(&root, path))
 }
 
 fn is_managed_zip_name(name: &str) -> bool {
@@ -110,10 +115,7 @@ fn is_managed_zip_name(name: &str) -> bool {
         && !name.contains('/')
         && !name.contains('\\')
         && Path::new(name).file_name().and_then(|value| value.to_str()) == Some(name)
-        && Path::new(name)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+        && has_zip_extension(Path::new(name))
 }
 
 fn failed_managed_zip_names(dir: &Path) -> BTreeSet<String> {
@@ -145,10 +147,13 @@ fn latest_managed_zip_in_dir(dir: &Path) -> Result<Option<PathBuf>, String> {
     let failed = failed_managed_zip_names(dir);
 
     let iter = fs::read_dir(dir).map_err(|e| format!("failed to read managed zip dir: {e}"))?;
+    let Ok(root) = dir.canonicalize() else {
+        return Ok(None);
+    };
     for entry in iter {
         let entry = entry.map_err(|e| format!("failed to read managed zip entry: {e}"))?;
         let path = entry.path();
-        if !is_managed_zip_file(dir, &path)
+        if !is_zip_file_in_root(&root, &path)
             || path
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -200,9 +205,14 @@ pub(crate) fn remember_successful_managed_zip(
     remember_successful_zip_in_dir(&dir, path)
 }
 
-fn remember_successful_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String> {
+/// Validate a managed ZIP and update its persisted state under the state write lock.
+fn with_managed_zip_state(
+    dir: &Path,
+    path: &Path,
+    update: impl FnOnce(&str, &mut BTreeSet<String>) -> Result<(), String>,
+) -> Result<(), String> {
     if !is_managed_zip_file(dir, path) {
-        return Err("successful ZIP is not in the managed ZIP directory".to_string());
+        return Err("ZIP is not in the managed ZIP directory".to_string());
     }
     let name = path
         .file_name()
@@ -213,10 +223,21 @@ fn remember_successful_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String>
         .lock()
         .map_err(|_| "managed ZIP state lock poisoned".to_string())?;
     let mut failed = failed_managed_zip_names(dir);
-    if failed.remove(name) {
-        save_failed_managed_zip_names(dir, &failed)?;
-    }
-    write_atomic(&dir.join(LAST_SUCCESSFUL_ZIP_FILE), name.as_bytes())
+    update(name, &mut failed)
+}
+
+fn remember_successful_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String> {
+    with_managed_zip_state(dir, path, |name, failed| {
+        if failed.remove(name) {
+            save_failed_managed_zip_names(dir, failed)?;
+        }
+        let pointer = dir.join(LAST_SUCCESSFUL_ZIP_FILE);
+        // Warm cache loads call this on every boot; skip the rewrite when nothing changed.
+        if fs::read_to_string(&pointer).is_ok_and(|current| current.trim() == name) {
+            return Ok(());
+        }
+        write_atomic(&pointer, name.as_bytes())
+    })
 }
 
 /// Exclude a failed managed ZIP from future automatic selection.
@@ -236,22 +257,12 @@ pub(crate) fn remember_failed_managed_zip(
 }
 
 fn remember_failed_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String> {
-    if !is_managed_zip_file(dir, path) {
-        return Err("failed ZIP is not in the managed ZIP directory".to_string());
-    }
-    let name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| "managed ZIP filename is not valid UTF-8".to_string())?;
-    let lock = MANAGED_ZIP_STATE_WRITE_LOCK.get_or_init(|| Mutex::new(()));
-    let _guard = lock
-        .lock()
-        .map_err(|_| "managed ZIP state lock poisoned".to_string())?;
-    let mut failed = failed_managed_zip_names(dir);
-    if failed.insert(name.to_string()) {
-        save_failed_managed_zip_names(dir, &failed)?;
-    }
-    Ok(())
+    with_managed_zip_state(dir, path, |name, failed| {
+        if failed.insert(name.to_string()) {
+            save_failed_managed_zip_names(dir, failed)?;
+        }
+        Ok(())
+    })
 }
 
 fn runtime_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {

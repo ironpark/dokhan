@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount, tick } from "svelte";
     import { isTauri } from "@tauri-apps/api/core";
+    import ChevronRight from "@lucide/svelte/icons/chevron-right";
+    import Search from "@lucide/svelte/icons/search";
     import type { DictionaryStore } from "$lib/stores/dictionaryStore.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
@@ -11,7 +13,10 @@
     let { dictionaryStore }: { dictionaryStore: DictionaryStore } = $props();
 
     let searchPanelHost = $state<HTMLElement | null>(null);
-    let showAllContents = $state(false);
+    const inTauri = isTauri();
+    // Expansion is tied to the ZIP it was opened for, so switching sources collapses it.
+    let expandedContentsZip = $state<string | null | undefined>(undefined);
+    let showAllContents = $derived(expandedContentsZip === dictionaryStore.zipPath);
     let showReader = $derived(
         dictionaryStore.selectedEntryId !== null || !!dictionaryStore.selectedContentLocal,
     );
@@ -25,11 +30,10 @@
         "본문을 불러오는 중",
     );
     let readerHistoryArmed = false;
-    let contentsZipPath: string | null = null;
 
     function handleBack() {
         if (!showReader) return;
-        if (isTauri()) dictionaryStore.closeDetail();
+        if (inTauri) dictionaryStore.closeDetail();
         else history.back();
     }
 
@@ -40,7 +44,7 @@
     }
 
     onMount(() => {
-        if (isTauri()) return;
+        if (inTauri) return;
         const onPopState = () => {
             if (dictionaryStore.selectedEntryId !== null || dictionaryStore.selectedContentLocal) {
                 dictionaryStore.closeDetail();
@@ -57,20 +61,13 @@
     });
 
     $effect(() => {
-        if (!isTauri() && showReader && !readerHistoryArmed) {
+        if (!inTauri && showReader && !readerHistoryArmed) {
             history.pushState({ dokhanReader: true }, "");
             readerHistoryArmed = true;
             return;
         }
         if (!showReader) {
             readerHistoryArmed = false;
-        }
-    });
-
-    $effect(() => {
-        if (dictionaryStore.zipPath !== contentsZipPath) {
-            contentsZipPath = dictionaryStore.zipPath;
-            showAllContents = false;
         }
     });
 </script>
@@ -155,9 +152,9 @@
                         <p>단어를 검색하거나 목차에서 내용을 살펴보세요.</p>
                     </div>
                     <button type="button" class="search-launch" onclick={openSearch}>
-                        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                        <Search aria-hidden="true" size={21} />
                         <span>독일어·한국어 검색</span>
-                        <svg class="launch-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                        <ChevronRight class="launch-arrow" aria-hidden="true" size={18} />
                     </button>
 
                     {#if recentItems.length}
@@ -171,7 +168,7 @@
                                     <li>
                                         <button type="button" class="home-list-button" onclick={() => dictionaryStore.openRecentView(item)}>
                                             <span class="list-copy"><strong>{item.label}</strong><small>{item.kind === "entry" ? "표제어" : "목차"}</small></span>
-                                            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                                            <ChevronRight aria-hidden="true" size={18} />
                                         </button>
                                     </li>
                                 {/each}
@@ -190,13 +187,13 @@
                                     <li>
                                         <button type="button" class="home-list-button" onclick={() => dictionaryStore.openContent(item.local)}>
                                             <span class="list-copy"><strong>{item.title}</strong></span>
-                                            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                                            <ChevronRight aria-hidden="true" size={18} />
                                         </button>
                                     </li>
                                 {/each}
                             </ul>
                             {#if dictionaryStore.contents.length > 12}
-                                <button type="button" class="more-contents" aria-expanded={showAllContents} onclick={() => showAllContents = !showAllContents}>
+                                <button type="button" class="more-contents" aria-expanded={showAllContents} onclick={() => (expandedContentsZip = showAllContents ? undefined : dictionaryStore.zipPath)}>
                                     {showAllContents ? "목차 접기" : `목차 전체 보기 (${dictionaryStore.contents.length}개)`}
                                 </button>
                             {/if}
@@ -633,12 +630,12 @@
         touch-action: manipulation;
     }
 
-    .search-launch > svg:first-child {
+    .search-launch > :global(svg:first-child) {
         color: var(--color-accent);
         flex: none;
     }
 
-    .search-launch .launch-arrow {
+    .search-launch > :global(.launch-arrow) {
         margin-left: auto;
         color: var(--color-text-muted);
         flex: none;
@@ -709,7 +706,7 @@
         background: var(--color-surface-hover);
     }
 
-    .home-list-button > svg {
+    .home-list-button > :global(svg) {
         flex: none;
         color: var(--color-text-muted);
     }

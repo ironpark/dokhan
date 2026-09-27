@@ -1,5 +1,6 @@
 <script lang="ts">
   import TabItem from "$lib/components/ui/tabs/TabItem.svelte";
+  import { nextRovingIndex } from "$lib/utils/rovingFocus";
 
   let {
     items,
@@ -9,7 +10,8 @@
     fullWidth = true,
     scrollable = false,
     animatedIndicator = true,
-    panelId = "dictionary-tab-panel",
+    panelId,
+    ariaLabel,
     class: className = "",
   }: {
     items: Array<{ id: string; label: string }>;
@@ -19,7 +21,8 @@
     fullWidth?: boolean;
     scrollable?: boolean;
     animatedIndicator?: boolean;
-    panelId?: string;
+    panelId: string;
+    ariaLabel: string;
     class?: string;
   } = $props();
 
@@ -28,25 +31,10 @@
 
   function handleNavigate(event: KeyboardEvent, id: string) {
     const index = items.findIndex((item) => item.id === id);
-    if (index < 0 || !items.length) return;
+    if (index < 0) return;
 
-    let nextIndex: number;
-    switch (event.key) {
-      case "ArrowRight":
-        nextIndex = (index + 1) % items.length;
-        break;
-      case "ArrowLeft":
-        nextIndex = (index - 1 + items.length) % items.length;
-        break;
-      case "Home":
-        nextIndex = 0;
-        break;
-      case "End":
-        nextIndex = items.length - 1;
-        break;
-      default:
-        return;
-    }
+    const nextIndex = nextRovingIndex(event.key, index, items.length, "horizontal");
+    if (nextIndex === null) return;
 
     event.preventDefault();
     const currentTab = event.currentTarget as HTMLButtonElement;
@@ -68,7 +56,7 @@
   class:full-width={fullWidth}
   class:scrollable={scrollable}
   role="tablist"
-  aria-label="사전 탭"
+  aria-label={ariaLabel}
   style={`--tab-count: ${Math.max(1, items.length)}; --tab-active-index: ${activeIndex};`}
 >
   {#if showIndicator}

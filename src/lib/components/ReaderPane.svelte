@@ -153,11 +153,12 @@
     isScrolled = target.scrollTop > 160;
   }
 
+  function scrollBehavior(): ScrollBehavior {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  }
+
   function returnToTop() {
-    readerEl?.scrollTo({
-      top: 0,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
+    readerEl?.scrollTo({ top: 0, behavior: scrollBehavior() });
   }
 
   function escapeRegex(text: string): string {
@@ -265,7 +266,7 @@
           : node;
         if (destination) {
           destination.scrollIntoView({
-            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+            behavior: scrollBehavior(),
             block: "start",
           });
         } else {
@@ -301,7 +302,7 @@
     let context = initial;
     let revision = 0;
     let lastStructureSignature = "";
-    let lastHighlightSignature = "";
+    let lastHighlightQuery: string | null = null;
     let lastHtml = "";
     const activeObjectUrls = new Set<string>();
 
@@ -365,18 +366,8 @@
       return [
         snapshot.sourcePath ?? "",
         snapshot.local ?? "",
-        String(snapshot.html.length),
         snapshot.preprocessEnabled ? "1" : "0",
         snapshot.markerPreprocessEnabled ? "1" : "0",
-      ].join("\u0001");
-    }
-
-    function computeHighlightSignature(snapshot: RenderContext): string {
-      return [
-        snapshot.sourcePath ?? "",
-        snapshot.local ?? "",
-        String(snapshot.html.length),
-        snapshot.highlightQuery,
       ].join("\u0001");
     }
 
@@ -391,11 +382,9 @@
     function scheduleDecorations() {
       const snapshot = { ...context };
       const nextStructureSignature = computeStructureSignature(snapshot);
-      const nextHighlightSignature = computeHighlightSignature(snapshot);
-      const htmlChanged = snapshot.html !== lastHtml;
-      const needsStructureWork = htmlChanged || nextStructureSignature !== lastStructureSignature;
-      const needsHighlightWork = htmlChanged || nextHighlightSignature !== lastHighlightSignature;
-      if (!needsStructureWork && !needsHighlightWork) return;
+      const needsStructureWork =
+        snapshot.html !== lastHtml || nextStructureSignature !== lastStructureSignature;
+      if (!needsStructureWork && snapshot.highlightQuery === lastHighlightQuery) return;
       const currentRevision = ++revision;
       queueMicrotask(async () => {
         if (currentRevision !== revision || !node.isConnected) return;
@@ -415,22 +404,18 @@
             }
           }
         }
-        if (needsHighlightWork || needsStructureWork) {
-          if (currentRevision !== revision || !node.isConnected) return;
-          try {
-            applyHighlights(node, snapshot.highlightQuery);
-          } catch {
-            clearHighlights(node);
-          }
+        if (currentRevision !== revision || !node.isConnected) return;
+        try {
+          applyHighlights(node, snapshot.highlightQuery);
+        } catch {
+          clearHighlights(node);
         }
         lastStructureSignature = nextStructureSignature;
-        lastHighlightSignature = nextHighlightSignature;
+        lastHighlightQuery = snapshot.highlightQuery;
         lastHtml = snapshot.html;
-        if (needsStructureWork || needsHighlightWork) {
-          void hydrateImages(currentRevision, snapshot).catch(() => {
-            // Keep rendering stable even if media resolution fails.
-          });
-        }
+        void hydrateImages(currentRevision, snapshot).catch(() => {
+          // Keep rendering stable even if media resolution fails.
+        });
       });
     }
 
