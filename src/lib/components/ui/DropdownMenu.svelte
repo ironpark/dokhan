@@ -106,7 +106,7 @@
   <button
     bind:this={triggerEl}
     type="button"
-    class="inline-flex min-h-[32px] min-w-[52px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] px-2 text-[var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
+    class="inline-flex min-h-[32px] min-w-[52px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[length:var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
     aria-haspopup="menu"
     aria-expanded={open}
     aria-label={ariaLabel}
@@ -119,7 +119,7 @@
   {#if open}
     <div
       bind:this={menuEl}
-      class="absolute right-0 top-[calc(100%+4px)] z-24 grid min-w-[108px] gap-[2px] rounded-[8px] border border-[var(--color-dokhan-border)] bg-[var(--color-surface-elevated)] p-1 shadow-[0_8px_18px_rgba(0,0,0,0.14)] animate-[menuIn_var(--motion-enter)]"
+      class="absolute right-0 top-[calc(100%+4px)] z-24 grid min-w-[108px] gap-[2px] rounded-[8px] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-1 shadow-[var(--shadow-popover)] animate-[menuIn_var(--motion-enter)]"
       role="menu"
       tabindex="-1"
       onkeydown={handleMenuKeydown}
@@ -129,10 +129,10 @@
           type="button"
           role="menuitemradio"
           aria-checked={!!option.active}
-          class={`cursor-pointer rounded-[6px] border-none bg-transparent px-[6px] py-[5px] text-left text-[var(--font-size-control-xs)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-focus-ring)] ${
+          class={`cursor-pointer rounded-[6px] border-none bg-transparent px-[6px] py-[5px] text-left text-[length:var(--font-size-control-xs)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-focus-ring)] ${
             option.active
-              ? "bg-[color-mix(in_oklab,var(--color-dokhan-accent),white_92%)] text-[var(--color-dokhan-accent)]"
-              : "text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)]"
+              ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+              : "text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)]"
           }`}
           onclick={() => {
             onSelect(option.id);

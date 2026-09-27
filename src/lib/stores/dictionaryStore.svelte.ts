@@ -49,7 +49,7 @@ function toErrorMessage(errorValue: unknown): string {
 function zipDisplayName(path: string | null): string {
   if (!path) return '';
   const filename = path.split(/[\\/]/).pop() ?? path;
-  return filename.replace(/-[0-9a-f]{16}(?=\.zip$)/i, '');
+  return filename.replace(/(-[0-9a-f]{16})?\.zip$/i, '');
 }
 
 export interface DictionaryStore {

@@ -311,7 +311,7 @@
   .recent-list button {
     border: 1px solid var(--color-border);
     border-radius: 999px;
-    background: color-mix(in oklab, var(--color-surface), #f7faff 20%);
+    background: var(--color-surface);
     color: var(--color-text);
     min-height: 34px;
     padding: 6px 12px;

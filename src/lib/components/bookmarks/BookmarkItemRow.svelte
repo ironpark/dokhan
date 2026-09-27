@@ -53,7 +53,7 @@
   li {
     display: grid;
     grid-template-columns: 1fr auto;
-    border-top: 1px solid color-mix(in oklab, var(--color-border), white 10%);
+    border-top: 1px solid color-mix(in oklab, var(--color-border), var(--color-surface) 10%);
     min-height: 42px;
   }
 
@@ -104,7 +104,7 @@
 
   .remove-btn:hover {
     color: var(--color-danger);
-    background: color-mix(in oklab, var(--color-danger), white 93%);
+    background: color-mix(in oklab, var(--color-danger), var(--color-surface) 93%);
   }
 
   .item-btn:focus-visible,

@@ -78,7 +78,7 @@
     border: 1px solid var(--color-border);
     border-radius: 17px;
     background: var(--color-surface);
-    box-shadow: 0 24px 70px rgba(20, 32, 41, 0.18);
+    box-shadow: var(--shadow-lg);
     padding: 22px 24px;
     display: grid;
     gap: 16px;

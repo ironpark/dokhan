@@ -77,7 +77,18 @@
     highlightQuery: string;
     preprocessEnabled: boolean;
     markerPreprocessEnabled: boolean;
+    /** Page title already shown in the toolbar; a matching leading heading is hidden. */
+    title?: string;
   };
+
+  function markDuplicateTitle(root: HTMLElement, title: string | undefined) {
+    const first = root.firstElementChild;
+    if (!title || !first || !/^H[1-3]$/.test(first.tagName)) return;
+    const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
+    if (normalize(first.textContent ?? "") === normalize(title)) {
+      first.classList.add("dict-duplicate-title");
+    }
+  }
 
   const readerLineHeightMap: Record<ReaderLineHeight, string> = {
     tight: "1.55",
@@ -403,6 +414,7 @@
               // Keep rendering stable even if preprocess transformation fails.
             }
           }
+          markDuplicateTitle(node, snapshot.title);
         }
         if (currentRevision !== revision || !node.isConnected) return;
         try {
@@ -659,6 +671,7 @@
             use:decorateRenderedHtml={{
               sourcePath: selectedContent.sourcePath,
               local: selectedContent.local,
+              title: selectedContent.title,
               html: selectedContent.bodyHtml,
               highlightQuery,
               preprocessEnabled,
@@ -824,6 +837,29 @@
     display: block;
     max-width: 100%;
     overflow-x: auto;
+    margin: 0.4em 0 1em;
+    border-collapse: collapse;
+    font-size: 0.94em;
+  }
+
+  .html-rendered :global(th),
+  .html-rendered :global(td) {
+    padding: 0.4em 0.75em;
+    border: 1px solid var(--color-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .html-rendered :global(th) {
+    background: var(--color-surface-soft);
+    color: var(--color-text-muted);
+    font-weight: 650;
+  }
+
+  .html-rendered :global(hr) {
+    margin: 1.4em 0;
+    border: 0;
+    border-top: 1px solid var(--color-border);
   }
 
   .html-rendered :global(ul),
@@ -879,6 +915,40 @@
     font-size: inherit;
   }
 
+  /* Tailwind preflight flattens headings; restore a clear hierarchy for front-matter pages. */
+  .html-rendered :global(h1),
+  .html-rendered :global(h2),
+  .html-rendered :global(h3),
+  .html-rendered :global(h4),
+  .html-rendered :global(h5),
+  .html-rendered :global(h6) {
+    color: var(--color-text);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .html-rendered :global(:is(h1, h2, h3, h4, h5, h6):first-child) {
+    margin-top: 0;
+  }
+
+  .html-rendered :global(.dict-duplicate-title) {
+    display: none;
+  }
+
+  .html-rendered :global(h1) {
+    margin: 1.2em 0 0.6em;
+    font-size: calc(var(--reader-font-size) * 1.45);
+    line-height: 1.3;
+  }
+
+  .html-rendered :global(h2) {
+    margin: 1.5em 0 0.6em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--color-border);
+    font-size: calc(var(--reader-font-size) * 1.28);
+    line-height: 1.32;
+  }
+
   .html-rendered :global(h3) {
     margin: 1.4em 0 0.55em;
     font-size: calc(var(--reader-font-size) * 1.2);
@@ -891,14 +961,21 @@
     line-height: 1.35;
   }
 
+  .html-rendered :global(h5),
+  .html-rendered :global(h6) {
+    margin: 0.8em 0 0.4em;
+    font-size: var(--reader-font-size);
+    line-height: 1.35;
+  }
+
   .html-rendered :global(img) {
     max-width: 100%;
     height: auto;
   }
 
   .html-rendered :global(mark.search-hit) {
-    background: #ffe38f;
-    color: #2b2300;
+    background: var(--color-highlight-bg);
+    color: var(--color-highlight-text);
     padding: 0 2px;
     border-radius: 3px;
   }
@@ -930,14 +1007,14 @@
     width: max-content;
     padding: 7px 9px;
     border-radius: 8px;
-    background: rgba(18, 21, 28, 0.96);
-    color: #f6f8fb;
+    background: var(--color-inverse-bg);
+    color: var(--color-inverse-text);
     font-size: 11px;
     line-height: 1.35;
     font-weight: 500;
     letter-spacing: 0;
     white-space: normal;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-popover);
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
@@ -955,33 +1032,33 @@
   }
 
   .html-rendered :global(span.dict-marker-round.dict-marker-register) {
-    color: #0f5a72;
+    color: var(--color-marker-register);
   }
 
   .html-rendered :global(span.dict-marker-round.dict-marker-region) {
-    color: #2f6a2f;
+    color: var(--color-marker-region);
   }
 
   .html-rendered :global(span.dict-marker-round.dict-marker-time) {
-    color: #8a5a10;
+    color: var(--color-marker-time);
   }
 
   .html-rendered :global(span.dict-marker-round.dict-marker-usage),
   .html-rendered :global(span.dict-marker-square.dict-marker-usage),
   .html-rendered :global(span.dict-marker-square.dict-marker-meaning) {
-    color: #60428a;
+    color: var(--color-marker-usage);
   }
 
   .html-rendered :global(span.dict-marker-square.dict-marker-domain) {
-    color: #4a4a4a;
+    color: var(--color-marker-domain);
   }
 
   .html-rendered :global(span.dict-marker-square.dict-marker-orthography) {
-    color: #0a5f52;
+    color: var(--color-marker-orthography);
   }
 
   .html-rendered :global(span.dict-marker-angle.dict-marker-grammar) {
-    color: #9a4f00;
+    color: var(--color-marker-grammar);
     font-weight: 600;
   }
 

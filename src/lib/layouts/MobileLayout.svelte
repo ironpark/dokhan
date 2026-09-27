@@ -448,7 +448,7 @@
     }
 
     .bottom-nav button:focus-visible {
-        outline: 2px solid color-mix(in oklab, var(--color-accent), white 35%);
+        outline: 2px solid color-mix(in oklab, var(--color-accent), var(--color-surface) 35%);
         outline-offset: -2px;
     }
 

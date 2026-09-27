@@ -185,7 +185,7 @@
         user-select: none;
         padding: 28px;
         box-sizing: border-box;
-        background: radial-gradient(circle at 50% 42%, #f8f8f4 0, var(--color-surface) 65%);
+        background: radial-gradient(circle at 50% 42%, var(--color-surface-soft) 0, var(--color-surface) 65%);
     }
 
     .empty-state-card {

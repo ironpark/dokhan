@@ -200,7 +200,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .recent-btn span {
+  /* Only the label line; meta spans inside <small> keep their subdued style. */
+  .recent-btn > span {
     color: var(--color-text);
     font-size: 13px;
     font-weight: 600;

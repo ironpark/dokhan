@@ -337,7 +337,7 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 22px;
-    box-shadow: 0 18px 54px rgba(24, 43, 55, 0.08);
+    box-shadow: var(--shadow-lg);
     padding: clamp(28px, 5vw, 44px);
     text-align: center;
     transition:
@@ -402,7 +402,7 @@
 
   .drag-over {
     border-color: var(--color-accent);
-    box-shadow: 0 0 0 5px var(--color-accent-soft), 0 18px 54px rgba(24, 43, 55, 0.1);
+    box-shadow: 0 0 0 5px var(--color-accent-soft), var(--shadow-lg);
   }
 
   .entry-footnote {
@@ -423,7 +423,7 @@
     width: min(280px, 100%);
     padding: 12px 20px;
     background: var(--color-accent);
-    color: #fff;
+    color: var(--color-on-accent);
     border: none;
     border-radius: 10px;
     display: inline-flex;

@@ -146,7 +146,7 @@
             type="button"
             size="xs"
             variant="soft"
-            class="text-[var(--font-size-control-sm)] px-[9px] py-[5px] gap-1.5"
+            class="text-[length:var(--font-size-control-sm)] px-[9px] py-[5px] gap-1.5"
             onclick={beginCreateFolder}
           >
             <FolderPlus size={14} />
@@ -171,7 +171,7 @@
     }}
   >
     {#snippet header()}
-      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
+      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
         <FolderPlus size={16} />
         <span>새 폴더 추가</span>
       </h4>
@@ -217,7 +217,7 @@
     }}
   >
     {#snippet header()}
-      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
+      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
         <Pencil size={16} />
         <span>폴더 이름 변경</span>
       </h4>
@@ -364,9 +364,9 @@
   .legacy-notice {
     margin: 0;
     padding: 9px 10px;
-    border: 1px solid color-mix(in oklab, var(--color-accent), white 72%);
+    border: 1px solid color-mix(in oklab, var(--color-accent), var(--color-surface) 72%);
     border-radius: 8px;
-    background: color-mix(in oklab, var(--color-accent), white 94%);
+    background: color-mix(in oklab, var(--color-accent), var(--color-surface) 94%);
     color: var(--color-text-muted);
     font-size: 12px;
     line-height: 1.45;
@@ -395,7 +395,7 @@
 
   :global(.folder-input input:focus-visible) {
     border-color: var(--color-accent);
-    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), white 84%);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent), var(--color-surface) 84%);
   }
 
   .folder-list {
@@ -408,7 +408,7 @@
   }
 
   .folder-card {
-    border: 1px solid color-mix(in oklab, var(--color-border), white 18%);
+    border: 1px solid color-mix(in oklab, var(--color-border), var(--color-surface) 18%);
     border-radius: 11px;
     background: var(--color-surface);
     overflow: hidden;
@@ -416,8 +416,8 @@
   }
 
   .folder-card.active {
-    border-color: color-mix(in oklab, var(--color-accent), white 62%);
-    box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent), white 78%);
+    border-color: color-mix(in oklab, var(--color-accent), var(--color-surface) 62%);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent), var(--color-surface) 78%);
   }
 
   .folder-card-head {
@@ -426,8 +426,8 @@
     justify-content: space-between;
     gap: 8px;
     padding: 5px 8px;
-    background: color-mix(in oklab, var(--color-surface-soft), white 24%);
-    border-bottom: 1px solid color-mix(in oklab, var(--color-border), white 18%);
+    background: color-mix(in oklab, var(--color-surface-soft), var(--color-surface) 24%);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-border), var(--color-surface) 18%);
   }
 
   .folder-toggle {

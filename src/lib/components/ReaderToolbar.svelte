@@ -237,7 +237,7 @@
     margin-bottom: 16px;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
-    box-shadow: 0 5px 14px -14px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-sm);
   }
 
   .doc-header {
@@ -393,7 +393,7 @@
     border: 2px solid var(--color-accent);
     border-radius: 50%;
     background: var(--color-surface);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.16);
+    box-shadow: var(--shadow-sm);
   }
 
   .font-slider::-moz-range-thumb {
@@ -402,7 +402,7 @@
     border: 2px solid var(--color-accent);
     border-radius: 50%;
     background: var(--color-surface);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.16);
+    box-shadow: var(--shadow-sm);
   }
 
   .font-slider:focus-visible {

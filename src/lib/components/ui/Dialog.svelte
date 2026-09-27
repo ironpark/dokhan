@@ -55,7 +55,7 @@
 {#if open}
   <dialog
     bind:this={dialogEl}
-    class={`ui-dialog w-[min(420px,calc(100vw-24px))] max-w-none rounded-[14px] border border-[color-mix(in_oklab,var(--color-dokhan-border),white_12%)] bg-[var(--color-surface-elevated)] p-0 text-[var(--color-dokhan-text)] shadow-[0_16px_40px_rgba(0,0,0,0.2)] z-[1400] animate-[dialogIn_var(--motion-enter)] ${className}`}
+    class={`ui-dialog w-[min(420px,calc(100vw-24px))] max-w-none rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-0 text-[var(--color-text)] shadow-[var(--shadow-md)] z-[1400] animate-[dialogIn_var(--motion-enter)] ${className}`}
     onclose={onDialogClose}
     onclick={onDialogClick}
     aria-label={ariaLabel}
@@ -65,11 +65,11 @@
         <div class="grid gap-1.5">{@render header()}</div>
       {:else if title}
         <div class="grid gap-1.5">
-          <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-dokhan-text)]">
+          <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
             {title}
           </h4>
           {#if description}
-            <p class="m-0 text-[var(--font-size-control-sm)] text-[var(--color-text-muted)]">{description}</p>
+            <p class="m-0 text-[length:var(--font-size-control-sm)] text-[var(--color-text-muted)]">{description}</p>
           {/if}
         </div>
       {/if}

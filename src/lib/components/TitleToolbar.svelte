@@ -1,5 +1,6 @@
 <script lang="ts">
     import BookOpen from "@lucide/svelte/icons/book-open";
+    import FolderOpen from "@lucide/svelte/icons/folder-open";
     import Button from "$lib/components/ui/Button.svelte";
 
     let {
@@ -29,7 +30,10 @@
     </div>
 
     {#if showZipAction}
-        <Button variant="outline" size="sm" class="zip-action" onclick={onPickZip}>사전 변경</Button>
+        <Button variant="toolbar-pill" size="sm" class="zip-action" onclick={onPickZip}>
+            <FolderOpen size={16} aria-hidden="true" />
+            <span>사전 변경</span>
+        </Button>
     {/if}
 </header>
 
@@ -65,7 +69,7 @@
         flex: none;
         display: grid;
         place-items: center;
-        border: 1px solid #cbdfe7;
+        border: 1px solid var(--color-accent-border);
         border-radius: 11px;
         background: var(--color-accent-soft);
         color: var(--color-accent);
@@ -105,16 +109,10 @@
         text-overflow: ellipsis;
     }
 
+    /* Matches the reader toolbar pills so header actions read as one family. */
     .title-toolbar :global(.zip-action) {
-        min-height: 36px;
-        padding-inline: 10px;
-        border-color: var(--color-border-strong);
-        color: var(--color-accent);
-        font-weight: 650;
-    }
-
-    .compact :global(.zip-action) {
         min-height: 34px;
+        font-size: 12px;
     }
 
     @media (max-width: 420px) {

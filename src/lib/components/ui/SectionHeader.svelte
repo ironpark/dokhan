@@ -14,7 +14,7 @@
   const headerClass =
     "m-0 px-[2px] flex items-center justify-between gap-2";
   const titleClass =
-    "m-0 text-[var(--font-size-label-sm)] tracking-[0.05em] uppercase text-[var(--color-text-muted)]";
+    "m-0 text-[length:var(--font-size-label-sm)] tracking-[0.05em] uppercase text-[var(--color-text-muted)]";
   const actionsClass = "inline-flex items-center gap-1.5";
 </script>
 
