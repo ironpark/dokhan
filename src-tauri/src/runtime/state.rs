@@ -133,7 +133,17 @@ fn get_or_build_runtime(
     }
     let runtime = build_runtime_for_source(app, source, key)?;
     cache_put(source, runtime.clone())?;
+    spawn_search_index_worker(app.clone(), source.clone(), runtime.clone());
     Ok(runtime)
+}
+
+/// Prepare full-text search after the runtime becomes available to readers.
+fn spawn_search_index_worker(app: AppHandle, source: RuntimeSource, runtime: Arc<RuntimeIndex>) {
+    std::thread::spawn(move || {
+        if let Err(err) = warm_search_index(&app, &source, &runtime.entries) {
+            eprintln!("failed to prepare search index: {err}");
+        }
+    });
 }
 
 /// Convert runtime snapshot to API summary payload.
@@ -216,7 +226,6 @@ fn build_runtime_for_source(
             st.phase = "cache".to_string();
             st.message = "Loaded runtime cache".to_string();
         });
-        warm_search_index(app, source, &runtime.entries)?;
         return Ok(runtime);
     }
 
@@ -234,11 +243,6 @@ fn build_runtime_for_source(
         }
     };
 
-    let _ = update_build_status(key, |st| {
-        st.phase = "search-index".to_string();
-        st.message = "Building search index".to_string();
-    });
-    warm_search_index(app, source, &runtime.entries)?;
     let _ = save_runtime_cache(
         app,
         source,

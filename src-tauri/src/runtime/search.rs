@@ -25,7 +25,8 @@ static SEARCH_CACHE: KeyedSlots<Option<Arc<TantivySearchIndex>>> = OnceLock::new
 static NORMALIZE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static NORMALIZE_LOOSE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 const NORMALIZE_CACHE_MAX: usize = 65_536;
-const SEARCH_INDEX_WRITER_HEAP_BYTES: usize = 50_000_000;
+// Tantivy splits this total budget across up to eight indexing workers.
+const SEARCH_INDEX_WRITER_HEAP_BYTES: usize = 200_000_000;
 
 const FIELD_ID: &str = "id";
 const FIELD_HEADWORD: &str = "headword";
@@ -83,7 +84,7 @@ fn extract_fields(index: &Index) -> Result<(Field, Field, Field, Field), String>
     Ok((id_field, headword_field, aliases_field, body_field))
 }
 
-fn load_search_index(dir: &Path) -> Result<TantivySearchIndex, String> {
+fn load_search_index(dir: &Path, expected_entries: usize) -> Result<TantivySearchIndex, String> {
     let index = Index::open_in_dir(dir).map_err(|e| format!("tantivy open failed: {e}"))?;
     let (id_field, headword_field, aliases_field, body_field) = extract_fields(&index)?;
     let reader = index
@@ -94,6 +95,12 @@ fn load_search_index(dir: &Path) -> Result<TantivySearchIndex, String> {
     reader
         .reload()
         .map_err(|e| format!("tantivy reader reload failed: {e}"))?;
+    let actual_entries = reader.searcher().num_docs();
+    if actual_entries != expected_entries as u64 {
+        return Err(format!(
+            "tantivy index has {actual_entries} entries, expected {expected_entries}"
+        ));
+    }
 
     Ok(TantivySearchIndex {
         index,
@@ -106,6 +113,15 @@ fn load_search_index(dir: &Path) -> Result<TantivySearchIndex, String> {
 }
 
 fn rebuild_search_index(dir: &Path, entries: &[EntryDetail]) -> Result<TantivySearchIndex, String> {
+    rebuild_search_index_with_config(dir, entries, None, SEARCH_INDEX_WRITER_HEAP_BYTES)
+}
+
+fn rebuild_search_index_with_config(
+    dir: &Path,
+    entries: &[EntryDetail],
+    threads: Option<usize>,
+    heap_bytes: usize,
+) -> Result<TantivySearchIndex, String> {
     if dir.exists() {
         fs::remove_dir_all(dir).map_err(|e| format!("failed to clear search index dir: {e}"))?;
     }
@@ -115,9 +131,11 @@ fn rebuild_search_index(dir: &Path, entries: &[EntryDetail]) -> Result<TantivySe
     let index = Index::create_in_dir(dir, schema).map_err(|e| format!("tantivy create failed: {e}"))?;
     let (id_field, headword_field, aliases_field, body_field) = extract_fields(&index)?;
 
-    let mut writer = index
-        .writer(SEARCH_INDEX_WRITER_HEAP_BYTES)
-        .map_err(|e| format!("tantivy writer init failed: {e}"))?;
+    let mut writer = match threads {
+        Some(count) => index.writer_with_num_threads(count, heap_bytes),
+        None => index.writer(heap_bytes),
+    }
+    .map_err(|e| format!("tantivy writer init failed: {e}"))?;
     for entry in entries {
         let aliases = entry.aliases.join(" ");
         writer.add_document(doc!(
@@ -165,7 +183,7 @@ fn get_or_build_tantivy_index(
     }
 
     let dir = search_index_dir(app, source)?;
-    let built = match load_search_index(&dir) {
+    let built = match load_search_index(&dir, entries.len()) {
         Ok(index) => Arc::new(index),
         Err(_) => Arc::new(rebuild_search_index(&dir, entries)?),
     };
@@ -173,7 +191,7 @@ fn get_or_build_tantivy_index(
     Ok(built)
 }
 
-/// Build and cache Tantivy index for a runtime source eagerly.
+/// Build and cache a Tantivy index for a runtime source.
 ///
 /// # Errors
 ///
@@ -546,10 +564,23 @@ pub(crate) fn get_index_entries_impl(
 }
 
 fn search_entries_linear(query: &str, limit: usize, entries: &[EntryDetail], keys: &[EntrySearchKey]) -> Vec<SearchHit> {
-    let terms = query
-        .split_whitespace()
-        .map(|x| (normalize_search_key(x), normalize_search_key_loose(x)))
-        .collect::<Vec<_>>();
+    let mut terms = Vec::new();
+    for (index, part) in query.split('"').enumerate() {
+        if index % 2 == 1 {
+            let phrase = part.trim();
+            if !phrase.is_empty() {
+                terms.push((normalize_search_key(phrase), normalize_search_key_loose(phrase)));
+            }
+        } else {
+            terms.extend(
+                part.split_whitespace()
+                    .map(|word| (normalize_search_key(word), normalize_search_key_loose(word))),
+            );
+        }
+    }
+    if terms.is_empty() {
+        return Vec::new();
+    }
 
     let mut hits = Vec::<SearchHit>::new();
     for (e, k) in entries.iter().zip(keys.iter()) {
@@ -591,14 +622,27 @@ fn search_entries_linear(query: &str, limit: usize, entries: &[EntryDetail], key
 }
 
 fn search_entries_tantivy(
-    app: &AppHandle,
     source: &RuntimeSource,
     query: &str,
     limit: usize,
     runtime: &RuntimeIndex,
 ) -> Result<Vec<SearchHit>, String> {
-    let idx = get_or_build_tantivy_index(app, source, &runtime.entries)?;
+    let Some(idx) = get_ready_tantivy_index(source)? else {
+        return Err("search index is still building".to_string());
+    };
     query_search_index(&idx, query, limit, runtime)
+}
+
+fn get_ready_tantivy_index(
+    source: &RuntimeSource,
+) -> Result<Option<Arc<TantivySearchIndex>>, String> {
+    let slot = keyed_slot(&SEARCH_CACHE, &source.cache_key())?;
+    let result = match slot.try_lock() {
+        Ok(current) => Ok(current.clone()),
+        Err(std::sync::TryLockError::WouldBlock) => Ok(None),
+        Err(std::sync::TryLockError::Poisoned(_)) => Err("search index lock poisoned".to_string()),
+    };
+    result
 }
 
 fn query_search_index(
@@ -646,7 +690,27 @@ fn query_search_index(
     Ok(out)
 }
 
-/// Execute weighted in-memory search over headword/aliases/body.
+fn search_entries_with_ready_index(
+    source: &RuntimeSource,
+    query: &str,
+    limit: usize,
+    runtime: &RuntimeIndex,
+) -> Vec<SearchHit> {
+    search_entries_tantivy(source, query, limit, runtime).unwrap_or_else(|_| {
+        search_entries_linear(query, limit, &runtime.entries, &runtime.entry_keys)
+    })
+}
+
+fn search_query_requires_tantivy(query: &str) -> bool {
+    query
+        .split_whitespace()
+        .any(|word| matches!(word, "AND" | "OR" | "NOT"))
+        || query
+            .chars()
+            .any(|ch| !ch.is_alphanumeric() && !ch.is_whitespace())
+}
+
+/// Search the ready Tantivy index, using in-memory search while it builds or on error.
 pub(crate) fn search_entries_impl(
     app: &AppHandle,
     query: &str,
@@ -660,25 +724,31 @@ pub(crate) fn search_entries_impl(
     let source = resolve_runtime_source(app, zip_path)?;
     let runtime = get_runtime(app, &source)?;
     let limit = limit.unwrap_or(50).clamp(1, 200);
-    match search_entries_tantivy(app, &source, &q, limit, &runtime) {
-        Ok(v) => Ok(v),
-        Err(_) => Ok(search_entries_linear(
-            &q,
-            limit,
-            &runtime.entries,
-            &runtime.entry_keys,
-        )),
+    if search_query_requires_tantivy(&q) {
+        if let Ok(index) = get_or_build_tantivy_index(app, &source, &runtime.entries) {
+            if let Ok(hits) = query_search_index(&index, &q, limit, &runtime) {
+                return Ok(hits);
+            }
+        }
     }
+    Ok(search_entries_with_ready_index(&source, &q, limit, &runtime))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        build_entry_search_keys, normalize_search_key, normalize_search_key_loose,
-        query_search_index, rebuild_search_index,
+        build_entry_search_keys, get_ready_tantivy_index, load_search_index, normalize_search_key,
+        normalize_search_key_loose, query_search_index, rebuild_search_index,
+        rebuild_search_index_with_config, search_entries_linear,
+        search_entries_with_ready_index, search_query_requires_tantivy, tantivy_schema,
+        SEARCH_CACHE,
     };
-    use crate::app::model::{EntryDetail, RuntimeIndex};
+    use crate::app::model::{EntryDetail, RuntimeIndex, RuntimeSource};
+    use crate::runtime::cache::keyed_slot;
     use std::collections::BTreeMap;
+    use std::path::Path;
+    use std::sync::Arc;
+    use tantivy::Index;
 
     #[test]
     fn normalize_search_key_handles_upper_umlaut() {
@@ -736,5 +806,131 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].id, 1);
         assert_eq!(hits[0].headword, "Apfel");
+        let phrase_hits = query_search_index(&index, "\"Eine Frucht\"", 10, &runtime)
+            .expect("phrase search index");
+        assert_eq!(phrase_hits.len(), 1);
+    }
+
+    #[test]
+    fn search_index_readiness_does_not_wait_for_builder() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let source = RuntimeSource::ZipPath(dir.path().join("unique-test-source.zip"));
+        let slot = keyed_slot(&SEARCH_CACHE, &source.cache_key()).expect("search cache slot");
+        let mut held = slot.lock().expect("search cache lock");
+        assert!(get_ready_tantivy_index(&source).expect("readiness check").is_none());
+        let index_dir = dir.path().join("index");
+        let built = rebuild_search_index(&index_dir, &[]).expect("build empty index");
+        *held = Some(Arc::new(built));
+        drop(held);
+        assert!(get_ready_tantivy_index(&source).expect("readiness check").is_some());
+    }
+
+    #[test]
+    fn search_uses_linear_fallback_before_index_is_ready() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let source = RuntimeSource::ZipPath(dir.path().join("unindexed-source.zip"));
+        let entries = vec![EntryDetail {
+            id: 1,
+            headword: "Apfel".to_string(),
+            aliases: vec![],
+            source_path: "merge01.chm".to_string(),
+            target_local: String::new(),
+            definition_text: "Eine Frucht".to_string(),
+            definition_html: String::new(),
+        }];
+        let runtime = RuntimeIndex {
+            contents: Vec::new(),
+            entry_keys: build_entry_search_keys(&entries),
+            entries,
+            content_pages: BTreeMap::new(),
+        };
+        let hits = search_entries_with_ready_index(&source, "Frucht", 10, &runtime);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, 1);
+        let phrase_hits = search_entries_with_ready_index(&source, "\"Eine Frucht\"", 10, &runtime);
+        assert_eq!(phrase_hits.len(), 1);
+        assert!(search_entries_with_ready_index(&source, "\"Frucht Eine\"", 10, &runtime).is_empty());
+    }
+
+    #[test]
+    fn parser_syntax_waits_for_tantivy() {
+        assert!(!search_query_requires_tantivy("Apfel Birne"));
+        assert!(search_query_requires_tantivy("Apfel OR Birne"));
+        assert!(search_query_requires_tantivy("headword:Apfel"));
+        assert!(search_query_requires_tantivy("\"Eine Frucht\""));
+        assert!(search_query_requires_tantivy("-Apfel"));
+    }
+
+    #[test]
+    fn incomplete_search_index_is_rebuilt_on_next_load() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        Index::create_in_dir(dir.path(), tantivy_schema()).expect("create interrupted index");
+        assert!(load_search_index(dir.path(), 1).is_err());
+        let entry = EntryDetail {
+            id: 1,
+            headword: "Apfel".to_string(),
+            aliases: vec![],
+            source_path: "merge01.chm".to_string(),
+            target_local: String::new(),
+            definition_text: "Eine Frucht".to_string(),
+            definition_html: String::new(),
+        };
+        rebuild_search_index(dir.path(), &[entry]).expect("rebuild interrupted index");
+        assert!(load_search_index(dir.path(), 1).is_ok());
+    }
+
+    /// Run with DOKHAN_TEST_ZIP and --ignored --nocapture to compare writer settings.
+    #[test]
+    #[ignore]
+    fn bench_tantivy_writer_configs() {
+        let configs = [
+            ("auto-50mb", None, 50_000_000),
+            ("four-100mb", Some(4), 100_000_000),
+            ("six-90mb", Some(6), 90_000_000),
+            ("eight-120mb", Some(8), 120_000_000),
+            ("eight-160mb", Some(8), 160_000_000),
+            ("eight-200mb", Some(8), 200_000_000),
+            ("auto-200mb", None, 200_000_000),
+        ];
+        let only = std::env::var("DOKHAN_BENCH_WRITER").ok();
+        let mut configs = configs.into_iter().collect::<Vec<_>>();
+        if std::env::var_os("DOKHAN_BENCH_REVERSE").is_some() {
+            configs.reverse();
+        }
+        let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
+        let runtime = crate::runtime::zip::parse_runtime_from_zip_with_progress(
+            Path::new(&path),
+            None,
+        )
+        .expect("benchmark dictionary should parse");
+        let linear_start = std::time::Instant::now();
+        let linear_hits = search_entries_linear("Apfel", 10, &runtime.entries, &runtime.entry_keys);
+        eprintln!(
+            "Linear search: {:?}, {} sample hits",
+            linear_start.elapsed(),
+            linear_hits.len()
+        );
+        let dir = tempfile::tempdir().expect("temp dir");
+        for (name, threads, heap_bytes) in configs {
+            if only.as_deref().is_some_and(|selected| selected != name) {
+                continue;
+            }
+            let start = std::time::Instant::now();
+            let index = rebuild_search_index_with_config(
+                &dir.path().join(name),
+                &runtime.entries,
+                threads,
+                heap_bytes,
+            )
+            .expect("build search index");
+            let elapsed = start.elapsed();
+            let hits = query_search_index(&index, "Apfel", 10, &runtime)
+                .expect("query search index");
+            eprintln!(
+                "Tantivy writer {name}: {elapsed:?}, {} entries, {} sample hits",
+                runtime.entries.len(),
+                hits.len()
+            );
+        }
     }
 }
