@@ -11,14 +11,17 @@ use tantivy::query::QueryParser;
 use tantivy::schema::{Field, Schema, TantivyDocument, Value, INDEXED, STORED, TEXT};
 use tantivy::{Index, IndexReader, ReloadPolicy};
 
-use crate::app::model::{DictionaryIndexEntry, EntryDetail, EntrySearchKey, SearchHit, TextSpan};
-use crate::app::model::RuntimeSource;
+use crate::app::model::{
+    DictionaryIndexEntry, EntryDetail, EntrySearchKey, RuntimeIndex, RuntimeSource, SearchHit,
+    TextSpan,
+};
 use crate::parsing::text::compact_ws;
 use crate::runtime::state::get_runtime;
 use crate::runtime::storage::search_index_dir;
 use crate::resolve_runtime_source;
 
-static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<TantivySearchIndex>>>> = OnceLock::new();
+type SearchIndexSlot = Arc<Mutex<Option<Arc<TantivySearchIndex>>>>;
+static SEARCH_CACHE: OnceLock<Mutex<BTreeMap<String, SearchIndexSlot>>> = OnceLock::new();
 static NORMALIZE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static NORMALIZE_LOOSE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 const NORMALIZE_CACHE_MAX: usize = 65_536;
@@ -37,17 +40,6 @@ struct TantivySearchIndex {
     headword_field: Field,
     aliases_field: Field,
     body_field: Field,
-}
-
-fn source_key(source: &RuntimeSource) -> String {
-    match source {
-        RuntimeSource::ZipPath(path) => format!(
-            "zip:{}",
-            path.canonicalize()
-                .unwrap_or_else(|_| path.to_path_buf())
-                .to_string_lossy()
-        ),
-    }
 }
 
 fn tantivy_schema() -> Schema {
@@ -148,15 +140,23 @@ fn get_or_build_tantivy_index(
     source: &RuntimeSource,
     entries: &[EntryDetail],
 ) -> Result<Arc<TantivySearchIndex>, String> {
-    let key = source_key(source);
+    let key = source.cache_key();
     let cache = SEARCH_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    {
-        let guard = cache
+    let slot = {
+        let mut guard = cache
             .lock()
             .map_err(|_| "search cache lock poisoned".to_string())?;
-        if let Some(found) = guard.get(&key) {
-            return Ok(found.clone());
-        }
+        guard
+            .entry(key)
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone()
+    };
+
+    let mut current = slot
+        .lock()
+        .map_err(|_| "search index lock poisoned".to_string())?;
+    if let Some(found) = current.as_ref() {
+        return Ok(found.clone());
     }
 
     let dir = search_index_dir(app, source)?;
@@ -164,10 +164,7 @@ fn get_or_build_tantivy_index(
         Ok(index) => Arc::new(index),
         Err(_) => Arc::new(rebuild_search_index(&dir, entries)?),
     };
-    let mut guard = cache
-        .lock()
-        .map_err(|_| "search cache lock poisoned".to_string())?;
-    guard.insert(key, built.clone());
+    *current = Some(built.clone());
     Ok(built)
 }
 
@@ -599,9 +596,18 @@ fn search_entries_tantivy(
     source: &RuntimeSource,
     query: &str,
     limit: usize,
-    entries: &[EntryDetail],
+    runtime: &RuntimeIndex,
 ) -> Result<Vec<SearchHit>, String> {
-    let idx = get_or_build_tantivy_index(app, source, entries)?;
+    let idx = get_or_build_tantivy_index(app, source, &runtime.entries)?;
+    query_search_index(&idx, query, limit, runtime)
+}
+
+fn query_search_index(
+    idx: &TantivySearchIndex,
+    query: &str,
+    limit: usize,
+    runtime: &RuntimeIndex,
+) -> Result<Vec<SearchHit>, String> {
     let mut parser = QueryParser::for_index(
         &idx.index,
         vec![idx.headword_field, idx.aliases_field, idx.body_field],
@@ -615,11 +621,6 @@ fn search_entries_tantivy(
     let top_docs = searcher
         .search(&parsed, &TopDocs::with_limit(limit).order_by_score())
         .map_err(|e| format!("tantivy search failed: {e}"))?;
-    let by_id = entries
-        .iter()
-        .map(|e| (e.id, e))
-        .collect::<HashMap<usize, &EntryDetail>>();
-
     let mut out = Vec::<SearchHit>::new();
     for (score, addr) in top_docs {
         let doc: TantivyDocument = searcher
@@ -632,7 +633,7 @@ fn search_entries_tantivy(
         else {
             continue;
         };
-        let Some(entry) = by_id.get(&id) else {
+        let Some(entry) = runtime.entry_by_id(id) else {
             continue;
         };
         out.push(SearchHit {
@@ -660,7 +661,7 @@ pub(crate) fn search_entries_impl(
     let source = resolve_runtime_source(app, zip_path)?;
     let runtime = get_runtime(app, &source)?;
     let limit = limit.unwrap_or(50).clamp(1, 200);
-    match search_entries_tantivy(app, &source, &q, limit, &runtime.entries) {
+    match search_entries_tantivy(app, &source, &q, limit, &runtime) {
         Ok(v) => Ok(v),
         Err(_) => Ok(search_entries_linear(
             &q,
@@ -673,12 +674,38 @@ pub(crate) fn search_entries_impl(
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_search_key;
+    use super::{normalize_search_key, query_search_index, rebuild_search_index};
+    use crate::app::model::{EntryDetail, RuntimeIndex};
+    use std::collections::BTreeMap;
 
     #[test]
     fn normalize_search_key_handles_upper_umlaut() {
         assert_eq!(normalize_search_key("Äpfel"), "aepfel");
         assert_eq!(normalize_search_key("Öl"), "oel");
         assert_eq!(normalize_search_key("Übung"), "uebung");
+    }
+
+    #[test]
+    fn tantivy_search_returns_matching_runtime_entry() {
+        let runtime = RuntimeIndex {
+            contents: Vec::new(),
+            entries: vec![EntryDetail {
+                id: 1,
+                headword: "Apfel".to_string(),
+                aliases: vec!["apple".to_string()],
+                source_path: "merge01.chm".to_string(),
+                target_local: "apfel.htm".to_string(),
+                definition_text: "Eine Frucht".to_string(),
+                definition_html: String::new(),
+            }],
+            content_pages: BTreeMap::new(),
+            entry_keys: Vec::new(),
+        };
+        let dir = tempfile::tempdir().expect("temp dir");
+        let index = rebuild_search_index(dir.path(), &runtime.entries).expect("build index");
+        let hits = query_search_index(&index, "Apfel", 10, &runtime).expect("search index");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, 1);
+        assert_eq!(hits[0].headword, "Apfel");
     }
 }

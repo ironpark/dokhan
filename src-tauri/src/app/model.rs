@@ -150,6 +150,16 @@ pub(crate) struct RuntimeIndex {
     pub(crate) entry_keys: Vec<EntrySearchKey>,
 }
 
+impl RuntimeIndex {
+    /// Entry IDs are assigned from 1 in sorted order. Fall back to a scan for older caches.
+    pub(crate) fn entry_by_id(&self, id: usize) -> Option<&EntryDetail> {
+        self.entries
+            .get(id.checked_sub(1)?)
+            .filter(|entry| entry.id == id)
+            .or_else(|| self.entries.iter().find(|entry| entry.id == id))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct EntrySearchKey {
     pub(crate) headword: String,
@@ -163,4 +173,50 @@ pub(crate) struct EntrySearchKey {
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeSource {
     ZipPath(PathBuf),
+}
+
+impl RuntimeSource {
+    pub(crate) fn cache_key(&self) -> String {
+        match self {
+            Self::ZipPath(path) => format!(
+                "zip:{}",
+                path.canonicalize()
+                    .unwrap_or_else(|_| path.to_path_buf())
+                    .to_string_lossy()
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EntryDetail, RuntimeIndex};
+    use std::collections::BTreeMap;
+
+    fn entry(id: usize) -> EntryDetail {
+        EntryDetail {
+            id,
+            headword: format!("word-{id}"),
+            aliases: Vec::new(),
+            source_path: String::new(),
+            target_local: String::new(),
+            definition_text: String::new(),
+            definition_html: String::new(),
+        }
+    }
+
+    #[test]
+    fn entry_lookup_uses_position_and_handles_legacy_order() {
+        let mut runtime = RuntimeIndex {
+            contents: Vec::new(),
+            entries: vec![entry(1), entry(2)],
+            content_pages: BTreeMap::new(),
+            entry_keys: Vec::new(),
+        };
+        assert_eq!(runtime.entry_by_id(2).map(|e| e.headword.as_str()), Some("word-2"));
+        assert!(runtime.entry_by_id(0).is_none());
+
+        runtime.entries.swap(0, 1);
+        assert_eq!(runtime.entry_by_id(2).map(|e| e.headword.as_str()), Some("word-2"));
+    }
 }

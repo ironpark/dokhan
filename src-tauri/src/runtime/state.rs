@@ -16,30 +16,14 @@ use crate::runtime::zip::{
 };
 
 static RUNTIME_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<RuntimeIndex>>>> = OnceLock::new();
+static RUNTIME_BUILD_LOCKS: OnceLock<Mutex<BTreeMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
 static BUILD_STATUS: OnceLock<Mutex<BTreeMap<String, BuildStatus>>> = OnceLock::new();
-
-/// Build a stable cache key for a runtime source.
-fn cache_key(source: &RuntimeSource) -> String {
-    match source {
-        RuntimeSource::ZipPath(path) => format!(
-            "zip:{}",
-            path.canonicalize()
-                .unwrap_or_else(|_| path.to_path_buf())
-                .to_string_lossy()
-        ),
-    }
-}
 
 /// Human-readable source label exposed in API summaries.
 fn source_label(source: &RuntimeSource) -> String {
     match source {
         RuntimeSource::ZipPath(path) => path.to_string_lossy().to_string(),
     }
-}
-
-/// Build status map key for a runtime source.
-fn status_key(source: &RuntimeSource) -> String {
-    cache_key(source)
 }
 
 /// Insert or replace build status entry.
@@ -52,6 +36,29 @@ fn set_build_status(key: &str, status: BuildStatus) -> Result<(), String> {
     let mut guard = map.lock().map_err(|_| "build status lock poisoned".to_string())?;
     guard.insert(key.to_string(), status);
     Ok(())
+}
+
+/// Reserve a source for one worker before spawning it.
+fn reserve_build(key: &str) -> Result<bool, String> {
+    let map = BUILD_STATUS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let mut guard = map.lock().map_err(|_| "build status lock poisoned".to_string())?;
+    if guard.get(key).is_some_and(|status| !status.done) {
+        return Ok(false);
+    }
+    guard.insert(
+        key.to_string(),
+        BuildStatus {
+            phase: "start".to_string(),
+            current: 0,
+            total: 1,
+            message: "Starting build".to_string(),
+            done: false,
+            success: false,
+            error: None,
+            summary: None,
+        },
+    );
+    Ok(true)
 }
 
 /// Update an existing build status entry in place.
@@ -88,7 +95,7 @@ fn get_build_status_internal(key: &str) -> Result<Option<BuildStatus>, String> {
 ///
 /// Returns an error when the runtime cache mutex is poisoned.
 fn cache_get(source: &RuntimeSource) -> Result<Option<Arc<RuntimeIndex>>, String> {
-    let key = cache_key(source);
+    let key = source.cache_key();
     let cache = RUNTIME_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
     let guard = cache.lock().map_err(|_| "runtime cache lock poisoned".to_string())?;
     Ok(guard.get(&key).cloned())
@@ -100,11 +107,38 @@ fn cache_get(source: &RuntimeSource) -> Result<Option<Arc<RuntimeIndex>>, String
 ///
 /// Returns an error when the runtime cache mutex is poisoned.
 fn cache_put(source: &RuntimeSource, runtime: Arc<RuntimeIndex>) -> Result<(), String> {
-    let key = cache_key(source);
+    let key = source.cache_key();
     let cache = RUNTIME_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
     let mut guard = cache.lock().map_err(|_| "runtime cache lock poisoned".to_string())?;
     guard.insert(key, runtime);
     Ok(())
+}
+
+/// Serialize cold runtime loads for a source while allowing other sources to build.
+fn get_or_build_runtime(
+    app: &AppHandle,
+    source: &RuntimeSource,
+    key: &str,
+) -> Result<Arc<RuntimeIndex>, String> {
+    let locks = RUNTIME_BUILD_LOCKS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let source_lock = {
+        let mut guard = locks
+            .lock()
+            .map_err(|_| "runtime build locks poisoned".to_string())?;
+        guard
+            .entry(key.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
+    };
+    let _guard = source_lock
+        .lock()
+        .map_err(|_| "runtime build lock poisoned".to_string())?;
+    if let Some(runtime) = cache_get(source)? {
+        return Ok(runtime);
+    }
+    let runtime = build_runtime_for_source(app, source, key)?;
+    cache_put(source, runtime.clone())?;
+    Ok(runtime)
 }
 
 /// Convert runtime snapshot to API summary payload.
@@ -219,7 +253,7 @@ fn build_runtime_for_source(
 /// Spawn detached worker that builds runtime and updates status.
 fn spawn_build_worker(app: AppHandle, source: RuntimeSource, key: String) {
     std::thread::spawn(move || {
-        let runtime = match build_runtime_for_source(&app, &source, &key) {
+        let runtime = match get_or_build_runtime(&app, &source, &key) {
             Ok(runtime) => runtime,
             Err(err) => {
                 let _ = set_build_error_status(&key, "Failed parsing zip/chm", err);
@@ -228,10 +262,6 @@ fn spawn_build_worker(app: AppHandle, source: RuntimeSource, key: String) {
         };
 
         let summary = summary_from_runtime(&source, &runtime);
-        if let Err(err) = cache_put(&source, runtime) {
-            let _ = set_build_error_status(&key, "Cache write failed", err);
-            return;
-        }
         let _ = set_build_done_status(&key, summary, "Build complete");
     });
 }
@@ -260,30 +290,7 @@ pub(crate) fn get_runtime(app: &AppHandle, source: &RuntimeSource) -> Result<Arc
     if let Some(v) = cache_get(source)? {
         return Ok(v);
     }
-    if let Some(persisted) = load_runtime_cache(app, source)? {
-        let runtime = Arc::new(build_runtime_index(
-            persisted.contents,
-            persisted.entries,
-            BTreeMap::new(),
-        ));
-        warm_search_index(app, source, &runtime.entries)?;
-        cache_put(source, runtime.clone())?;
-        return Ok(runtime);
-    }
-    let runtime = match source {
-        RuntimeSource::ZipPath(zip_path) => Arc::new(parse_runtime_from_zip_with_progress(zip_path, None)?),
-    };
-    warm_search_index(app, source, &runtime.entries)?;
-    let _ = save_runtime_cache(
-        app,
-        source,
-        &PersistedRuntime {
-            contents: runtime.contents.clone(),
-            entries: runtime.entries.clone(),
-        },
-    );
-    cache_put(source, runtime.clone())?;
-    Ok(runtime)
+    get_or_build_runtime(app, source, &source.cache_key())
 }
 
 /// Start async build and return status polling key.
@@ -295,7 +302,7 @@ pub(crate) fn get_runtime(app: &AppHandle, source: &RuntimeSource) -> Result<Arc
 /// Returns an error when source resolution fails or status/cache storage is unavailable.
 pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>) -> Result<String, String> {
     let source = resolve_runtime_source(app, zip_path)?;
-    let key = status_key(&source);
+    let key = source.cache_key();
 
     if let Some(runtime) = cache_get(&source)? {
         let summary = summary_from_runtime(&source, &runtime);
@@ -303,25 +310,22 @@ pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>)
         return Ok(key);
     }
 
-    if let Some(st) = get_build_status_internal(&key)? {
-        if !st.done {
-            return Ok(key);
-        }
+    if !reserve_build(&key)? {
+        return Ok(key);
     }
 
-    set_build_status(
-        &key,
-        BuildStatus {
-            phase: "start".to_string(),
-            current: 0,
-            total: 1,
-            message: "Starting build".to_string(),
-            done: false,
-            success: false,
-            error: None,
-            summary: None,
-        },
-    )?;
+    let cached = match cache_get(&source) {
+        Ok(cached) => cached,
+        Err(error) => {
+            let _ = set_build_error_status(&key, "Cache lookup failed", error.clone());
+            return Err(error);
+        }
+    };
+    if let Some(runtime) = cached {
+        let summary = summary_from_runtime(&source, &runtime);
+        set_build_done_status(&key, summary, "Loaded from cache")?;
+        return Ok(key);
+    }
 
     spawn_build_worker(app.clone(), source, key.clone());
 
@@ -338,7 +342,7 @@ pub(crate) fn get_master_build_status_impl(
     zip_path: Option<String>,
 ) -> Result<BuildStatus, String> {
     let source = resolve_runtime_source(app, zip_path)?;
-    let key = status_key(&source);
+    let key = source.cache_key();
     if let Some(st) = get_build_status_internal(&key)? {
         return Ok(st);
     }
@@ -377,9 +381,7 @@ pub(crate) fn get_entry_detail_impl(
     let source = resolve_runtime_source(app, zip_path)?;
     let runtime = get_runtime(app, &source)?;
     let entry = runtime
-        .entries
-        .iter()
-        .find(|e| e.id == id)
+        .entry_by_id(id)
         .cloned()
         .ok_or_else(|| format!("entry not found: {id}"))?;
 
@@ -413,5 +415,38 @@ pub(crate) fn get_content_page_impl(
             }
             read_content_page_from_zip(zip_path, &source_path, local)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{reserve_build, BUILD_STATUS};
+    use std::sync::{Arc, Barrier};
+
+    #[test]
+    fn concurrent_requests_reserve_one_build() {
+        let key = format!("build-reservation-test-{:?}", std::thread::current().id());
+        let barrier = Arc::new(Barrier::new(8));
+        let workers = (0..8)
+            .map(|_| {
+                let key = key.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    reserve_build(&key).expect("reserve build")
+                })
+            })
+            .collect::<Vec<_>>();
+        let reserved = workers
+            .into_iter()
+            .map(|worker| usize::from(worker.join().expect("worker")))
+            .sum::<usize>();
+        assert_eq!(reserved, 1);
+        BUILD_STATUS
+            .get()
+            .expect("build status")
+            .lock()
+            .expect("build status lock")
+            .remove(&key);
     }
 }

@@ -17,6 +17,7 @@ use crate::parsing::text::{
     compact_ws, decode_euc_kr, extract_first_bold_text, extract_html_fragments,
     sanitize_html_fragment, strip_html_tags,
 };
+use crate::runtime::cache::BoundedCache;
 use crate::runtime::link_media::read_chm_binary_object;
 use crate::runtime::search::normalize_search_key;
 use crate::runtime::state::build_runtime_index;
@@ -24,11 +25,12 @@ use crate::runtime::state::build_runtime_index;
 type ChmBytes = Arc<[u8]>;
 type ZipBytes = Arc<[u8]>;
 
-static CHM_BYTES_CACHE: OnceLock<Mutex<BTreeMap<String, ChmBytes>>> = OnceLock::new();
-static ZIP_BYTES_CACHE: OnceLock<Mutex<BTreeMap<String, ZipBytes>>> = OnceLock::new();
-static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BTreeMap<String, Arc<chm::ChmArchive>>>> = OnceLock::new();
+static CHM_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ChmBytes>>> = OnceLock::new();
+static ZIP_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ZipBytes>>> = OnceLock::new();
+static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BoundedCache<Arc<chm::ChmArchive>>>> = OnceLock::new();
 const MAX_CHM_BYTES_CACHE_ITEMS: usize = 24;
 const MAX_CHM_ARCHIVE_CACHE_ITEMS: usize = 16;
+const MAX_ZIP_BYTES_CACHE_ITEMS: usize = 2;
 
 /// Decode CHM page bytes into normalized content payload.
 fn decode_content_page(local: String, source_path: String, bytes: &[u8]) -> ContentPage {
@@ -130,28 +132,25 @@ fn chm_cache_key(zip_path: &Path, chm_name: &str) -> String {
 }
 
 fn get_cached_chm_bytes(zip_path: &Path, chm_name: &str) -> Result<Option<ChmBytes>, String> {
-    let cache = CHM_BYTES_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    let guard = cache.lock().map_err(|_| "chm cache lock poisoned".to_string())?;
+    let cache = CHM_BYTES_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_BYTES_CACHE_ITEMS)));
+    let mut guard = cache.lock().map_err(|_| "chm cache lock poisoned".to_string())?;
     Ok(guard.get(&chm_cache_key(zip_path, chm_name)).cloned())
 }
 
 fn cache_chm_bytes(zip_path: &Path, chm_name: &str, bytes: ChmBytes) -> Result<(), String> {
-    let cache = CHM_BYTES_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let cache = CHM_BYTES_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_BYTES_CACHE_ITEMS)));
     let mut guard = cache.lock().map_err(|_| "chm cache lock poisoned".to_string())?;
     let key = chm_cache_key(zip_path, chm_name);
     guard.insert(key, bytes);
-    while guard.len() > MAX_CHM_BYTES_CACHE_ITEMS {
-        let Some(oldest_key) = guard.keys().next().cloned() else {
-            break;
-        };
-        guard.remove(&oldest_key);
-    }
     Ok(())
 }
 
 fn get_cached_chm_archive(zip_path: &Path, chm_name: &str) -> Result<Option<chm::ChmArchive>, String> {
-    let cache = CHM_ARCHIVE_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    let guard = cache
+    let cache = CHM_ARCHIVE_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_ARCHIVE_CACHE_ITEMS)));
+    let mut guard = cache
         .lock()
         .map_err(|_| "chm archive cache lock poisoned".to_string())?;
     Ok(guard
@@ -160,34 +159,27 @@ fn get_cached_chm_archive(zip_path: &Path, chm_name: &str) -> Result<Option<chm:
 }
 
 fn cache_chm_archive(zip_path: &Path, chm_name: &str, archive: chm::ChmArchive) -> Result<(), String> {
-    let cache = CHM_ARCHIVE_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let cache = CHM_ARCHIVE_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_ARCHIVE_CACHE_ITEMS)));
     let mut guard = cache
         .lock()
         .map_err(|_| "chm archive cache lock poisoned".to_string())?;
     let key = chm_cache_key(zip_path, chm_name);
     guard.insert(key, Arc::new(archive));
-    while guard.len() > MAX_CHM_ARCHIVE_CACHE_ITEMS {
-        let Some(oldest_key) = guard.keys().next().cloned() else {
-            break;
-        };
-        guard.remove(&oldest_key);
-    }
     Ok(())
 }
 
 fn get_zip_bytes(zip_path: &Path) -> Result<ZipBytes, String> {
     let key = zip_cache_prefix(zip_path);
-    let cache = ZIP_BYTES_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    {
-        let guard = cache.lock().map_err(|_| "zip cache lock poisoned".to_string())?;
-        if let Some(found) = guard.get(&key) {
-            return Ok(Arc::clone(found));
-        }
+    let cache = ZIP_BYTES_CACHE
+        .get_or_init(|| Mutex::new(BoundedCache::new(MAX_ZIP_BYTES_CACHE_ITEMS)));
+    let mut guard = cache.lock().map_err(|_| "zip cache lock poisoned".to_string())?;
+    if let Some(found) = guard.get(&key) {
+        return Ok(Arc::clone(found));
     }
 
     let bytes = fs::read(zip_path).map_err(|e| format!("failed to read zip file: {e}"))?;
     let shared: ZipBytes = Arc::from(bytes.into_boxed_slice());
-    let mut guard = cache.lock().map_err(|_| "zip cache lock poisoned".to_string())?;
     guard.insert(key, Arc::clone(&shared));
     Ok(shared)
 }
@@ -319,7 +311,7 @@ fn build_html_path_index(chm: &chm::ChmArchive) -> BTreeMap<String, Vec<String>>
 }
 
 fn hydrate_entries_from_open_chm(chm: &mut chm::ChmArchive, entries: &mut [EntryDetail]) {
-    let path_index = build_html_path_index(&chm);
+    let path_index = build_html_path_index(chm);
     for entry in entries.iter_mut() {
         let html_bytes = if entry.target_local.is_empty() {
             read_entry_html_from_chm(chm, &entry.headword, Some(&path_index))
