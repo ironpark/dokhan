@@ -32,6 +32,21 @@ const FIELD_HEADWORD: &str = "headword";
 const FIELD_ALIASES: &str = "aliases";
 const FIELD_BODY: &str = "body";
 
+fn normalize_search_key_uncached(s: &str) -> String {
+    s.to_lowercase()
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+}
+
+fn loose_from_search_key(strict: &str) -> String {
+    strict
+        .replace("ae", "a")
+        .replace("oe", "o")
+        .replace("ue", "u")
+}
+
 #[derive(Clone)]
 struct TantivySearchIndex {
     index: Index,
@@ -181,23 +196,14 @@ pub(crate) fn normalize_search_key(s: &str) -> String {
         if let Some(found) = cache.get(s) {
             return found.clone();
         }
-        let normalized = s
-            .to_lowercase()
-            .replace("ä", "ae")
-            .replace("ö", "oe")
-            .replace("ü", "ue")
-            .replace("ß", "ss");
+        let normalized = normalize_search_key_uncached(s);
         if cache.len() >= NORMALIZE_CACHE_MAX {
             cache.clear();
         }
         cache.insert(s.to_string(), normalized.clone());
         return normalized;
     }
-    s.to_lowercase()
-        .replace("ä", "ae")
-        .replace("ö", "oe")
-        .replace("ü", "ue")
-        .replace("ß", "ss")
+    normalize_search_key_uncached(s)
 }
 
 /// Looser normalization for prefix/contains tolerance (ae->a etc.).
@@ -209,20 +215,14 @@ pub(crate) fn normalize_search_key_loose(s: &str) -> String {
         if let Some(found) = cache.get(s) {
             return found.clone();
         }
-        let normalized = normalize_search_key(s)
-            .replace("ae", "a")
-            .replace("oe", "o")
-            .replace("ue", "u");
+        let normalized = loose_from_search_key(&normalize_search_key(s));
         if cache.len() >= NORMALIZE_CACHE_MAX {
             cache.clear();
         }
         cache.insert(s.to_string(), normalized.clone());
         return normalized;
     }
-    normalize_search_key(s)
-        .replace("ae", "a")
-        .replace("oe", "o")
-        .replace("ue", "u")
+    loose_from_search_key(&normalize_search_key(s))
 }
 
 /// Check prefix match against strict+loose normalized variants.
@@ -453,17 +453,26 @@ pub(crate) fn build_entry_search_keys(entries: &[EntryDetail]) -> Vec<EntrySearc
     entries
         .iter()
         .map(|e| {
-            let aliases = e.aliases.iter().map(|a| normalize_search_key(a)).collect::<Vec<_>>();
-            let aliases_loose = e
+            let (aliases, aliases_loose) = e
                 .aliases
                 .iter()
-                .map(|a| normalize_search_key_loose(a))
-                .collect::<Vec<_>>();
+                .map(|alias| {
+                    let strict = normalize_search_key_uncached(alias);
+                    let loose = loose_from_search_key(&strict);
+                    (strict, loose)
+                })
+                .unzip();
+            let headword = normalize_search_key_uncached(&e.headword);
+            let headword_loose = loose_from_search_key(&headword);
+            // Definitions are mostly unique and already stored as search keys below.
+            // Avoid duplicating each full body in the global normalization caches.
+            let body = normalize_search_key_uncached(&e.definition_text);
+            let body_loose = loose_from_search_key(&body);
             EntrySearchKey {
-                headword: normalize_search_key(&e.headword),
-                headword_loose: normalize_search_key_loose(&e.headword),
-                body: normalize_search_key(&e.definition_text),
-                body_loose: normalize_search_key_loose(&e.definition_text),
+                headword,
+                headword_loose,
+                body,
+                body_loose,
                 aliases,
                 aliases_loose,
             }
@@ -664,7 +673,10 @@ pub(crate) fn search_entries_impl(
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_search_key, query_search_index, rebuild_search_index};
+    use super::{
+        build_entry_search_keys, normalize_search_key, normalize_search_key_loose,
+        query_search_index, rebuild_search_index,
+    };
     use crate::app::model::{EntryDetail, RuntimeIndex};
     use std::collections::BTreeMap;
 
@@ -673,6 +685,33 @@ mod tests {
         assert_eq!(normalize_search_key("Äpfel"), "aepfel");
         assert_eq!(normalize_search_key("Öl"), "oel");
         assert_eq!(normalize_search_key("Übung"), "uebung");
+    }
+
+    #[test]
+    fn precomputed_keys_match_query_normalization() {
+        let entry = EntryDetail {
+            id: 1,
+            headword: "Äußerung".to_string(),
+            aliases: vec!["Ölbaum".to_string(), "aeoeue".to_string()],
+            source_path: "merge01.chm".to_string(),
+            target_local: String::new(),
+            definition_text: "Übermäßige Bäume".to_string(),
+            definition_html: String::new(),
+        };
+        let keys = build_entry_search_keys(&[entry.clone()]);
+        let key = &keys[0];
+        assert_eq!(key.headword, normalize_search_key(&entry.headword));
+        assert_eq!(key.headword_loose, normalize_search_key_loose(&entry.headword));
+        assert_eq!(key.body, normalize_search_key(&entry.definition_text));
+        assert_eq!(key.body_loose, normalize_search_key_loose(&entry.definition_text));
+        for (alias, (strict, loose)) in entry
+            .aliases
+            .iter()
+            .zip(key.aliases.iter().zip(&key.aliases_loose))
+        {
+            assert_eq!(strict, &normalize_search_key(alias));
+            assert_eq!(loose, &normalize_search_key_loose(alias));
+        }
     }
 
     #[test]
