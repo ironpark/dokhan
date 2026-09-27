@@ -61,6 +61,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 - Product Name: `Dokhan`
 - Tauri Identifier: `io.github.ironpark.dokhan`
+- 앱 아이콘 원본: `src-tauri/icons/dokhan-icon.svg` (`pnpm tauri icon src-tauri/icons/icon-manifest.json`으로 플랫폼별 아이콘 재생성)
 
 ## 라이선스
 
