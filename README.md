@@ -14,24 +14,30 @@ Tauri(v2) + Svelte + TypeScript + Rust 기반 독-한/한-독 전자사전 앱�
 
 ## 기술 스택
 
-- Frontend: Svelte 5, TypeScript, Bun
+- Frontend: Svelte 5, TypeScript, pnpm
 - Desktop/Mobile: Tauri v2
 - Backend: Rust
 - Search: Tantivy
 
 ## 실행
 
+Node.js 22.12 이상과 pnpm 12가 필요합니다.
+
 ```bash
-bun install
-bun tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
 ## 검증
 
 ```bash
-bun check
+pnpm check
+pnpm test
+pnpm build
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
+
+사전 ZIP 전체 파싱을 확인하려면 `DOKHAN_TEST_ZIP=/path/to/dictionary.zip cargo test --manifest-path src-tauri/Cargo.toml configured_zip_runtime_smoke`를 실행합니다.
 
 ## Tauri Command API
 

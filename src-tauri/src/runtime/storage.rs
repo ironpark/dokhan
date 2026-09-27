@@ -11,7 +11,7 @@ use crate::app::model::{ContentItem, EntryDetail, RuntimeSource};
 
 const MANAGED_ZIP_DIR: &str = "zips";
 const RUNTIME_CACHE_DIR: &str = "runtime-cache";
-const SEARCH_INDEX_DIR: &str = "tantivy";
+const SEARCH_INDEX_DIR: &str = "tantivy-v0.26";
 const RUNTIME_CACHE_VERSION: u32 = 1;
 const CACHE_MANIFEST_FILE: &str = "manifest.bin";
 const CACHE_CONTENTS_FILE: &str = "contents.bin.zst";

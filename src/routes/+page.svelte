@@ -11,6 +11,16 @@
 
   const dictionaryStore = createDictionaryStore();
   let copyMessage = $state("");
+  let copyMessageTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function showCopyMessage() {
+    copyMessage = "복사됨";
+    if (copyMessageTimer) clearTimeout(copyMessageTimer);
+    copyMessageTimer = setTimeout(() => {
+      copyMessage = "";
+      copyMessageTimer = undefined;
+    }, 1200);
+  }
 
   onMount(() => {
     let unlistenDragDrop: (() => void) | undefined;
@@ -49,6 +59,7 @@
 
     return () => {
       dictionaryStore.dispose();
+      if (copyMessageTimer) clearTimeout(copyMessageTimer);
       if (unlistenDragDrop) unlistenDragDrop();
       if (unlistenCloseRequest) unlistenCloseRequest();
     };
@@ -59,10 +70,7 @@
     const text = dictionaryStore.error;
     try {
       await writeText(text);
-      copyMessage = "복사됨";
-      setTimeout(() => {
-        copyMessage = "";
-      }, 1200);
+      showCopyMessage();
       return;
     } catch {
       // Fallback
@@ -71,10 +79,7 @@
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        copyMessage = "복사됨";
-        setTimeout(() => {
-          copyMessage = "";
-        }, 1200);
+        showCopyMessage();
         return;
       }
     } catch {}

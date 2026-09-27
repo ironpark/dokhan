@@ -281,11 +281,7 @@ export function createDictionaryStore(): DictionaryStore {
     const requestId = ++searchRequestSeq;
     setRetryAction(async () => {
       searchIndexState.setSearchQuery(searchTerm);
-      searchIndexState.setCommittedSearchQuery(searchTerm);
-      const retryRows = await withBusy('search', () => searchEntries(zipPath, searchTerm, 200));
-      if (retryRows && requestId === searchRequestSeq) {
-        searchIndexState.setSearchRows(retryRows);
-      }
+      await runSearch(searchTerm, false);
     });
     const rows = await withBusy('search', () => searchEntries(zipPath, searchTerm, 200));
     if (rows && requestId === searchRequestSeq) {

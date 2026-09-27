@@ -25,10 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v3
         with:
-          bun-version: 1.3.5
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -39,10 +41,10 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Install frontend deps
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build desktop app
-        run: bunx tauri build
+        run: pnpm tauri build
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -66,10 +68,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v3
         with:
-          bun-version: 1.3.5
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -115,7 +119,7 @@ jobs:
           fi
 
       - name: Install frontend deps
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare Android signing keystore
         run: |
@@ -131,7 +135,7 @@ jobs:
         run: sed -i '/^android\\.aapt2FromMavenOverride=/d' src-tauri/gen/android/gradle.properties
 
       - name: Build Android APK (release)
-        run: bunx tauri android build --apk
+        run: pnpm tauri android build --apk
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4

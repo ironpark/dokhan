@@ -613,7 +613,7 @@ fn search_entries_tantivy(
 
     let searcher = idx.reader.searcher();
     let top_docs = searcher
-        .search(&parsed, &TopDocs::with_limit(limit))
+        .search(&parsed, &TopDocs::with_limit(limit).order_by_score())
         .map_err(|e| format!("tantivy search failed: {e}"))?;
     let by_id = entries
         .iter()

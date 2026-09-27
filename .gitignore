@@ -1,5 +1,6 @@
 .DS_Store
 node_modules
+/.pnpm-store
 /build
 /.svelte-kit
 /package
@@ -9,3 +10,4 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 /asset
+*.zip

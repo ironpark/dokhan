@@ -104,4 +104,15 @@ mod tests {
         }
         assert!(detected > 0, "expected at least one CHM to expose .hhk hints");
     }
+
+    #[test]
+    fn configured_zip_runtime_smoke() {
+        let Ok(path) = std::env::var("DOKHAN_TEST_ZIP") else {
+            return;
+        };
+        let runtime = runtime::zip::parse_runtime_from_zip_with_progress(Path::new(&path), None)
+            .expect("configured dictionary zip should parse");
+        assert!(!runtime.contents.is_empty(), "expected table of contents");
+        assert!(!runtime.entries.is_empty(), "expected dictionary entries");
+    }
 }
