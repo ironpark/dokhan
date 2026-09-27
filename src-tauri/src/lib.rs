@@ -115,4 +115,106 @@ mod tests {
         assert!(!runtime.contents.is_empty(), "expected table of contents");
         assert!(!runtime.entries.is_empty(), "expected dictionary entries");
     }
+
+    /// Run with DOKHAN_TEST_ZIP and --ignored --nocapture to compare CHM changes.
+    #[test]
+    #[ignore]
+    fn bench_chm_runtime_build() {
+        use std::collections::HashSet;
+
+        let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
+        let start = std::time::Instant::now();
+        let runtime = runtime::zip::parse_runtime_from_zip_with_progress(Path::new(&path), None)
+            .expect("benchmark dictionary should parse");
+        let elapsed = start.elapsed();
+        let targets = runtime
+            .entries
+            .iter()
+            .filter(|entry| !entry.target_local.is_empty())
+            .map(|entry| (&entry.source_path, &entry.target_local))
+            .collect::<HashSet<_>>();
+        let empty_targets = runtime
+            .entries
+            .iter()
+            .filter(|entry| entry.target_local.is_empty())
+            .count();
+        let hydrated = runtime
+            .entries
+            .iter()
+            .filter(|entry| !entry.definition_text.is_empty())
+            .count();
+        eprintln!(
+            "CHM runtime build: {elapsed:?}, {} entries, {} unique targets, {empty_targets} empty targets, {hydrated} hydrated",
+            runtime.entries.len(),
+            targets.len()
+        );
+        let sample = runtime.entries.iter()
+            .filter(|entry| entry.source_path == "merge17.chm" && !entry.definition_text.is_empty())
+            .take(100)
+            .cloned()
+            .collect::<Vec<_>>();
+        let start = std::time::Instant::now();
+        let rendered = sample.into_iter()
+            .map(|entry| runtime::zip::hydrate_zip_entry_detail(Path::new(&path), entry))
+            .filter(|entry| !entry.definition_html.is_empty())
+            .count();
+        eprintln!("CHM detail HTML: {:?}, {rendered}/100 rendered", start.elapsed());
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_chm_page_reads() {
+        use std::io::Read;
+        use std::sync::Arc;
+        use std::time::Instant;
+
+        let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
+        let file = std::fs::File::open(&path).expect("open benchmark zip");
+        let mut zip = zip::ZipArchive::new(file).expect("parse benchmark zip");
+        let mut bytes = Vec::new();
+        zip.by_name("merge17.chm")
+            .expect("merge17.chm")
+            .read_to_end(&mut bytes)
+            .expect("read CHM bytes");
+        let shared: Arc<[u8]> = Arc::from(bytes);
+        let start = Instant::now();
+        let template = chm::ChmArchive::open(shared).expect("open CHM");
+        let open_time = start.elapsed();
+        let paths = template
+            .entries()
+            .iter()
+            .filter(|e| e.path.ends_with(".html") || e.path.ends_with(".htm"))
+            .take(100)
+            .map(|e| e.path.clone())
+            .collect::<Vec<_>>();
+        assert!(!paths.is_empty());
+
+        let start = Instant::now();
+        let mut reusable = template.clone();
+        let mut total_bytes = 0;
+        for path in &paths {
+            total_bytes += reusable.read_object(path).expect("read page").len();
+        }
+        let shared_time = start.elapsed();
+
+        let start = Instant::now();
+        for path in &paths {
+            let mut fresh = template.clone();
+            total_bytes += fresh.read_object(path).expect("read page").len();
+        }
+        let clone_time = start.elapsed();
+
+        let start = Instant::now();
+        for path_local in &paths {
+            let archive = runtime::zip::open_named_chm_from_zip(Path::new(&path), "merge17.chm")
+                .expect("open cached CHM");
+            let mut archive = archive.lock().expect("lock cached CHM");
+            total_bytes += archive.read_object(path_local).expect("read cached page").len();
+        }
+        let cached_time = start.elapsed();
+        eprintln!(
+            "CHM page reads: open={open_time:?}, reusable={shared_time:?}, fresh-clone={clone_time:?}, runtime-cache={cached_time:?}, pages={}, bytes={total_bytes}",
+            paths.len()
+        );
+    }
 }

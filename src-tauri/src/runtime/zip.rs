@@ -28,7 +28,9 @@ type ZipBytes = Arc<[u8]>;
 static CHM_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ChmBytes>>> = OnceLock::new();
 static ZIP_BYTES_CACHE: OnceLock<Mutex<BoundedCache<ZipBytes>>> = OnceLock::new();
 static ZIP_LOAD_LOCKS: KeyedSlots<()> = OnceLock::new();
-static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BoundedCache<Arc<chm::ChmArchive>>>> = OnceLock::new();
+type SharedChmArchive = Arc<Mutex<chm::ChmArchive>>;
+static CHM_ARCHIVE_CACHE: OnceLock<Mutex<BoundedCache<SharedChmArchive>>> = OnceLock::new();
+static CHM_OPEN_LOCKS: KeyedSlots<()> = OnceLock::new();
 const MAX_CHM_BYTES_CACHE_ITEMS: usize = 24;
 const MAX_CHM_ARCHIVE_CACHE_ITEMS: usize = 16;
 const MAX_ZIP_BYTES_CACHE_ITEMS: usize = 2;
@@ -148,25 +150,30 @@ fn cache_chm_bytes(zip_path: &Path, chm_name: &str, bytes: ChmBytes) -> Result<(
     Ok(())
 }
 
-fn get_cached_chm_archive(zip_path: &Path, chm_name: &str) -> Result<Option<chm::ChmArchive>, String> {
+fn get_cached_chm_archive(
+    zip_path: &Path,
+    chm_name: &str,
+) -> Result<Option<SharedChmArchive>, String> {
     let cache = CHM_ARCHIVE_CACHE
         .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_ARCHIVE_CACHE_ITEMS)));
     let mut guard = cache
         .lock()
         .map_err(|_| "chm archive cache lock poisoned".to_string())?;
-    Ok(guard
-        .get(&chm_cache_key(zip_path, chm_name))
-        .map(|arch| (**arch).clone()))
+    Ok(guard.get(&chm_cache_key(zip_path, chm_name)).cloned())
 }
 
-fn cache_chm_archive(zip_path: &Path, chm_name: &str, archive: chm::ChmArchive) -> Result<(), String> {
+fn cache_chm_archive(
+    zip_path: &Path,
+    chm_name: &str,
+    archive: SharedChmArchive,
+) -> Result<(), String> {
     let cache = CHM_ARCHIVE_CACHE
         .get_or_init(|| Mutex::new(BoundedCache::new(MAX_CHM_ARCHIVE_CACHE_ITEMS)));
     let mut guard = cache
         .lock()
         .map_err(|_| "chm archive cache lock poisoned".to_string())?;
     let key = chm_cache_key(zip_path, chm_name);
-    guard.insert(key, Arc::new(archive));
+    guard.insert(key, archive);
     Ok(())
 }
 
@@ -248,13 +255,26 @@ pub(crate) fn read_named_chm_from_zip(zip_path: &Path, chm_name: &str) -> Result
 /// # Errors
 ///
 /// Returns an error when CHM bytes cannot be loaded or archive parsing fails.
-pub(crate) fn open_named_chm_from_zip(zip_path: &Path, chm_name: &str) -> Result<chm::ChmArchive, String> {
+pub(crate) fn open_named_chm_from_zip(
+    zip_path: &Path,
+    chm_name: &str,
+) -> Result<SharedChmArchive, String> {
+    if let Some(arch) = get_cached_chm_archive(zip_path, chm_name)? {
+        return Ok(arch);
+    }
+    let key = chm_cache_key(zip_path, chm_name);
+    let open_lock = keyed_slot(&CHM_OPEN_LOCKS, &key)?;
+    let _open_guard = open_lock
+        .lock()
+        .map_err(|_| "chm open lock poisoned".to_string())?;
     if let Some(arch) = get_cached_chm_archive(zip_path, chm_name)? {
         return Ok(arch);
     }
     let bytes = read_named_chm_from_zip(zip_path, chm_name)?;
-    let archive = chm::ChmArchive::open(bytes).map_err(|e| format!("failed to open {chm_name}: {e}"))?;
-    let _ = cache_chm_archive(zip_path, chm_name, archive.clone());
+    let archive = Arc::new(Mutex::new(
+        chm::ChmArchive::open(bytes).map_err(|e| format!("failed to open {chm_name}: {e}"))?,
+    ));
+    cache_chm_archive(zip_path, chm_name, Arc::clone(&archive))?;
     Ok(archive)
 }
 
@@ -271,6 +291,14 @@ fn read_entry_html_from_chm(
         let slash = format!("/{candidate}");
         if let Ok(v) = chm.read_object(&slash) {
             return Some(v);
+        }
+        let candidate_lower = candidate.to_ascii_lowercase();
+        if by_stem.is_none()
+            && (candidate_lower.ends_with(".htm") || candidate_lower.ends_with(".html"))
+        {
+            if let Some(v) = chm.read_object_by_basename(&candidate) {
+                return Some(v);
+            }
         }
     }
 
@@ -350,11 +378,7 @@ fn hydrate_entries_from_open_chm(chm: &mut chm::ChmArchive, entries: &mut [Entry
         let body = fragments.body_html.unwrap_or_default();
         let body_text = compact_ws(&strip_html_tags(&body));
 
-        if !paragraph_html.is_empty() {
-            entry.definition_html = sanitize_html_fragment(&paragraph_html);
-        } else if !body.is_empty() {
-            entry.definition_html = sanitize_html_fragment(&body);
-        }
+        // Search needs plain text now; HTML is sanitized when a detail is opened.
         if !paragraph_text.is_empty() {
             entry.definition_text = paragraph_text;
         } else if !body_text.is_empty() {
@@ -434,12 +458,15 @@ fn emit_progress_throttled(
     *last_emit = Instant::now();
 }
 
-/// Fill empty entry body fields by reading original CHM HTML.
+/// Fill entry HTML on demand by reading the original CHM page.
 pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) -> EntryDetail {
-    if !entry.definition_text.is_empty() {
+    if !entry.definition_text.is_empty() && !entry.definition_html.is_empty() {
         return entry;
     }
-    let Ok(mut chm) = open_named_chm_from_zip(zip_path, &entry.source_path) else {
+    let Ok(chm) = open_named_chm_from_zip(zip_path, &entry.source_path) else {
+        return entry;
+    };
+    let Ok(mut chm) = chm.lock() else {
         return entry;
     };
     let html_bytes = if entry.target_local.is_empty() {
@@ -451,6 +478,7 @@ pub(crate) fn hydrate_zip_entry_detail(zip_path: &Path, mut entry: EntryDetail) 
     let Some(html_bytes) = html_bytes else {
         return entry;
     };
+    drop(chm);
 
     let html_text = decode_euc_kr(&html_bytes);
     let fragments = extract_html_fragments(&html_text);
@@ -498,8 +526,11 @@ pub(crate) fn read_content_page_from_zip(
     source_path: &str,
     local: &str,
 ) -> Result<ContentPage, String> {
-    let mut chm = open_named_chm_from_zip(zip_path, source_path)?;
-    if let Some(v) = read_chm_object_with_candidates(&mut chm, local) {
+    let chm = open_named_chm_from_zip(zip_path, source_path)?;
+    let mut chm = chm.lock().map_err(|_| "chm archive lock poisoned".to_string())?;
+    let bytes = read_chm_object_with_candidates(&mut chm, local);
+    drop(chm);
+    if let Some(v) = bytes {
         return Ok(decode_content_page(local.to_string(), source_path.to_string(), &v));
     }
     Err(format!(
@@ -667,4 +698,142 @@ pub(crate) fn parse_runtime_from_zip_with_progress(
 
     let entries = finalize_entries(entries);
     Ok(build_runtime_index(contents, entries, BTreeMap::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_index_entries_from_open_chm, hydrate_entries_from_open_chm, hydrate_zip_entry_detail, open_named_chm_from_zip, read_entry_html_from_chm};
+    use crate::chm::ChmArchive;
+    use crate::parsing::text::{compact_ws, decode_euc_kr, extract_first_bold_text, extract_html_fragments, sanitize_html_fragment, strip_html_tags};
+    use std::io::Read;
+    use std::path::Path;
+    use std::sync::{Arc, Barrier};
+    use std::time::Instant;
+
+    #[test]
+    fn concurrent_opens_share_one_chm_archive_if_configured() {
+        let Ok(path) = std::env::var("DOKHAN_TEST_ZIP") else {
+            return;
+        };
+        let barrier = Arc::new(Barrier::new(8));
+        let workers = (0..8)
+            .map(|_| {
+                let path = path.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    open_named_chm_from_zip(Path::new(&path), "merge17.chm").expect("open CHM")
+                })
+            })
+            .collect::<Vec<_>>();
+        let archives = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .collect::<Vec<_>>();
+        assert!(archives.iter().all(|archive| Arc::ptr_eq(archive, &archives[0])));
+    }
+
+    #[test]
+    fn entry_html_is_loaded_on_demand_if_configured() {
+        let Ok(path) = std::env::var("DOKHAN_TEST_ZIP") else {
+            return;
+        };
+        let file = std::fs::File::open(&path).expect("open benchmark zip");
+        let mut zip = zip::ZipArchive::new(file).expect("parse benchmark zip");
+        let mut bytes = Vec::new();
+        zip.by_name("merge17.chm")
+            .expect("CHM in benchmark zip")
+            .read_to_end(&mut bytes)
+            .expect("read CHM bytes");
+        let mut chm = ChmArchive::open(bytes).expect("open CHM");
+        let mut entries = extract_index_entries_from_open_chm("merge17.chm", &mut chm);
+        hydrate_entries_from_open_chm(&mut chm, &mut entries);
+        let (entry, expected_html) = entries.into_iter()
+            .filter(|entry| !entry.definition_text.is_empty())
+            .find_map(|entry| {
+                let bytes = read_entry_html_from_chm(&mut chm, &entry.headword, None)?;
+                let text = decode_euc_kr(&bytes);
+                let fragments = extract_html_fragments(&text);
+                let html = fragments.first_paragraph_html.or(fragments.body_html)?;
+                let clean = sanitize_html_fragment(&html);
+                (!clean.is_empty()).then_some((entry, clean))
+            })
+            .expect("entry with renderable HTML");
+        assert!(entry.definition_html.is_empty());
+        let detail = hydrate_zip_entry_detail(Path::new(&path), entry.clone());
+        assert_eq!(detail.definition_html, expected_html);
+        assert_eq!(detail.definition_text, entry.definition_text);
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_chm_extract_and_hydrate() {
+        let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
+        let file = std::fs::File::open(path).expect("open benchmark zip");
+        let mut zip = zip::ZipArchive::new(file).expect("parse benchmark zip");
+        for name in ["merge17.chm", "merge36.chm", "merge01.chm"] {
+            let mut bytes = Vec::new();
+            zip.by_name(name)
+                .expect("CHM in benchmark zip")
+                .read_to_end(&mut bytes)
+                .expect("read CHM bytes");
+            let start = Instant::now();
+            let mut chm = ChmArchive::open(bytes).expect("open CHM");
+            let open_time = start.elapsed();
+            let start = Instant::now();
+            let mut entries = extract_index_entries_from_open_chm(name, &mut chm);
+            let extract_time = start.elapsed();
+            let start = Instant::now();
+            hydrate_entries_from_open_chm(&mut chm, &mut entries);
+            let hydrate_time = start.elapsed();
+            eprintln!(
+                "CHM {name}: open={open_time:?}, extract={extract_time:?}, hydrate={hydrate_time:?}, entries={}",
+                entries.len()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_chm_html_stages() {
+        let path = std::env::var("DOKHAN_TEST_ZIP").expect("set DOKHAN_TEST_ZIP");
+        let file = std::fs::File::open(path).expect("open benchmark zip");
+        let mut zip = zip::ZipArchive::new(file).expect("parse benchmark zip");
+        let mut bytes = Vec::new();
+        zip.by_name("merge17.chm")
+            .expect("CHM in benchmark zip")
+            .read_to_end(&mut bytes)
+            .expect("read CHM bytes");
+        let mut chm = ChmArchive::open(bytes).expect("open CHM");
+        let paths = chm.entries().iter()
+            .filter(|entry| entry.path.ends_with(".html") || entry.path.ends_with(".htm"))
+            .take(100)
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        let (mut read_time, mut decode_time, mut extract_time, mut sanitize_time, mut text_time, mut bold_time) =
+            (std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::ZERO,
+             std::time::Duration::ZERO, std::time::Duration::ZERO, std::time::Duration::ZERO);
+        for path in &paths {
+            let start = Instant::now();
+            let bytes = chm.read_object(path).expect("read page");
+            read_time += start.elapsed();
+            let start = Instant::now();
+            let text = decode_euc_kr(&bytes);
+            decode_time += start.elapsed();
+            let start = Instant::now();
+            let fragments = extract_html_fragments(&text);
+            extract_time += start.elapsed();
+            let paragraph = fragments.first_paragraph_html.unwrap_or_default();
+            let start = Instant::now();
+            let _ = sanitize_html_fragment(&paragraph);
+            sanitize_time += start.elapsed();
+            let start = Instant::now();
+            let _ = compact_ws(&strip_html_tags(&paragraph));
+            text_time += start.elapsed();
+            let start = Instant::now();
+            let _ = extract_first_bold_text(&text);
+            bold_time += start.elapsed();
+        }
+        eprintln!("CHM HTML stages for {} pages: read={read_time:?}, decode={decode_time:?}, extract={extract_time:?}, sanitize={sanitize_time:?}, strip={text_time:?}, bold={bold_time:?}", paths.len());
+    }
 }

@@ -138,29 +138,7 @@ pub(crate) fn read_chm_binary_object(chm: &mut chm::ChmArchive, local: &str) -> 
     if let Ok(v) = chm.read_object(&slash) {
         return Some(v);
     }
-    let needle = path.to_ascii_lowercase();
-    let base = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
-    let mut matches = chm
-        .entries()
-        .iter()
-        .filter_map(|e| {
-            let entry_lower = e.path.trim_start_matches('/').to_ascii_lowercase();
-            let entry_base = entry_lower.rsplit('/').next().unwrap_or(&entry_lower);
-            if entry_lower == needle || entry_base == base {
-                Some(e.path.clone())
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-    matches.sort();
-    matches.dedup();
-    for p in matches {
-        if let Ok(v) = chm.read_object(&p) {
-            return Some(v);
-        }
-    }
-    None
+    chm.read_object_by_basename(path)
 }
 
 /// Core implementation for media href -> data URL resolution.
@@ -184,7 +162,8 @@ fn resolve_media_data_url_inner(
         .unwrap_or_else(|| "master.chm".to_string());
     let bytes = match resolve_runtime_source(app, zip_path)? {
         RuntimeSource::ZipPath(zip_path) => {
-            let mut chm = open_named_chm_from_zip(&zip_path, &source_path)?;
+            let chm = open_named_chm_from_zip(&zip_path, &source_path)?;
+            let mut chm = chm.lock().map_err(|_| "chm archive lock poisoned".to_string())?;
             read_chm_binary_object(&mut chm, &resolved_local)
                 .ok_or_else(|| format!("asset not found in {source_path}: {resolved_local}"))?
         }

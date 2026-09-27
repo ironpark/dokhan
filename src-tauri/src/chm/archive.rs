@@ -23,6 +23,7 @@ pub struct ChmArchive {
     data_offset: u64,
     entries: Vec<DirectoryEntry>,
     by_path: BTreeMap<String, usize>,
+    by_basename: BTreeMap<String, Arc<[usize]>>,
     compression: Option<CompressionContext>,
     block_cache: BTreeMap<u64, Arc<[u8]>>,
     native_streams: BTreeMap<u64, NativeStream>,
@@ -72,6 +73,7 @@ impl ChmArchive {
         for (i, e) in entries.iter().enumerate() {
             by_path.insert(e.path.to_ascii_lowercase(), i);
         }
+        let by_basename = build_basename_index(&entries);
         let compression = parse_compression_context(&data, layout.data_offset, &entries, &by_path)?;
 
         Ok(Self {
@@ -79,6 +81,7 @@ impl ChmArchive {
             data_offset: layout.data_offset,
             entries,
             by_path,
+            by_basename,
             compression,
             block_cache: BTreeMap::new(),
             native_streams: BTreeMap::new(),
@@ -110,6 +113,19 @@ impl ChmArchive {
         let end = start + entry.length as usize;
         let bytes = self.data.get(start..end).ok_or(ChmError::OutOfBounds)?;
         Ok(bytes.to_vec())
+    }
+
+    /// Try objects with the same filename in path order, skipping unreadable entries.
+    pub fn read_object_by_basename(&mut self, path: &str) -> Option<Vec<u8>> {
+        let basename = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
+        let candidates = Arc::clone(self.by_basename.get(&basename)?);
+        for &index in candidates.iter() {
+            let candidate = self.entries[index].path.clone();
+            if let Ok(bytes) = self.read_object(&candidate) {
+                return Some(bytes);
+            }
+        }
+        None
     }
 
     fn read_compressed_object(&mut self, start: u64, len: u64) -> Result<Vec<u8>, ChmError> {
@@ -158,10 +174,13 @@ impl ChmArchive {
         let window_bits = (32 - window_size.leading_zeros()) as u8 - 1;
         let reset_blkcount = std::cmp::max(ctx.lzx_params.reset_blkcount as u64, 1);
         let reset_base = block - (block % reset_blkcount);
-        let mut stream = self.native_streams.remove(&reset_base).unwrap_or(NativeStream {
-            next_block: reset_base,
-            state: lzx::LzxState::new(window_bits).map_err(ChmError::DecompressionFailed)?,
-        });
+        let mut stream = match self.native_streams.remove(&reset_base) {
+            Some(stream) => stream,
+            None => NativeStream {
+                next_block: reset_base,
+                state: lzx::LzxState::new(window_bits).map_err(ChmError::DecompressionFailed)?,
+            },
+        };
 
         // If the requested block is behind stream progress, rebuild from reset base.
         if stream.next_block > block {
@@ -271,6 +290,27 @@ impl ChmArchive {
     }
 }
 
+fn build_basename_index(entries: &[DirectoryEntry]) -> BTreeMap<String, Arc<[usize]>> {
+    let mut index = BTreeMap::<String, Vec<usize>>::new();
+    for (entry_index, entry) in entries.iter().enumerate() {
+        let basename = entry
+            .path
+            .rsplit('/')
+            .next()
+            .unwrap_or(&entry.path)
+            .to_ascii_lowercase();
+        index.entry(basename).or_default().push(entry_index);
+    }
+    index
+        .into_iter()
+        .map(|(basename, mut indices)| {
+            indices.sort_unstable_by(|a, b| entries[*a].path.cmp(&entries[*b].path));
+            indices.dedup_by(|a, b| entries[*a].path == entries[*b].path);
+            (basename, Arc::from(indices))
+        })
+        .collect()
+}
+
 fn pad_for_lzx(bytes: &[u8]) -> Vec<u8> {
     let mut padded = Vec::with_capacity(bytes.len() + 2);
     padded.extend_from_slice(bytes);
@@ -284,9 +324,139 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::fs::File;
+    use std::hint::black_box;
     use std::io::Read;
     use std::path::PathBuf;
+    use std::time::Instant;
     use zip::ZipArchive;
+
+    fn uncompressed_archive(entries: Vec<DirectoryEntry>, data: &[u8]) -> ChmArchive {
+        let by_path = entries
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| (entry.path.to_ascii_lowercase(), index))
+            .collect();
+        let by_basename = build_basename_index(&entries);
+        ChmArchive {
+            data: Arc::from(data),
+            data_offset: 0,
+            entries,
+            by_path,
+            by_basename,
+            compression: None,
+            block_cache: BTreeMap::new(),
+            native_streams: BTreeMap::new(),
+        }
+    }
+
+    fn uncompressed_entry(path: &str, start: u64) -> DirectoryEntry {
+        DirectoryEntry {
+            path: path.to_string(),
+            space: 0,
+            start,
+            length: 1,
+        }
+    }
+
+    #[test]
+    fn basename_fallback_preserves_path_order_and_skips_unreadable_entries() {
+        let entries = vec![
+            uncompressed_entry("/z/Logo.PNG", 1),
+            uncompressed_entry("/A/logo.png", 0),
+            uncompressed_entry("/A/logo.png", 0),
+        ];
+        let mut chm = uncompressed_archive(entries, b"AZ");
+        let candidates = chm.by_basename.get("logo.png").expect("indexed basename");
+        assert_eq!(candidates.len(), 2, "duplicate paths should be tried once");
+        assert_eq!(
+            crate::runtime::link_media::read_chm_binary_object(&mut chm, "missing/LOGO.png"),
+            Some(b"A".to_vec()),
+        );
+        assert_eq!(
+            crate::runtime::link_media::read_chm_binary_object(&mut chm, "z/logo.png"),
+            Some(b"Z".to_vec()),
+            "an exact path should take priority over basename fallback",
+        );
+
+        let entries = vec![
+            uncompressed_entry("/z/Logo.PNG", 1),
+            uncompressed_entry("/A/logo.png", 99),
+        ];
+        let mut chm = uncompressed_archive(entries, b"AZ");
+        assert_eq!(
+            crate::runtime::link_media::read_chm_binary_object(&mut chm, "missing/logo.png"),
+            Some(b"Z".to_vec()),
+            "fallback should continue after an unreadable path",
+        );
+        assert_eq!(
+            crate::runtime::link_media::read_chm_binary_object(&mut chm, "missing/absent.png"),
+            None,
+        );
+    }
+
+    #[test]
+    #[ignore = "synthetic lookup benchmark"]
+    fn bench_basename_lookup() {
+        let entries = (0..20_000)
+            .map(|i| {
+                uncompressed_entry(
+                    &format!("/group_{:04}/asset_{:04}.png", i / 1_000, i % 1_000),
+                    0,
+                )
+            })
+            .collect::<Vec<_>>();
+        let queries = (0..1_000)
+            .map(|i| format!("missing/asset_{i:04}.png"))
+            .collect::<Vec<_>>();
+
+        let start = Instant::now();
+        let index = build_basename_index(&entries);
+        let build_time = start.elapsed();
+
+        let start = Instant::now();
+        let scanned = queries
+            .iter()
+            .map(|query| {
+                let needle = query.to_ascii_lowercase();
+                let base = needle.rsplit('/').next().unwrap_or(&needle);
+                let mut matches = entries
+                    .iter()
+                    .filter_map(|entry| {
+                        let lower = entry.path.trim_start_matches('/').to_ascii_lowercase();
+                        let entry_base = lower.rsplit('/').next().unwrap_or(&lower);
+                        (lower == needle || entry_base == base).then(|| entry.path.clone())
+                    })
+                    .collect::<Vec<_>>();
+                matches.sort();
+                matches.dedup();
+                black_box(matches)
+            })
+            .collect::<Vec<_>>();
+        let scan_time = start.elapsed();
+
+        let start = Instant::now();
+        let indexed = queries
+            .iter()
+            .map(|query| {
+                let base = query
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(query)
+                    .to_ascii_lowercase();
+                let matches = index
+                    .get(&base)
+                    .into_iter()
+                    .flat_map(|indices| indices.iter())
+                    .map(|&i| entries[i].path.clone())
+                    .collect::<Vec<_>>();
+                black_box(matches)
+            })
+            .collect::<Vec<_>>();
+        let index_time = start.elapsed();
+
+        assert_eq!(scanned, indexed);
+        println!("basename index: build={build_time:?}, scan_1000={scan_time:?}, indexed_1000={index_time:?}");
+    }
 
     fn find_dataset_zip() -> Option<PathBuf> {
         let cwd = std::env::current_dir().ok()?;
