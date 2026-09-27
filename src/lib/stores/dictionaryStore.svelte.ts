@@ -443,7 +443,7 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   function handleMobileBackNavigation(): boolean {
-    if (detailState.selectedEntryId || detailState.selectedContentLocal) {
+    if (detailState.selectedEntryId !== null || detailState.selectedContentLocal) {
       closeDetail();
       return true;
     }

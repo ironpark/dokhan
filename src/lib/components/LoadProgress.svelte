@@ -68,23 +68,24 @@
     inset: 0;
     z-index: 1200;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    padding: calc(14px + env(safe-area-inset-top)) 12px;
+    padding: 20px;
     box-sizing: border-box;
-    background: rgba(20, 28, 44, 0.24);
+    background: var(--color-overlay);
+    backdrop-filter: blur(3px);
     pointer-events: auto;
   }
 
   .progress-panel {
-    width: min(560px, 100%);
-    border: 1px solid color-mix(in oklab, var(--line), #8ea2c9 20%);
-    background: color-mix(in oklab, var(--surface), #f8fbff 35%);
-    box-shadow: 0 14px 28px rgba(24, 36, 64, 0.14);
-    backdrop-filter: blur(8px);
-    padding: 10px 12px;
+    width: min(460px, 100%);
+    border: 1px solid var(--color-border);
+    border-radius: 17px;
+    background: var(--color-surface);
+    box-shadow: 0 24px 70px rgba(20, 32, 41, 0.18);
+    padding: 22px 24px;
     display: grid;
-    gap: 8px;
+    gap: 16px;
   }
 
   .progress-top {
@@ -96,35 +97,36 @@
 
   .title-group {
     display: grid;
-    gap: 2px;
+    gap: 5px;
   }
 
   .title-group strong {
-    font-size: 13px;
-    line-height: 1.2;
+    font-size: 16px;
+    line-height: 1.3;
+    color: var(--color-text);
   }
 
   .title-group small {
-    color: var(--muted);
-    font-size: 11px;
+    color: var(--color-text-muted);
+    font-size: 12px;
   }
 
   .percent {
     font-size: 12px;
     font-weight: 700;
-    color: #345ea8;
+    color: var(--color-accent);
   }
 
   .meter {
-    height: 6px;
-    background: #dde4f3;
+    height: 8px;
+    background: var(--color-accent-soft);
     overflow: hidden;
     border-radius: 999px;
   }
 
   .meter-fill {
     height: 100%;
-    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    background: var(--color-accent);
     transition: width 120ms linear;
     border-radius: 999px;
   }
@@ -152,13 +154,18 @@
 
   .progress-bottom p {
     margin: 0;
-    font-size: 12px;
-    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
   }
 
   .progress-bottom span {
-    font-size: 11px;
-    color: #657598;
+    font-size: 12px;
+    color: var(--color-text-muted);
     white-space: nowrap;
+  }
+
+  @media (max-width: 520px) {
+    .progress-panel { padding: 19px 20px; }
   }
 </style>

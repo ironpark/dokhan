@@ -38,7 +38,7 @@
   const virtualizer = createVirtualizer({
     count: 0,
     getScrollElement: () => listEl,
-    estimateSize: () => 56,
+    estimateSize: () => 60,
     overscan: 5,
   });
 
@@ -50,19 +50,28 @@
   }
 
   let lastRows: SearchHit[] | null = null;
+  let lastVirtualizerCount = -1;
   $effect(() => {
-    if (rows !== lastRows) {
-      lastRows = rows;
+    const nextRows = rows;
+    const nextCount = nextRows.length;
+    const rowsChanged = nextRows !== lastRows;
+    if (rowsChanged) {
+      lastRows = nextRows;
       if (listEl) listEl.scrollTop = 0;
       $virtualizer.scrollToIndex(0);
     }
-    $virtualizer.setOptions({
-      count: rows.length,
-      getScrollElement: () => listEl,
-    });
-    requestAnimationFrame(() => {
-      $virtualizer.measure();
-    });
+    if (nextCount !== lastVirtualizerCount) {
+      lastVirtualizerCount = nextCount;
+      $virtualizer.setOptions({
+        count: nextCount,
+        getScrollElement: () => listEl,
+      });
+    }
+    if (rowsChanged) {
+      requestAnimationFrame(() => {
+        $virtualizer.measure();
+      });
+    }
   });
 
   $effect(() => {
@@ -97,12 +106,15 @@
   <div class="search-group">
     <form
       class="search-line"
+      role="search"
+      aria-label="사전 검색"
       onsubmit={(event) => {
         event.preventDefault();
         onSubmit();
       }}
     >
     <Input
+      class="search-input"
       value={query}
       aria-label="사전 검색어"
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
@@ -129,6 +141,9 @@
           {/each}
         </div>
       </div>
+    {/if}
+    {#if !loading && rows.length > 0 && hasCommittedCurrentQuery}
+      <p class="result-summary" role="status">{rows.length >= 200 ? '상위 200개 검색 결과' : `검색 결과 ${rows.length}개`}</p>
     {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>
@@ -204,13 +219,13 @@
   }
 
   .search-group {
-    background: transparent;
+    background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
   }
 
   .search-line {
     margin: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 8px;
@@ -227,7 +242,7 @@
     order: 2;
     border-bottom: none;
     border-top: 1px solid var(--color-border);
-    background: color-mix(in oklab, var(--color-surface), white 12%);
+    background: var(--color-surface);
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 
@@ -248,13 +263,18 @@
   }
 
   .search-recent {
-    padding: 6px 12px 10px;
+    padding: 4px 14px 12px;
     border-top: none;
     background: transparent;
   }
 
   :global(.search-submit) {
-    min-width: 56px;
+    min-width: 64px;
+    min-height: 44px;
+  }
+
+  :global(.search-input input) {
+    height: 44px;
   }
 
   .search-recent p {
@@ -292,8 +312,9 @@
     border-radius: 999px;
     background: color-mix(in oklab, var(--color-surface), #f7faff 20%);
     color: var(--color-text);
-    padding: 5px 10px;
-    font-size: 12px;
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 13px;
     cursor: pointer;
     transition:
       background-color var(--motion-fast),
@@ -312,7 +333,7 @@
     border-bottom: 1px solid var(--color-border);
     background: transparent;
     text-align: left;
-    padding: 9px 12px 8px;
+    padding: 9px 14px;
     display: grid;
     gap: 3px;
     box-sizing: border-box;
@@ -332,7 +353,7 @@
   }
 
   .result-row strong {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--color-text);
     font-weight: 600;
     line-height: 1.3;
@@ -347,11 +368,25 @@
 
   .result-row small {
     margin: 0;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-text-subtle);
     line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .result-summary {
+    margin: 0;
+    padding: 0 14px 10px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .recent-list button:focus-visible,
+  .result-row:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
   }
 </style>

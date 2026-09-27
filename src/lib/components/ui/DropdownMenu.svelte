@@ -114,7 +114,7 @@
   <button
     bind:this={triggerEl}
     type="button"
-    class="inline-flex min-h-[20px] min-w-[44px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[6px] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] px-[5px] text-[var(--font-size-control-xs)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
+    class="inline-flex min-h-[32px] min-w-[52px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-dokhan-border)] bg-[var(--color-dokhan-surface)] px-2 text-[var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-dokhan-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
     aria-haspopup="menu"
     aria-expanded={open}
     aria-label={`책갈피 폴더 선택, 현재 ${label}`}

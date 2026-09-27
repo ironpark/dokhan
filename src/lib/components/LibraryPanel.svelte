@@ -57,6 +57,14 @@
   let renamingFolderName = $state("");
   let deletingFolder = $state<{ id: string; name: string } | null>(null);
   let openFolderIds = $state<string[]>([]);
+  let initializedFolder = false;
+
+  $effect(() => {
+    if (!initializedFolder && folders.length) {
+      openFolderIds = [activeFolderId];
+      initializedFolder = true;
+    }
+  });
 
   function toggleFolder(folderId: string) {
     if (openFolderIds.includes(folderId)) {
@@ -369,10 +377,10 @@
     height: 100%;
     overflow: hidden;
     box-sizing: border-box;
-    padding: 10px;
+    padding: 14px 12px;
     display: grid;
     grid-template-rows: auto 1fr;
-    gap: 10px;
+    gap: 14px;
   }
 
   :global(.folder-input input) {
@@ -395,13 +403,13 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
     padding-right: 2px;
   }
 
   .folder-card {
     border: 1px solid color-mix(in oklab, var(--color-border), white 18%);
-    border-radius: 8px;
+    border-radius: 11px;
     background: var(--color-surface);
     overflow: hidden;
     transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
@@ -417,7 +425,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 6px 8px;
+    padding: 5px 8px;
     background: color-mix(in oklab, var(--color-surface-soft), white 24%);
     border-bottom: 1px solid color-mix(in oklab, var(--color-border), white 18%);
   }
@@ -433,11 +441,12 @@
     text-align: left;
     cursor: pointer;
     min-width: 0;
+    min-height: 39px;
   }
 
   .folder-toggle strong {
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 650;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -475,6 +484,8 @@
   :global(.folder-icon-btn) {
     line-height: 0;
     color: var(--color-text-muted);
+    min-width: 34px;
+    min-height: 34px;
   }
 
   .folder-card-body {
@@ -499,6 +510,11 @@
   }
 
   .folder-empty {
-    padding: 8px;
+    padding: 10px;
+  }
+
+  @media (max-width: 980px) {
+    :global(.folder-icon-btn) { min-width: 40px; min-height: 40px; }
+    .folder-toggle { min-height: 44px; }
   }
 </style>

@@ -147,6 +147,7 @@
 <section class="panel" class:input-bottom={inputAtBottom}>
   <div class="search-line">
     <Input
+      class="index-input"
       value={query}
       aria-label="색인 검색어"
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
@@ -158,6 +159,9 @@
       <p class="index-limit-notice" role="status">
         최대 500개를 표시합니다. 단어를 입력하면 전체 색인에서 찾습니다.
       </p>
+    {/if}
+    {#if !loading && query.trim() && rows.length > 0}
+      <p class="index-result-summary" role="status">{rows.length >= 500 ? '상위 500개 색인 항목' : `색인 항목 ${rows.length}개`}</p>
     {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>
@@ -212,15 +216,21 @@
 
   .search-line {
     margin: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
     align-items: center;
     border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
 
-  .index-limit-notice {
+  :global(.index-input input) {
+    height: 44px;
+  }
+
+  .index-limit-notice,
+  .index-result-summary {
     margin: 0;
     color: var(--color-text-muted);
     font-size: var(--font-size-control-sm);
@@ -230,7 +240,7 @@
   .panel.input-bottom .search-line {
     order: 2;
     border-top: 1px solid var(--color-border);
-    background: color-mix(in oklab, var(--color-surface), white 12%);
+    background: var(--color-surface);
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 

@@ -80,13 +80,13 @@
   };
 
   const readerLineHeightMap: Record<ReaderLineHeight, string> = {
-    tight: "1.5",
-    normal: "1.62",
-    loose: "1.76",
+    tight: "1.55",
+    normal: "1.7",
+    loose: "1.85",
   };
   const readerWidthMap: Record<ReaderWidth, string> = {
-    narrow: "760px",
-    normal: "860px",
+    narrow: "680px",
+    normal: "780px",
     wide: "980px",
   };
 
@@ -95,10 +95,14 @@
   let bookmarkTargetFolderId = $state("default");
   let linkError = $state("");
   let readerEl = $state<HTMLElement | null>(null);
+  let readingProgress = $state(0);
+  let isScrolled = $state(false);
 
   $effect(() => {
     const selected = mode === "entry" ? selectedEntry : selectedContent;
     if (selected && readerEl) readerEl.scrollTop = 0;
+    readingProgress = 0;
+    isScrolled = false;
   });
 
   $effect(() => {
@@ -135,10 +139,26 @@
   }
 
   const readerStyleVars = $derived(
-    `--reader-font-size: ${(15 * normalizeFontScale(readerFontSize)) / 100}px;` +
+    `--reader-font-size: ${(16 * normalizeFontScale(readerFontSize)) / 100}px;` +
       ` --reader-line-height: ${readerLineHeightMap[readerLineHeight] ?? readerLineHeightMap.normal};` +
       ` --reader-max-width: ${readerWidthMap[readerWidth] ?? readerWidthMap.normal};`,
   );
+
+  function updateReadingPosition(event: Event) {
+    const target = event.currentTarget as HTMLElement;
+    const scrollableHeight = target.scrollHeight - target.clientHeight;
+    readingProgress = scrollableHeight > 0
+      ? Math.min(100, Math.max(0, Math.round((target.scrollTop / scrollableHeight) * 100)))
+      : 0;
+    isScrolled = target.scrollTop > 160;
+  }
+
+  function returnToTop() {
+    readerEl?.scrollTo({
+      top: 0,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }
 
   function escapeRegex(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -244,7 +264,10 @@
             )
           : node;
         if (destination) {
-          destination.scrollIntoView({ behavior: "smooth", block: "start" });
+          destination.scrollIntoView({
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+            block: "start",
+          });
         } else {
           linkError = "본문에서 이동할 위치를 찾지 못했습니다.";
         }
@@ -428,6 +451,12 @@
   function smartMarkerTooltip(node: HTMLElement) {
     let activeMarker: HTMLElement | null = null;
     let tooltipEl: HTMLDivElement | null = null;
+    let touchHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function clearTouchHideTimer() {
+      if (touchHideTimer) clearTimeout(touchHideTimer);
+      touchHideTimer = null;
+    }
 
     function ensureTooltip(): HTMLDivElement {
       if (tooltipEl && document.body.contains(tooltipEl)) return tooltipEl;
@@ -446,6 +475,7 @@
     }
 
     function hideTooltip() {
+      clearTouchHideTimer();
       activeMarker = null;
       if (!tooltipEl) return;
       tooltipEl.classList.remove("visible");
@@ -551,8 +581,26 @@
       hideTooltip();
     }
 
+    function onPointerDown(event: PointerEvent) {
+      if (event.pointerType !== "touch") return;
+      const marker = getMarkerFromTarget(event.target);
+      if (!marker) return;
+      showTooltip(marker);
+      clearTouchHideTimer();
+      touchHideTimer = setTimeout(hideTooltip, 3500);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && activeMarker) hideTooltip();
+    }
+
     function onViewportChange() {
       if (!activeMarker || !tooltipEl) return;
+      const markerRect = activeMarker.getBoundingClientRect();
+      if (markerRect.bottom < 0 || markerRect.top > window.innerHeight) {
+        hideTooltip();
+        return;
+      }
       positionTooltip(activeMarker, tooltipEl);
     }
 
@@ -560,6 +608,8 @@
     node.addEventListener("mouseout", onMouseOut);
     node.addEventListener("focusin", onFocusIn);
     node.addEventListener("focusout", onFocusOut);
+    node.addEventListener("pointerdown", onPointerDown);
+    node.addEventListener("keydown", onKeyDown);
     window.addEventListener("scroll", onViewportChange, true);
     window.addEventListener("resize", onViewportChange);
 
@@ -569,6 +619,8 @@
         node.removeEventListener("mouseout", onMouseOut);
         node.removeEventListener("focusin", onFocusIn);
         node.removeEventListener("focusout", onFocusOut);
+        node.removeEventListener("pointerdown", onPointerDown);
+        node.removeEventListener("keydown", onKeyDown);
         window.removeEventListener("scroll", onViewportChange, true);
         window.removeEventListener("resize", onViewportChange);
         hideTooltip();
@@ -581,11 +633,21 @@
   }
 </script>
 
-<section class="reader" style={readerStyleVars} bind:this={readerEl}>
+<section
+  class="reader"
+  style={readerStyleVars}
+  bind:this={readerEl}
+  onscroll={updateReadingPosition}
+  aria-label="사전 본문"
+>
   {#if mode === "content" && selectedContent}
     <article class="body-content">
       <ReaderToolbar
         title={selectedContent.title}
+        kind="목차"
+        {readingProgress}
+        {isScrolled}
+        onReturnToTop={returnToTop}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
@@ -630,6 +692,10 @@
     <article class="body-content">
       <ReaderToolbar
         title={selectedEntry.headword}
+        kind="표제어"
+        {readingProgress}
+        {isScrolled}
+        onReturnToTop={returnToTop}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
@@ -645,7 +711,9 @@
         onReaderLineHeightChange={onReaderLineHeightChange}
         onReaderWidthChange={onReaderWidthChange}
       />
-      <p class="alias-line">{selectedEntry.aliases.join(" · ")}</p>
+      {#if selectedEntry.aliases.length}
+        <p class="alias-line"><span class="alias-label">다른 이름</span>{selectedEntry.aliases.join(" · ")}</p>
+      {/if}
       {#if selectedEntry.definitionHtml}
         {#key `${selectedEntry.id}::${selectedEntry.definitionHtml.length}`}
           <div
@@ -716,7 +784,7 @@
     height: 100%;
     min-height: 0;
     overflow: auto;
-    padding: 0 var(--space-8) var(--space-5);
+    padding: 0 var(--space-8) var(--space-8);
     background: var(--color-surface);
     color: var(--color-text);
   }
@@ -735,11 +803,42 @@
     margin: 0 auto;
     font-size: var(--reader-font-size);
     line-height: var(--reader-line-height);
+    overflow-wrap: anywhere;
   }
 
   .html-rendered {
     font-size: inherit;
     line-height: inherit;
+  }
+
+  .html-rendered :global(a) {
+    color: var(--color-accent-hover);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+  }
+
+  .html-rendered :global(a:hover) {
+    color: var(--color-accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .html-rendered :global(a:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .html-rendered :global(blockquote) {
+    margin: 1em 0;
+    padding: 0.2em 0 0.2em 1em;
+    border-left: 3px solid var(--color-divider);
+    color: var(--color-text-muted);
+  }
+
+  .html-rendered :global(table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .html-rendered :global(ul),
@@ -796,7 +895,7 @@
   }
 
   .html-rendered :global(h3) {
-    margin: 1.1em 0 0.55em;
+    margin: 1.4em 0 0.55em;
     font-size: calc(var(--reader-font-size) * 1.2);
     line-height: 1.35;
   }
@@ -815,7 +914,8 @@
   .html-rendered :global(mark.search-hit) {
     background: #ffe38f;
     color: #2b2300;
-    padding: 0 1px;
+    padding: 0 2px;
+    border-radius: 3px;
   }
 
   .html-rendered :global(span.dict-marker) {
@@ -901,11 +1001,21 @@
   }
 
   .alias-line {
-    margin: 5px 0 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin: -6px 0 18px;
     color: var(--color-text-muted);
-    font-size: calc(var(--reader-font-size) * 0.92);
+    font-size: calc(var(--reader-font-size) * 0.88);
     line-height: inherit;
-    font-family: "Alegreya Sans SC", "IBM Plex Sans", sans-serif;
+  }
+
+  .alias-label {
+    color: var(--color-text-subtle);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
   }
 
   .placeholder {

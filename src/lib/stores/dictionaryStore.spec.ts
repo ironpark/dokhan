@@ -135,4 +135,29 @@ describe("dictionary source changes", () => {
     expect(store.selectedEntryId).toBeNull();
     store.dispose();
   });
+
+  it("handles mobile back navigation while entry zero is opening", async () => {
+    const store = createDictionaryStore();
+    store.setAutoOpenFirstContent(false);
+    await store.useZipPath("/first.zip");
+
+    const detail = deferred<EntryDetail>();
+    api.getEntryDetail.mockReturnValue(detail.promise);
+    const pendingDetail = store.openEntry(0);
+
+    expect(store.handleMobileBackNavigation()).toBe(true);
+    expect(store.selectedEntryId).toBeNull();
+
+    detail.resolve({
+      id: 0,
+      headword: "Null",
+      aliases: [],
+      sourcePath: "merge01.chm",
+      definitionText: "zero",
+      definitionHtml: "",
+    });
+    await pendingDetail;
+    expect(store.selectedEntry).toBeNull();
+    store.dispose();
+  });
 });

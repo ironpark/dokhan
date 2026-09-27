@@ -45,9 +45,12 @@
   }
 </script>
 
-<section class="panel" class:without-header={!showTocHeader}>
+<section class="panel" class:without-header={!showTocHeader} class:has-recents={recentItems.length > 0}>
   {#if showTocHeader}
-    <SectionHeader title="목차" class="toc-title" />
+    <div class="section-heading">
+      <SectionHeader title="목차" class="toc-title" />
+      <span class="item-count" aria-label={`목차 ${items.length}개`}>{items.length}</span>
+    </div>
   {/if}
   <div class="entry-list">
     {#if items.length}
@@ -63,7 +66,12 @@
     {/if}
   </div>
 
-  <SectionHeader title="최근 열람" class="recent-head" />
+  <div class="section-heading recent-heading">
+    <SectionHeader title="최근 열람" class="recent-head" />
+    {#if recentItems.length}
+      <span class="item-count" aria-label={`최근 열람 ${recentItems.length}개`}>{recentItems.length}</span>
+    {/if}
+  </div>
   {#if recentItems.length}
     <div class="recent-scroll">
       <ul>
@@ -92,32 +100,58 @@
     min-height: 0;
     height: 100%;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 0.8fr);
-    gap: 10px;
-    padding: 10px;
+    grid-template-rows: auto minmax(0, 1.35fr) auto minmax(0, 1fr);
+    gap: 9px;
+    padding: 13px 12px 14px;
     box-sizing: border-box;
   }
 
   .panel.without-header {
-    grid-template-rows: minmax(0, 1fr) auto minmax(0, 0.8fr);
+    grid-template-rows: minmax(0, 1.35fr) auto minmax(0, 1fr);
+  }
+
+  .panel:not(.has-recents) {
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+
+  .panel.without-header:not(.has-recents) {
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+    min-height: 20px;
+  }
+
+  .item-count {
+    color: var(--color-text-subtle);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-hover);
   }
 
   :global(.toc-title) {
-    padding: 0 2px;
+    padding: 0;
   }
 
   :global(.recent-head) {
-    padding: 2px 2px 0;
+    padding: 0;
   }
 
   .recent-scroll {
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
-  }
-
-  .recent-scroll {
-    border-top: 1px solid var(--color-border);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
   }
 
   .entry-list {
@@ -127,6 +161,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
   }
 
   ul {
@@ -145,23 +182,30 @@
 
   .recent-btn {
     width: 100%;
+    min-height: 58px;
     border: none;
     background: transparent;
     text-align: left;
-    padding: 7px 11px;
+    padding: 9px 12px;
     display: grid;
-    gap: 1px;
+    gap: 4px;
     cursor: pointer;
+    transition: background-color var(--motion-fast);
   }
 
   .recent-btn:hover {
     background: var(--color-surface-hover);
   }
 
+  .recent-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -3px;
+  }
+
   .recent-btn small {
-    color: color-mix(in oklab, var(--color-text-subtle), var(--color-text-muted) 45%);
+    color: var(--color-text-subtle);
     font-size: 11px;
-    letter-spacing: 0.01em;
+    line-height: 1.25;
   }
 
   .recent-meta {
@@ -179,12 +223,29 @@
   .recent-btn span {
     color: var(--color-text);
     font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .recent-empty {
-    padding: 8px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    background: var(--color-surface);
+  }
+
+  @media (max-height: 620px) {
+    .panel {
+      gap: 6px;
+      padding: 8px;
+    }
+
+    .recent-btn {
+      min-height: 48px;
+      padding-block: 6px;
+    }
   }
 </style>

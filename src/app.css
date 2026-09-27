@@ -19,31 +19,31 @@
   --color-dokhan-accent: var(--color-accent);
   --color-dokhan-border: var(--color-border);
 
-  /* Colors */
-  --color-bg: #f5f5f7;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f2f2f7;
-  --color-surface-active: #e5e5ea;
-  --color-surface-soft: #f9faff;
-  --color-accent-soft: rgba(0, 122, 255, 0.12);
-  
-  --color-text: #1c1c1e;
-  --color-text-muted: #626977;
-  --color-text-subtle: #686f7c;
-  
-  --color-accent: #007aff;
-  --color-accent-hover: #0062cc;
-  --color-danger: #ff3b30;
-  
-  --color-border: rgba(0, 0, 0, 0.1);
-  --color-divider: #d1d1d6;
-  --color-border-strong: rgba(0, 0, 0, 0.16);
-  --color-surface-elevated: color-mix(in oklab, var(--color-surface), white 8%);
-  --color-overlay: rgba(8, 10, 14, 0.28);
-  --color-focus-ring: color-mix(in oklab, var(--color-accent), white 80%);
-  --color-danger-soft-bg: color-mix(in oklab, var(--color-danger), white 93%);
-  --color-danger-soft-border: color-mix(in oklab, var(--color-danger), white 65%);
-  --color-danger-soft-border-hover: color-mix(in oklab, var(--color-danger), white 50%);
+  /* A warm canvas keeps the reading surface distinct from navigation. */
+  --color-bg: #f2f1ec;
+  --color-surface: #fffefa;
+  --color-surface-hover: #eef2f2;
+  --color-surface-active: #e2e9eb;
+  --color-surface-soft: #f8f7f3;
+  --color-accent-soft: #e5f0f5;
+
+  --color-text: #202b32;
+  --color-text-muted: #53616a;
+  --color-text-subtle: #637078;
+
+  --color-accent: #205b80;
+  --color-accent-hover: #164768;
+  --color-danger: #b63f3b;
+
+  --color-border: #e2e3dd;
+  --color-divider: #d2d7d5;
+  --color-border-strong: #bec9ca;
+  --color-surface-elevated: #ffffff;
+  --color-overlay: rgba(21, 32, 38, 0.38);
+  --color-focus-ring: #9fcede;
+  --color-danger-soft-bg: #fbefed;
+  --color-danger-soft-border: #e7b7b3;
+  --color-danger-soft-border-hover: #d89590;
   --color-interactive-hover: var(--color-surface-hover);
   --color-interactive-active: var(--color-surface-active);
 
@@ -57,26 +57,26 @@
   --space-8: 32px;
 
   /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-size-label-sm: 11px;
-  --font-size-control-xs: 10px;
-  --font-size-control-sm: 12px;
+  --font-size-label-sm: 12px;
+  --font-size-control-xs: 11px;
+  --font-size-control-sm: 13px;
   --font-size-control-md: 14px;
   --line-height-tight: 1.35;
   --line-height-normal: 1.5;
   --line-height-loose: 1.7;
 
   /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 2px rgba(25, 42, 49, 0.06);
+  --shadow-md: 0 8px 24px rgba(25, 42, 49, 0.12);
 
   /* Motion */
   --motion-fast: 140ms ease;
@@ -87,12 +87,35 @@
 }
 
 body {
+  margin: 0;
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
+}
+
+::selection {
+  background: #cfe6f0;
+  color: var(--color-text);
+}
+
+:focus-visible {
+  outline-color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-enter: 0ms;
+    --motion-exit: 0ms;
+    --motion-emphasized: 0ms;
+  }
 }

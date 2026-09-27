@@ -53,14 +53,14 @@
     display: grid;
     grid-template-columns: 1fr auto;
     border-top: 1px solid color-mix(in oklab, var(--color-border), white 10%);
-    min-height: 34px;
+    min-height: 42px;
   }
 
   .item-btn {
     border: none;
     background: transparent;
     text-align: left;
-    padding: 4px 8px;
+    padding: 7px 10px;
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -73,8 +73,8 @@
 
   .item-btn span {
     color: var(--color-text);
-    font-size: 11px;
-    line-height: 1.2;
+    font-size: 13px;
+    line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -84,15 +84,15 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 0 6px;
+    padding: 0 8px;
   }
 
   .remove-btn {
     border: none;
     background: transparent;
     color: var(--color-text-muted);
-    width: 20px;
-    height: 20px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border-radius: 5px;
     cursor: pointer;
@@ -104,5 +104,16 @@
   .remove-btn:hover {
     color: var(--color-danger);
     background: color-mix(in oklab, var(--color-danger), white 93%);
+  }
+
+  .item-btn:focus-visible,
+  .remove-btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+
+  @media (max-width: 980px) {
+    li { min-height: 48px; }
+    .remove-btn { width: 40px; height: 40px; }
   }
 </style>

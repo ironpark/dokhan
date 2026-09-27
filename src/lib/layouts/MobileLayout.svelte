@@ -1,30 +1,48 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
+    import { isTauri } from "@tauri-apps/api/core";
     import type { DictionaryStore } from "$lib/stores/dictionaryStore.svelte";
     import ReaderPane from "$lib/components/ReaderPane.svelte";
-    import ContentPanel from "$lib/components/ContentPanel.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
     import LibraryPanel from "$lib/components/LibraryPanel.svelte";
     import TitleToolbar from "$lib/components/TitleToolbar.svelte";
 
-    // Props
     let { dictionaryStore }: { dictionaryStore: DictionaryStore } = $props();
 
+    let searchPanelHost = $state<HTMLElement | null>(null);
+    let showAllContents = $state(false);
     let showReader = $derived(
-        !!(dictionaryStore.selectedEntryId || dictionaryStore.selectedContentLocal),
+        dictionaryStore.selectedEntryId !== null || !!dictionaryStore.selectedContentLocal,
+    );
+    let recentItems = $derived(dictionaryStore.recentViews.slice(0, 4));
+    let visibleContents = $derived(
+        showAllContents ? dictionaryStore.contents : dictionaryStore.contents.slice(0, 12),
+    );
+    let readerTitle = $derived(
+        dictionaryStore.selectedEntry?.headword ??
+        dictionaryStore.selectedContent?.title ??
+        "본문을 불러오는 중",
     );
     let readerHistoryArmed = false;
+    let contentsZipPath: string | null = null;
 
     function handleBack() {
-        if (showReader) {
-            history.back();
-        }
+        if (!showReader) return;
+        if (isTauri()) dictionaryStore.closeDetail();
+        else history.back();
+    }
+
+    async function openSearch() {
+        dictionaryStore.setMobileTab("search");
+        await tick();
+        searchPanelHost?.querySelector<HTMLInputElement>("input")?.focus();
     }
 
     onMount(() => {
+        if (isTauri()) return;
         const onPopState = () => {
-            if (dictionaryStore.selectedEntryId || dictionaryStore.selectedContentLocal) {
+            if (dictionaryStore.selectedEntryId !== null || dictionaryStore.selectedContentLocal) {
                 dictionaryStore.closeDetail();
                 return;
             }
@@ -39,7 +57,7 @@
     });
 
     $effect(() => {
-        if (showReader && !readerHistoryArmed) {
+        if (!isTauri() && showReader && !readerHistoryArmed) {
             history.pushState({ dokhanReader: true }, "");
             readerHistoryArmed = true;
             return;
@@ -48,17 +66,25 @@
             readerHistoryArmed = false;
         }
     });
+
+    $effect(() => {
+        if (dictionaryStore.zipPath !== contentsZipPath) {
+            contentsZipPath = dictionaryStore.zipPath;
+            showAllContents = false;
+        }
+    });
 </script>
 
 <div class="mobile-layout">
-    <main class="content-area">
+    <div class="content-area">
         {#if showReader}
             <div class="reader-overlay">
                 <header class="reader-header">
                     <button
+                        type="button"
                         class="back-btn"
                         onclick={handleBack}
-                        aria-label="뒤로가기"
+                        aria-label="목록으로 돌아가기"
                     >
                         <svg
                             width="24"
@@ -70,8 +96,9 @@
                         >
                             <path d="M19 12H5M12 19l-7-7 7-7" />
                         </svg>
+                        <span>목록</span>
                     </button>
-                    <span class="header-title">본문</span>
+                    <span class="header-title" title={readerTitle}>{readerTitle}</span>
                 </header>
                 <div class="reader-content">
                     {#if dictionaryStore.isOpeningDetail && !dictionaryStore.selectedEntry && !dictionaryStore.selectedContent}
@@ -123,48 +150,63 @@
             {#if dictionaryStore.mobileTab === "home"}
                 <div class="home-view">
                     <div class="hero">
-                        <h1>독한 사전</h1>
-                        <p>독일어-한국어 전자사전 · {dictionaryStore.activeZipName}</p>
+                        <p class="hero-kicker">독일어 · 한국어</p>
+                        <h2>무엇을 찾으세요?</h2>
+                        <p>단어를 검색하거나 목차에서 내용을 살펴보세요.</p>
                     </div>
-                    <div class="search-box">
-                        <button
-                            type="button"
-                            class="search-launch"
-                            aria-label="검색 탭으로 이동"
-                            onclick={() => dictionaryStore.setMobileTab("search")}
-                        >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            >
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line
-                                    x1="21"
-                                    y1="21"
-                                    x2="16.65"
-                                    y2="16.65"
-                                ></line>
-                            </svg>
-                            <span>사전 검색 열기</span>
-                        </button>
-                    </div>
+                    <button type="button" class="search-launch" onclick={openSearch}>
+                        <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                        <span>독일어·한국어 검색</span>
+                        <svg class="launch-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                    </button>
 
-                    <div class="content-list">
-                        <ContentPanel
-                            items={dictionaryStore.contents}
-                            recents={dictionaryStore.recentViews}
-                            selectedLocal={dictionaryStore.selectedContentLocal}
-                            onOpen={(local) => dictionaryStore.openContent(local)}
-                            onOpenRecent={(item) => dictionaryStore.openRecentView(item)}
-                        />
-                    </div>
+                    {#if recentItems.length}
+                        <section class="home-section" aria-labelledby="recent-heading">
+                            <div class="section-heading">
+                                <h3 id="recent-heading">최근 열람</h3>
+                                <span>이어 읽기</span>
+                            </div>
+                            <ul class="home-list">
+                                {#each recentItems as item (item.key)}
+                                    <li>
+                                        <button type="button" class="home-list-button" onclick={() => dictionaryStore.openRecentView(item)}>
+                                            <span class="list-copy"><strong>{item.label}</strong><small>{item.kind === "entry" ? "표제어" : "목차"}</small></span>
+                                            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        </section>
+                    {/if}
+
+                    <section class="home-section" aria-labelledby="contents-heading">
+                        <div class="section-heading">
+                            <h3 id="contents-heading">목차</h3>
+                            <span>{dictionaryStore.contents.length}개 항목</span>
+                        </div>
+                        {#if visibleContents.length}
+                            <ul class="home-list">
+                                {#each visibleContents as item (item.local)}
+                                    <li>
+                                        <button type="button" class="home-list-button" onclick={() => dictionaryStore.openContent(item.local)}>
+                                            <span class="list-copy"><strong>{item.title}</strong></span>
+                                            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                            {#if dictionaryStore.contents.length > 12}
+                                <button type="button" class="more-contents" aria-expanded={showAllContents} onclick={() => showAllContents = !showAllContents}>
+                                    {showAllContents ? "목차 접기" : `목차 전체 보기 (${dictionaryStore.contents.length}개)`}
+                                </button>
+                            {/if}
+                        {:else}
+                            <p class="home-empty">표시할 목차가 없습니다. 검색에서 단어를 찾아보세요.</p>
+                        {/if}
+                    </section>
                 </div>
             {:else if dictionaryStore.mobileTab === "search"}
-                <div class="panel-container">
+                <div class="panel-container" bind:this={searchPanelHost}>
                     <SearchPanel
                         query={dictionaryStore.searchQuery}
                         committedQuery={dictionaryStore.committedSearchQuery}
@@ -213,16 +255,16 @@
                 </div>
             {/if}
         {/if}
-    </main>
+    </div>
 
     {#if !showReader}
-        <nav class="bottom-nav">
+        <nav class="bottom-nav" aria-label="주요 메뉴">
             <button
                 class:active={dictionaryStore.mobileTab === "home"}
                 aria-current={dictionaryStore.mobileTab === "home" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("home")}
             >
-                <div class="icon">
+                <div class="icon" aria-hidden="true">
                     <svg
                         width="24"
                         height="24"
@@ -245,7 +287,7 @@
                 aria-current={dictionaryStore.mobileTab === "search" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("search")}
             >
-                <div class="icon">
+                <div class="icon" aria-hidden="true">
                     <svg
                         width="24"
                         height="24"
@@ -270,7 +312,7 @@
                 aria-current={dictionaryStore.mobileTab === "index" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("index")}
             >
-                <div class="icon">
+                <div class="icon" aria-hidden="true">
                     <svg
                         width="24"
                         height="24"
@@ -292,7 +334,7 @@
                 aria-current={dictionaryStore.mobileTab === "favorites" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("favorites")}
             >
-                <div class="icon">
+                <div class="icon" aria-hidden="true">
                     <svg
                         width="24"
                         height="24"
@@ -316,10 +358,12 @@
 <style>
     .mobile-layout {
         display: grid;
-        grid-template-rows: 1fr auto;
+        grid-template-rows: minmax(0, 1fr) auto;
         flex: 1;
         height: 100%;
         min-height: 0;
+        min-width: 0;
+        overflow: hidden;
         padding-top: env(safe-area-inset-top);
         background: var(--color-bg);
         color: var(--color-text);
@@ -331,6 +375,8 @@
         background: var(--color-bg);
         display: flex;
         flex-direction: column;
+        min-height: 0;
+        min-width: 0;
     }
 
     .panel-container {
@@ -342,17 +388,14 @@
 
     .bottom-nav {
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
-        gap: 6px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 2px;
         border-top: 1px solid var(--color-border);
-        background: rgba(255, 255, 255, 0.88);
+        background: color-mix(in oklab, var(--color-surface), transparent 6%);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        padding-top: 6px;
-        padding-bottom: calc(8px + env(safe-area-inset-bottom));
-        padding-left: 8px;
-        padding-right: 8px;
-        min-height: 60px;
+        padding: 5px 8px calc(5px + env(safe-area-inset-bottom));
+        min-height: 62px;
         align-items: center;
     }
 
@@ -360,17 +403,17 @@
         position: relative;
         background: transparent;
         border: none;
-        padding: 8px 8px;
+        padding: 7px 4px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        font-size: 10px;
+        gap: 3px;
+        font-size: 11px;
         min-height: 52px;
         color: var(--color-text-muted);
         cursor: pointer;
-        border-radius: 14px;
+        border-radius: 12px;
         overflow: hidden;
         isolation: isolate;
         -webkit-tap-highlight-color: transparent;
@@ -383,9 +426,9 @@
     .bottom-nav button::before {
         content: "";
         position: absolute;
-        inset: 3px 4px;
-        border-radius: 12px;
-        background: color-mix(in oklab, var(--color-accent), white 84%);
+        inset: 1px 2px;
+        border-radius: 10px;
+        background: var(--color-accent-soft);
         opacity: 0;
         transform: scale(0.92);
         transition:
@@ -420,7 +463,7 @@
     }
 
     .bottom-nav button span {
-        font-weight: 500;
+        font-weight: 600;
         transition:
             transform 180ms ease,
             letter-spacing 180ms ease;
@@ -450,15 +493,12 @@
 
     .reader-overlay {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        inset: 0;
         background: var(--color-surface);
         z-index: 100;
         display: grid;
-        grid-template-rows: auto 1fr;
-        animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        grid-template-rows: auto minmax(0, 1fr);
+        animation: slideUp 220ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     @keyframes slideUp {
@@ -471,35 +511,60 @@
     }
 
     .reader-header {
-        height: 50px;
+        min-height: 54px;
         border-bottom: 1px solid var(--color-border);
         display: flex;
         align-items: center;
-        padding: 0 8px;
-        background: rgba(255, 255, 255, 0.95);
+        justify-content: space-between;
+        gap: 12px;
+        padding: 4px 12px;
+        background: color-mix(in oklab, var(--color-surface), transparent 4%);
         backdrop-filter: blur(10px);
-        position: sticky;
-        top: 0;
         z-index: 10;
     }
 
     .back-btn {
-        background: none;
+        background: transparent;
         border: none;
-        padding: 8px;
+        border-radius: var(--radius-md);
+        min-height: 44px;
+        padding: 0 8px 0 2px;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
         color: var(--color-accent);
+        font-size: 14px;
+        font-weight: 650;
         cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .back-btn:active {
+        background: var(--color-accent-soft);
+    }
+
+    .back-btn:focus-visible,
+    .search-launch:focus-visible,
+    .home-list-button:focus-visible,
+    .more-contents:focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: -2px;
     }
 
     .header-title {
         font-weight: 600;
-        font-size: 17px;
-        margin-left: 8px;
+        font-size: 14px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--color-text-muted);
     }
 
     .reader-content {
         overflow: hidden;
         position: relative;
+        min-height: 0;
     }
 
     .detail-loading {
@@ -513,57 +578,194 @@
     .home-view {
         flex: 1;
         min-height: 0;
-        padding: 20px;
+        padding: 22px 16px 28px;
         display: flex;
         flex-direction: column;
-        gap: 24px;
+        gap: 20px;
         overflow-y: auto;
-    }
-
-    .content-list {
-        flex: 1;
-        min-height: 300px;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
     }
 
     .hero {
-        margin-top: 20px;
+        padding: 4px 2px 0;
     }
 
-    .hero h1 {
-        font-size: 32px;
-        line-height: 1.1;
-        margin: 0 0 8px 0;
-        letter-spacing: -0.02em;
+    .hero .hero-kicker {
+        color: var(--color-accent);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        margin-bottom: 7px;
+    }
+
+    .hero h2 {
+        font-size: clamp(22px, 6vw, 27px);
+        line-height: 1.2;
+        margin: 0 0 6px;
+        letter-spacing: -0.03em;
         color: var(--color-text);
     }
 
     .hero p {
         margin: 0;
         color: var(--color-text-muted);
-        font-weight: 500;
-    }
-
-    .search-box {
-        position: relative;
+        font-size: 13px;
+        line-height: 1.45;
     }
 
     .search-launch {
         width: 100%;
-        height: 42px;
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
+        min-height: 56px;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-lg);
         background: var(--color-surface);
-        color: var(--color-text-muted);
+        color: var(--color-text);
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 0 12px;
-        font-size: 14px;
+        gap: 12px;
+        padding: 0 16px;
+        font-size: 15px;
+        font-weight: 600;
         cursor: pointer;
+        box-shadow: var(--shadow-sm);
+        text-align: left;
+        touch-action: manipulation;
+    }
+
+    .search-launch > svg:first-child {
+        color: var(--color-accent);
+        flex: none;
+    }
+
+    .search-launch .launch-arrow {
+        margin-left: auto;
+        color: var(--color-text-muted);
+        flex: none;
     }
 
     .search-launch:active {
         background: var(--color-surface-hover);
+    }
+
+    .home-section {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .section-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 2px;
+    }
+
+    .section-heading h3 {
+        margin: 0;
+        color: var(--color-text);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    .section-heading span {
+        color: var(--color-text-muted);
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .home-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .home-list li + li {
+        border-top: 1px solid var(--color-border);
+    }
+
+    .home-list-button {
+        width: 100%;
+        min-height: 54px;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 0;
+        background: transparent;
+        color: var(--color-text);
+        text-align: left;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .home-list-button:active {
+        background: var(--color-surface-hover);
+    }
+
+    .home-list-button > svg {
+        flex: none;
+        color: var(--color-text-muted);
+    }
+
+    .list-copy {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+    }
+
+    .list-copy strong {
+        font-size: 14px;
+        line-height: 1.35;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .list-copy small {
+        color: var(--color-text-muted);
+        font-size: 11px;
+    }
+
+    .more-contents {
+        min-height: 44px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-surface);
+        color: var(--color-accent);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .more-contents:active {
+        background: var(--color-surface-hover);
+    }
+
+    .home-empty {
+        margin: 0;
+        padding: 16px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface);
+        color: var(--color-text-muted);
+        font-size: 13px;
+    }
+
+    @media (max-height: 540px) {
+        .home-view { gap: 14px; padding-top: 14px; }
+        .hero { padding-top: 0; }
+        .hero h2 { font-size: 22px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .reader-overlay { animation: none; }
     }
 
 </style>

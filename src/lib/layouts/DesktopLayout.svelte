@@ -1,4 +1,5 @@
 <script lang="ts">
+    import BookOpen from "@lucide/svelte/icons/book-open";
     import type { DictionaryStore } from "$lib/stores/dictionaryStore.svelte";
     import SearchPanel from "$lib/components/SearchPanel.svelte";
     import IndexPanel from "$lib/components/IndexPanel.svelte";
@@ -94,10 +95,13 @@
     <main class="main-content">
         {#if !dictionaryStore.selectedContent && !dictionaryStore.selectedEntry}
             <div class="empty-state">
-                <EmptyState
-                    title="본문을 표시할 항목을 선택하세요."
-                    description="목차, 색인, 검색 또는 책갈피에서 항목을 선택하면 여기에 표시됩니다."
-                />
+                <div class="empty-state-card">
+                    <span class="empty-state-icon" aria-hidden="true"><BookOpen size={25} strokeWidth={1.7} /></span>
+                    <EmptyState
+                        title="읽을 항목을 선택하세요"
+                        description="왼쪽의 목차, 색인, 검색 또는 책갈피에서 항목을 선택하면 본문이 이곳에 표시됩니다."
+                    />
+                </div>
             </div>
         {:else}
             <ReaderPane
@@ -135,22 +139,24 @@
 <style>
     .desktop-layout {
         display: grid;
-        grid-template-columns: 280px 1fr;
+        grid-template-columns: clamp(276px, 24vw, 336px) minmax(0, 1fr);
         flex: 1;
         height: 100%;
         min-height: 0;
         width: 100%;
         overflow: hidden;
-        background: var(--color-bg);
+        background: var(--color-surface);
         font-family: var(--font-sans);
         color: var(--color-text);
     }
 
     .sidebar {
         display: grid;
-        grid-template-rows: auto auto 1fr;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
         border-right: 1px solid var(--color-border);
-        background: var(--color-bg);
+        background: var(--color-surface-soft);
         overflow: hidden;
     }
 
@@ -158,6 +164,7 @@
         overflow: hidden;
         background: var(--color-surface-soft);
         min-height: 0;
+        outline-offset: -3px;
     }
 
     .main-content {
@@ -166,6 +173,8 @@
         display: flex;
         flex-direction: column;
         position: relative;
+        min-width: 0;
+        min-height: 0;
     }
 
     .empty-state {
@@ -175,10 +184,72 @@
         justify-content: center;
         color: var(--color-text-muted);
         user-select: none;
+        padding: 28px;
+        box-sizing: border-box;
+        background: radial-gradient(circle at 50% 42%, #f8f8f4 0, var(--color-surface) 65%);
+    }
+
+    .empty-state-card {
+        width: min(100%, 420px);
+        padding: 36px 30px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-xl);
+        background: var(--color-surface);
+        box-shadow: var(--shadow-sm);
+        text-align: center;
+    }
+
+    .empty-state-icon {
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 12px;
+        border-radius: 16px;
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .empty-state-card :global(.empty-state) {
+        padding: 0;
+        gap: 8px;
+    }
+
+    .empty-state-card :global(.empty-state .title) {
+        color: var(--color-text);
+        font-size: 16px;
+    }
+
+    .empty-state-card :global(.empty-state .description) {
+        color: var(--color-text-muted);
+        font-size: 13px;
+        line-height: 1.55;
     }
 
     .tabs-container {
         padding: 0;
         background: var(--color-surface-soft);
+    }
+
+    @media (max-width: 820px) {
+        .desktop-layout {
+            grid-template-columns: 248px minmax(0, 1fr);
+        }
+    }
+
+    @media (max-width: 620px) {
+        .desktop-layout {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
+        }
+
+        .sidebar {
+            border-right: 0;
+            border-bottom: 1px solid var(--color-border-strong);
+        }
+
+        .empty-state-card {
+            padding: 24px 20px;
+        }
     }
 </style>
