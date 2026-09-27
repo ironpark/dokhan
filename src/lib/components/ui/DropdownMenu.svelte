@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
   import { tick, type Snippet } from "svelte";
   import { nextRovingIndex } from "$lib/utils/rovingFocus";
 
@@ -8,11 +9,17 @@
     options,
     onSelect,
     trigger,
+    variant = "select",
+    heading = "",
     class: className = "",
   }: {
     label: string;
     ariaLabel?: string;
-    options: Array<{ id: string; label: string; active?: boolean }>;
+    options: Array<{ id: string; label: string; active?: boolean; danger?: boolean }>;
+    /** `select`: pick one of several (radio items, check mark). `action`: plain commands. */
+    variant?: "select" | "action";
+    /** Optional small caption above the items (e.g. "이동할 폴더"). */
+    heading?: string;
     onSelect: (id: string) => void;
     /** Custom trigger content (e.g. an icon); `label` is then only the accessible fallback. */
     trigger?: Snippet;
@@ -23,6 +30,26 @@
   let rootEl = $state<HTMLDivElement | null>(null);
   let triggerEl = $state<HTMLButtonElement | null>(null);
   let menuEl = $state<HTMLDivElement | null>(null);
+  // Fixed coordinates so the menu escapes `overflow: hidden` cards and scroll containers.
+  let menuStyle = $state("");
+
+  const MENU_GAP = 4;
+  const VIEWPORT_MARGIN = 8;
+
+  function positionMenu() {
+    if (!triggerEl || !menuEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const menuHeight = menuEl.offsetHeight;
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+    const openUp = spaceBelow < menuHeight + MENU_GAP && rect.top > spaceBelow;
+    const top = openUp
+      ? Math.max(VIEWPORT_MARGIN, rect.top - MENU_GAP - menuHeight)
+      : rect.bottom + MENU_GAP;
+    // Right-align with the trigger, but keep the whole menu inside the viewport.
+    const maxLeft = window.innerWidth - VIEWPORT_MARGIN - menuEl.offsetWidth;
+    const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.right - menuEl.offsetWidth, maxLeft));
+    menuStyle = `top: ${top}px; left: ${left}px; transform-origin: ${openUp ? "bottom" : "top"} right;`;
+  }
 
   function toggle() {
     if (open) {
@@ -36,13 +63,14 @@
     open = true;
     await tick();
     if (!open) return;
+    positionMenu();
     const items = menuItems();
     const target = focusLast ? items?.[items.length - 1] : items?.[0];
     target?.focus();
   }
 
   function menuItems() {
-    return menuEl?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']");
+    return menuEl?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio'], [role='menuitem']");
   }
 
   function close(restoreFocus = false) {
@@ -95,6 +123,18 @@
     items[nextIndex].focus();
   }
 
+  // A fixed menu would drift from its trigger on scroll/resize; closing is simpler and expected.
+  $effect(() => {
+    if (!open) return;
+    const dismiss = () => close();
+    window.addEventListener("resize", dismiss);
+    document.addEventListener("scroll", dismiss, true);
+    return () => {
+      window.removeEventListener("resize", dismiss);
+      document.removeEventListener("scroll", dismiss, true);
+    };
+  });
+
   $effect(() => {
     document.addEventListener("click", handleDocumentClick);
     document.addEventListener("focusin", handleDocumentFocus);
@@ -122,27 +162,38 @@
   {#if open}
     <div
       bind:this={menuEl}
-      class="absolute right-0 top-[calc(100%+4px)] z-24 grid min-w-[108px] gap-[2px] rounded-[8px] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-1 shadow-[var(--shadow-popover)] animate-[menuIn_var(--motion-enter)]"
+      class="fixed z-50 grid grid-cols-[minmax(0,1fr)] min-w-[148px] max-w-[min(260px,calc(100vw-16px))] max-h-[min(320px,60vh)] overflow-y-auto gap-[2px] rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-1 shadow-[var(--shadow-popover)] animate-[menuIn_var(--motion-enter)]"
+      style={menuStyle}
       role="menu"
       tabindex="-1"
       onkeydown={handleMenuKeydown}
     >
+      {#if heading}
+        <p class="m-0 px-[10px] pb-[2px] pt-[6px] text-[11px] font-semibold tracking-[0.04em] text-[var(--color-text-subtle)]" aria-hidden="true">{heading}</p>
+      {/if}
       {#each options as option (option.id)}
         <button
           type="button"
-          role="menuitemradio"
-          aria-checked={!!option.active}
-          class={`cursor-pointer rounded-[6px] border-none bg-transparent px-[6px] py-[5px] text-left text-[length:var(--font-size-control-xs)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-focus-ring)] ${
+          role={variant === "select" ? "menuitemradio" : "menuitem"}
+          aria-checked={variant === "select" ? !!option.active : undefined}
+          class={`menu-option flex min-h-[34px] cursor-pointer items-center gap-2 rounded-[7px] border-none px-[10px] py-[6px] text-left text-[length:var(--font-size-control-sm)] focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--color-focus-ring)] ${
             option.active
-              ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-              : "text-[var(--color-text-muted)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)]"
+              ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-accent)]"
+              : option.danger
+                ? "bg-transparent text-[var(--color-danger)] hover:bg-[var(--color-danger-soft-bg)]"
+                : "bg-transparent text-[var(--color-text)] hover:bg-[var(--color-interactive-hover)]"
           }`}
           onclick={() => {
             onSelect(option.id);
             close(true);
           }}
         >
-          {option.label}
+          <span class="min-w-0 flex-1 truncate" title={option.label}>{option.label}</span>
+          {#if variant === "select"}
+            <span class="inline-flex w-4 shrink-0" aria-hidden="true">
+              {#if option.active}<Check size={14} />{/if}
+            </span>
+          {/if}
         </button>
       {/each}
     </div>

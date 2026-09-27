@@ -217,24 +217,40 @@
 
   .search-line {
     margin: 0;
-    padding: 12px 14px;
+    padding: 4px 12px 10px;
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
   }
 
+  /* Index rows are German headwords; set them in the serif. */
+  .entry-list :global(.list-item .label) {
+    font-family: var(--font-serif);
+    font-size: 15px;
+  }
+
+  .entry-list :global(.list-item .label strong) {
+    color: var(--color-accent);
+    font-weight: 700;
+  }
+
+  /* Matches the tab bar (38px, 10px radius); mobile bottom dock keeps 44px. */
   :global(.index-input input) {
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .panel.input-bottom :global(.index-input input) {
     height: 44px;
   }
 
   .index-limit-notice,
   .index-result-summary {
     margin: 0;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-control-sm);
+    padding: 0 6px;
+    color: var(--color-text-subtle);
+    font-size: 12px;
     line-height: var(--line-height-normal);
   }
 
@@ -242,6 +258,7 @@
     order: 2;
     border-top: 1px solid var(--color-border);
     background: var(--color-surface);
+    padding-top: 10px;
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
   }
 

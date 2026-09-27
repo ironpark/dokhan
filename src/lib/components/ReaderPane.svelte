@@ -1,9 +1,6 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
-  import Button from "$lib/components/ui/Button.svelte";
-  import Dialog from "$lib/components/ui/Dialog.svelte";
-  import Select from "$lib/components/ui/Select.svelte";
   import Toast from "$lib/components/ui/Toast.svelte";
   import type {
     BookmarkFolder,
@@ -27,7 +24,9 @@
     onToggleFavorite = () => {},
     bookmarkFolders = [],
     activeBookmarkFolderId = "default",
+    currentBookmarkFolderId = null,
     onAddBookmarkToFolder = () => {},
+    onCreateBookmarkFolder = () => null,
     preprocessEnabled = true,
     onTogglePreprocess = () => {},
     markerPreprocessEnabled = true,
@@ -57,7 +56,10 @@
     onToggleFavorite?: () => void;
     bookmarkFolders?: BookmarkFolder[];
     activeBookmarkFolderId?: string;
+    /** Folder of the open item's bookmark; null when it isn't bookmarked. */
+    currentBookmarkFolderId?: string | null;
     onAddBookmarkToFolder?: (folderId: string) => void;
+    onCreateBookmarkFolder?: (name: string) => string | null;
     preprocessEnabled?: boolean;
     onTogglePreprocess?: () => void;
     markerPreprocessEnabled?: boolean;
@@ -90,6 +92,16 @@
     }
   }
 
+  /** CHM pages often pad with `<h2>&nbsp;</h2>`; hide them so their borders/margins don't leave gaps. */
+  function markEmptyHeadings(root: HTMLElement) {
+    for (const heading of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+      if (heading.querySelector("img")) continue;
+      if ((heading.textContent ?? "").replace(/[\s\u00a0]+/g, "") === "") {
+        heading.classList.add("dict-empty-heading");
+      }
+    }
+  }
+
   const readerLineHeightMap: Record<ReaderLineHeight, string> = {
     tight: "1.55",
     normal: "1.7",
@@ -102,8 +114,6 @@
   };
 
   let showReaderTools = $state(false);
-  let showBookmarkFolderDialog = $state(false);
-  let bookmarkTargetFolderId = $state("default");
   let linkError = $state("");
   let readerEl = $state<HTMLElement | null>(null);
   let readingProgress = $state(0);
@@ -116,34 +126,6 @@
     isScrolled = false;
   });
 
-  $effect(() => {
-    if (!showBookmarkFolderDialog) {
-      bookmarkTargetFolderId = activeBookmarkFolderId;
-    }
-  });
-
-  function handleFavoriteClick() {
-    if (isFavorite) {
-      onToggleFavorite();
-      return;
-    }
-    if (bookmarkFolders.length <= 1) {
-      onToggleFavorite();
-      return;
-    }
-    bookmarkTargetFolderId = activeBookmarkFolderId;
-    showBookmarkFolderDialog = true;
-  }
-
-  function cancelBookmarkFolderDialog() {
-    showBookmarkFolderDialog = false;
-  }
-
-  function confirmBookmarkFolderDialog() {
-    onAddBookmarkToFolder(bookmarkTargetFolderId);
-    showBookmarkFolderDialog = false;
-  }
-
   function normalizeFontScale(value: ReaderFontSize): number {
     const rounded = Math.round(value);
     return Math.min(130, Math.max(80, rounded));
@@ -153,6 +135,11 @@
     `--reader-font-size: ${(16 * normalizeFontScale(readerFontSize)) / 100}px;` +
       ` --reader-line-height: ${readerLineHeightMap[readerLineHeight] ?? readerLineHeightMap.normal};` +
       ` --reader-max-width: ${readerWidthMap[readerWidth] ?? readerWidthMap.normal};`,
+  );
+
+  // The CHM title often repeats the headword verbatim; only show genuinely different names.
+  const entryAliases = $derived(
+    selectedEntry ? selectedEntry.aliases.filter((alias) => alias.trim() !== selectedEntry.headword.trim()) : [],
   );
 
   function updateReadingPosition(event: Event) {
@@ -414,6 +401,7 @@
               // Keep rendering stable even if preprocess transformation fails.
             }
           }
+          markEmptyHeadings(node);
           markDuplicateTitle(node, snapshot.title);
         }
         if (currentRevision !== revision || !node.isConnected) return;
@@ -648,13 +636,18 @@
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
+        {bookmarkFolders}
+        {activeBookmarkFolderId}
+        {currentBookmarkFolderId}
+        {onAddBookmarkToFolder}
+        {onCreateBookmarkFolder}
         {showReaderTools}
         {readerFontSize}
         {readerLineHeight}
         {readerWidth}
         {onTogglePreprocess}
         {onToggleMarkerPreprocess}
-        onToggleFavorite={handleFavoriteClick}
+        {onToggleFavorite}
         onToggleReaderTools={() => (showReaderTools = !showReaderTools)}
         onReaderFontSizeChange={onReaderFontSizeChange}
         onReaderLineHeightChange={onReaderLineHeightChange}
@@ -697,25 +690,30 @@
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
+        {bookmarkFolders}
+        {activeBookmarkFolderId}
+        {currentBookmarkFolderId}
+        {onAddBookmarkToFolder}
+        {onCreateBookmarkFolder}
         {showReaderTools}
         {readerFontSize}
         {readerLineHeight}
         {readerWidth}
         {onTogglePreprocess}
         {onToggleMarkerPreprocess}
-        onToggleFavorite={handleFavoriteClick}
+        {onToggleFavorite}
         onToggleReaderTools={() => (showReaderTools = !showReaderTools)}
         onReaderFontSizeChange={onReaderFontSizeChange}
         onReaderLineHeightChange={onReaderLineHeightChange}
         onReaderWidthChange={onReaderWidthChange}
       />
-      {#if selectedEntry.aliases.length}
-        <p class="alias-line"><span class="alias-label">다른 이름</span>{selectedEntry.aliases.join(" · ")}</p>
+      {#if entryAliases.length}
+        <p class="alias-line"><span class="alias-label">다른 이름</span>{entryAliases.join(" · ")}</p>
       {/if}
       {#if selectedEntry.definitionHtml}
         {#key `${selectedEntry.id}::${selectedEntry.definitionHtml.length}`}
           <div
-            class="html-rendered"
+            class="html-rendered entry-body"
             use:interceptLinks={{
               sourcePath: selectedEntry.sourcePath,
               local: null,
@@ -745,29 +743,6 @@
   {/if}
 </section>
 
-<Dialog
-  open={showBookmarkFolderDialog}
-  ariaLabel="책갈피 폴더 선택"
-  title="책갈피 폴더 선택"
-  description="이 항목을 저장할 폴더를 선택하세요."
-  onOpenChange={(next) => {
-    showBookmarkFolderDialog = next;
-  }}
->
-  {#snippet children()}
-    <Select class="bookmark-folder-select" bind:value={bookmarkTargetFolderId} uiSize="sm">
-      {#each bookmarkFolders as folder (folder.id)}
-        <option value={folder.id}>{folder.name}</option>
-      {/each}
-    </Select>
-  {/snippet}
-  {#snippet actions()}
-    <Button type="button" size="xs" variant="soft" onclick={cancelBookmarkFolderDialog}>취소</Button>
-    <Button type="button" size="xs" variant="pill-active" onclick={confirmBookmarkFolderDialog}
-      >추가</Button
-    >
-  {/snippet}
-</Dialog>
 <Toast
   open={!!linkError}
   message={linkError}
@@ -785,15 +760,6 @@
     padding: 0 var(--space-8) var(--space-8);
     background: var(--color-surface);
     color: var(--color-text);
-  }
-
-  :global(.bookmark-folder-select) {
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 12px;
-    padding: 8px 10px;
   }
 
   .body-content {
@@ -872,6 +838,30 @@
     margin-bottom: 0.42em;
   }
 
+  /* Tailwind preflight strips list markers; dictionary senses rely on them for 1. / a) numbering. */
+  .html-rendered :global(ul) {
+    list-style-type: disc;
+  }
+
+  .html-rendered :global(ol) {
+    list-style-type: decimal;
+  }
+
+  .html-rendered :global(ol[type="a"]) {
+    list-style-type: lower-alpha;
+  }
+
+  .html-rendered :global(ol.dict-subsense-list) {
+    list-style-type: dict-paren-alpha;
+  }
+
+  .html-rendered :global(li.dict-sense-item::marker),
+  .html-rendered :global(li.dict-subsense-item::marker) {
+    color: var(--color-accent);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
   .html-rendered :global(span.dict-br-spacer) {
     display: block;
     height: 0.52em;
@@ -931,7 +921,8 @@
     margin-top: 0;
   }
 
-  .html-rendered :global(.dict-duplicate-title) {
+  .html-rendered :global(.dict-duplicate-title),
+  .html-rendered :global(.dict-empty-heading) {
     display: none;
   }
 
@@ -976,8 +967,12 @@
   .html-rendered :global(mark.search-hit) {
     background: var(--color-highlight-bg);
     color: var(--color-highlight-text);
-    padding: 0 2px;
-    border-radius: 3px;
+    /* Bleed via shadow instead of padding so mid-word hits (Sc|haus|pielen) don't split the word. */
+    padding: 0;
+    border-radius: 2px;
+    box-shadow: -1px 0 0 var(--color-highlight-bg), 1px 0 0 var(--color-highlight-bg);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
   .html-rendered :global(span.dict-marker) {
@@ -1062,21 +1057,34 @@
     font-weight: 600;
   }
 
+  /* Entries open with "<b>Headword</b>, das; -es, …": give the headword a
+     dictionary-style serif lead-in. */
+  .entry-body > :global(b:first-child),
+  .entry-body > :global(p:first-child > b:first-child) {
+    font-family: var(--font-serif);
+    font-size: 1.28em;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+
   .alias-line {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 10px;
-    margin: -6px 0 18px;
+    margin: -8px 0 18px;
     color: var(--color-text-muted);
-    font-size: calc(var(--reader-font-size) * 0.88);
+    font-family: var(--font-serif);
+    font-size: calc(var(--reader-font-size) * 0.92);
     line-height: inherit;
   }
 
   .alias-label {
     color: var(--color-text-subtle);
+    font-family: var(--font-sans);
     font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.04em;
     white-space: nowrap;
   }
 

@@ -3,25 +3,25 @@
 :root {
   color-scheme: light dark;
 
-  /* A warm canvas keeps the reading surface distinct from navigation. */
-  --color-bg: #f2f1ec;
-  --color-surface: #fffefa;
-  --color-surface-hover: #eef2f2;
-  --color-surface-active: #e2e9eb;
-  --color-surface-soft: #f8f7f3;
-  --color-accent-soft: #e5f0f5;
+  /* Paper tones: a warm canvas for navigation, a lighter sheet for reading. */
+  --color-bg: #f1efe8;
+  --color-surface: #fdfcf8;
+  --color-surface-hover: #edebe3;
+  --color-surface-active: #e4e1d7;
+  --color-surface-soft: #f5f3ed;
+  --color-accent-soft: #e3edf2;
 
-  --color-text: #202b32;
-  --color-text-muted: #53616a;
-  --color-text-subtle: #637078;
+  --color-text: #1d252b;
+  --color-text-muted: #545d65;
+  --color-text-subtle: #6a7279;
 
   --color-accent: #205b80;
   --color-accent-hover: #164768;
   --color-danger: #b63f3b;
 
-  --color-border: #e2e3dd;
-  --color-divider: #d2d7d5;
-  --color-border-strong: #bec9ca;
+  --color-border: #e3e0d6;
+  --color-divider: #d6d2c6;
+  --color-border-strong: #c3beb1;
   --color-surface-elevated: #ffffff;
   --color-overlay: rgba(21, 32, 38, 0.38);
   --color-focus-ring: #9fcede;
@@ -66,6 +66,8 @@
 
   /* Typography */
   --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", Roboto, Helvetica, Arial, sans-serif;
+  /* German headwords and titles; Hangul falls through to the sans stack. */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Source Serif 4", Georgia, "Apple SD Gothic Neo", "Malgun Gothic", serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-size-label-sm: 12px;
   --font-size-control-xs: 11px;
@@ -98,11 +100,11 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #13171a;
-    --color-surface: #1b2024;
-    --color-surface-hover: #252c31;
-    --color-surface-active: #2d363c;
-    --color-surface-soft: #171c1f;
+    --color-bg: #121517;
+    --color-surface: #1a1e21;
+    --color-surface-hover: #242a2e;
+    --color-surface-active: #2c3337;
+    --color-surface-soft: #16191c;
     --color-accent-soft: #1b3240;
 
     --color-text: #e3e8ea;
@@ -113,8 +115,8 @@
     --color-accent-hover: #a2d1eb;
     --color-danger: #ee8b85;
 
-    --color-border: #2a3237;
-    --color-divider: #364046;
+    --color-border: #292f33;
+    --color-divider: #353c41;
     --color-border-strong: #45515a;
     --color-surface-elevated: #222a2f;
     --color-overlay: rgba(0, 0, 0, 0.55);
@@ -176,6 +178,12 @@ textarea {
 
 :focus-visible {
   outline-color: var(--color-accent);
+}
+
+/* Dictionary sub-senses read as "a)" in the source; falls back to lower-alpha where unsupported. */
+@counter-style dict-paren-alpha {
+  system: extends lower-alpha;
+  suffix: ") ";
 }
 
 @media (prefers-reduced-motion: reduce) {

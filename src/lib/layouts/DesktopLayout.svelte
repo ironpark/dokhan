@@ -116,7 +116,9 @@
                 onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
                 bookmarkFolders={dictionaryStore.bookmarkFolders}
                 activeBookmarkFolderId={dictionaryStore.activeBookmarkFolderId}
+                currentBookmarkFolderId={dictionaryStore.currentFavoriteFolderId()}
                 onAddBookmarkToFolder={(folderId) => dictionaryStore.addCurrentFavoriteToFolder(folderId)}
+                onCreateBookmarkFolder={(name) => dictionaryStore.createBookmarkFolder(name)}
                 preprocessEnabled={dictionaryStore.preprocessEnabled}
                 onTogglePreprocess={() =>
                     dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}
@@ -226,8 +228,15 @@
     }
 
     .tabs-container {
-        padding: 0;
+        padding: 2px 12px 10px;
         background: var(--color-surface-soft);
+    }
+
+    /* In the sidebar the header flows straight into the tabs; no divider needed. */
+    .sidebar :global(.title-toolbar) {
+        border-bottom: 0;
+        min-height: 64px;
+        padding: 12px 12px 10px 16px;
     }
 
     @media (max-width: 820px) {

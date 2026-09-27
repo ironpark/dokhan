@@ -15,70 +15,61 @@
 </script>
 
 <li class="list-item {className}" class:selected>
-    <button type="button" {onclick}>
-        {@render children()}
+    <button type="button" {onclick} aria-current={selected ? "true" : undefined}>
+        <span class="label">{@render children()}</span>
     </button>
 </li>
 
 <style>
+    /* Flat rows; the selection is an inset pill rather than a full-bleed band.
+       Total height stays 38px to match virtualized list estimates. */
     .list-item {
-        position: relative;
         min-height: 38px;
-        border-bottom: 1px solid var(--color-border);
+        padding: 1px 8px;
         box-sizing: border-box;
-        transition: background-color var(--motion-fast);
         display: flex;
         align-items: stretch;
     }
 
-    .list-item::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 6px;
-        bottom: 6px;
-        width: 3px;
-        border-radius: var(--radius-full);
-        background: var(--color-accent);
-        opacity: 0;
-        transform: scaleY(0.7);
-        transition:
-            opacity var(--motion-fast),
-            transform var(--motion-fast);
-    }
-
-    .list-item:hover {
-        background-color: var(--color-surface-hover);
-    }
-
-    .list-item.selected {
-        background-color: var(--color-accent-soft);
-    }
-
-    .list-item.selected::before {
-        opacity: 1;
-        transform: scaleY(1);
-    }
-
     button {
         width: 100%;
-        min-height: 38px;
+        min-height: 36px;
         border: none;
+        border-radius: var(--radius-sm);
         background: transparent;
         text-align: left;
-        padding: 0 var(--space-3);
+        padding: 0 10px;
         display: flex;
         align-items: center;
         font-size: 14px;
         color: var(--color-text);
         cursor: pointer;
+        min-width: 0;
+        transition:
+            background-color var(--motion-fast),
+            color var(--motion-fast);
+    }
+
+    button:hover {
+        background: var(--color-surface-hover);
+    }
+
+    .list-item.selected button {
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+        font-weight: 600;
+    }
+
+    /* Ellipsis needs a block-level child; it has no effect on the flex button itself. */
+    .label {
+        min-width: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    .list-item.selected button {
-        color: var(--color-accent);
-        font-weight: 600;
+    button:focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: -2px;
     }
 </style>

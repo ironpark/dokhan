@@ -123,6 +123,8 @@ export interface DictionaryStore {
   toggleFavoriteContent(content: Pick<ContentPage, 'local' | 'title' | 'sourcePath'>): void;
   toggleCurrentFavorite(): void;
   isCurrentFavorite(): boolean;
+  /** Folder holding the open entry/page's bookmark, or null when it isn't bookmarked. */
+  currentFavoriteFolderId(): string | null;
   removeFavorite(key: string): void;
   setActiveBookmarkFolder(folderId: string): void;
   createBookmarkFolder(name: string): string | null;
@@ -552,11 +554,14 @@ export function createDictionaryStore(): DictionaryStore {
       clearSelection();
       return;
     }
-    detailState.setContent(page, local);
+    // Pages without a <title> fall back to their file name; prefer the TOC label instead.
+    const tocTitle = contents.find((item) => item.local === local)?.title;
+    const resolvedPage = page.title === page.local && tocTitle ? { ...page, title: tocTitle } : page;
+    detailState.setContent(resolvedPage, local);
     pushRecentView({
       key: `content:${page.sourcePath}:${local}`,
       kind: 'content',
-      label: page.title,
+      label: resolvedPage.title,
       id: null,
       local,
       sourcePath: page.sourcePath,
@@ -661,6 +666,17 @@ export function createDictionaryStore(): DictionaryStore {
     return false;
   }
 
+  function currentFavoriteFolderId(): string | null {
+    if (detailState.detailMode === 'entry' && detailState.selectedEntry) {
+      return libraryState.favoriteFolderId(`entry:${detailState.selectedEntry.id}`);
+    }
+    if (detailState.detailMode === 'content' && detailState.selectedContent) {
+      const { sourcePath, local } = detailState.selectedContent;
+      return libraryState.favoriteFolderId(`content:${sourcePath ?? ''}:${local}`);
+    }
+    return null;
+  }
+
   function removeFavorite(key: string) {
     libraryState.removeFavorite(key);
   }
@@ -687,6 +703,8 @@ export function createDictionaryStore(): DictionaryStore {
 
   function addCurrentFavoriteToFolder(folderId: string) {
     if (!libraryState.bookmarkFolders.some((folder) => folder.id === folderId)) return;
+    // The last folder used becomes the default target for the next save.
+    libraryState.setActiveBookmarkFolder(folderId);
     if (detailState.detailMode === 'entry' && detailState.selectedEntry) {
       libraryState.addFavoriteEntry(detailState.selectedEntry, folderId);
       return;
@@ -811,6 +829,7 @@ export function createDictionaryStore(): DictionaryStore {
     toggleFavoriteContent,
     toggleCurrentFavorite,
     isCurrentFavorite,
+    currentFavoriteFolderId,
     removeFavorite,
     setActiveBookmarkFolder,
     createBookmarkFolder,

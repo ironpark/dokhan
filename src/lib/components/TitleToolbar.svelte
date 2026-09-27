@@ -30,8 +30,8 @@
     </div>
 
     {#if showZipAction}
-        <Button variant="toolbar-pill" size="sm" class="zip-action" onclick={onPickZip}>
-            <FolderOpen size={16} aria-hidden="true" />
+        <Button variant="ghost" size="sm" class="zip-action" onclick={onPickZip} title="다른 사전 ZIP 열기">
+            <FolderOpen size={15} aria-hidden="true" />
             <span>사전 변경</span>
         </Button>
     {/if}
@@ -64,15 +64,17 @@
     }
 
     .brand-mark {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
         flex: none;
         display: grid;
         place-items: center;
-        border: 1px solid var(--color-accent-border);
-        border-radius: 11px;
-        background: var(--color-accent-soft);
-        color: var(--color-accent);
+        border-radius: 10px;
+        background: linear-gradient(155deg, color-mix(in oklab, var(--color-accent), white 14%), var(--color-accent));
+        color: var(--color-on-accent);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.18),
+            0 1px 2px color-mix(in oklab, var(--color-accent), transparent 70%);
     }
 
     .compact .brand-mark {
@@ -91,8 +93,8 @@
         margin: 0;
         font-size: 15px;
         line-height: 1.2;
-        font-weight: 750;
-        letter-spacing: -0.025em;
+        font-weight: 700;
+        letter-spacing: -0.02em;
         color: var(--color-text);
         white-space: nowrap;
         overflow: hidden;
@@ -109,10 +111,13 @@
         text-overflow: ellipsis;
     }
 
-    /* Matches the reader toolbar pills so header actions read as one family. */
+    /* Quiet secondary action: the brand, not the button, should anchor the header. */
     .title-toolbar :global(.zip-action) {
-        min-height: 34px;
+        min-height: 32px;
+        padding-inline: 10px;
         font-size: 12px;
+        color: var(--color-text-muted);
+        border-radius: var(--radius-full);
     }
 
     @media (max-width: 420px) {

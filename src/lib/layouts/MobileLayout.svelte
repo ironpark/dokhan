@@ -114,8 +114,9 @@
                         onToggleFavorite={() => dictionaryStore.toggleCurrentFavorite()}
                         bookmarkFolders={dictionaryStore.bookmarkFolders}
                         activeBookmarkFolderId={dictionaryStore.activeBookmarkFolderId}
-                        onAddBookmarkToFolder={(folderId) =>
-                            dictionaryStore.addCurrentFavoriteToFolder(folderId)}
+                        currentBookmarkFolderId={dictionaryStore.currentFavoriteFolderId()}
+                        onAddBookmarkToFolder={(folderId) => dictionaryStore.addCurrentFavoriteToFolder(folderId)}
+                        onCreateBookmarkFolder={(name) => dictionaryStore.createBookmarkFolder(name)}
                         preprocessEnabled={dictionaryStore.preprocessEnabled}
                         onTogglePreprocess={() =>
                             dictionaryStore.setPreprocessEnabled(!dictionaryStore.preprocessEnabled)}

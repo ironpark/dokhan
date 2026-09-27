@@ -331,8 +331,12 @@
     height: 58px;
     margin-bottom: 20px;
     border-radius: 17px;
-    background: var(--color-accent-soft);
-    color: var(--color-accent);
+    /* Same mark as the sidebar brand so the app has one identity. */
+    background: linear-gradient(155deg, color-mix(in oklab, var(--color-accent), white 14%), var(--color-accent));
+    color: var(--color-on-accent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 6px 16px color-mix(in oklab, var(--color-accent), transparent 72%);
   }
 
   .eyebrow {

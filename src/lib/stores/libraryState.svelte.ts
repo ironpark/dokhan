@@ -147,6 +147,12 @@ export function createLibraryState(onChange: () => void) {
       const key = activeKey(`entry:${id}`);
       return key !== null && favorites.some((item) => item.key === key);
     },
+    /** `rawKey` is the unscoped favorite key (e.g. `entry:12`). */
+    favoriteFolderId(rawKey: string): string | null {
+      const key = activeKey(rawKey);
+      if (!key) return null;
+      return favorites.find((item) => item.key === key)?.folderId ?? null;
+    },
     isFavoriteContent(local: string, sourcePath: string | null): boolean {
       const key = activeKey(`content:${sourcePath ?? ''}:${local}`);
       return key !== null && favorites.some((item) => item.key === key);

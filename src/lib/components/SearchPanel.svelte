@@ -43,11 +43,16 @@
     overscan: 5,
   });
 
+  const entityDecoder = typeof document === "undefined" ? null : document.createElement("textarea");
+
+  // Snippets may carry raw CHM markup and entities (e.g. `H&auml;user`).
   function normalizeSnippet(snippet: string): string {
-    return snippet
-      .replace(/<[^>]*>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    let text = snippet.replace(/<[^>]*>/g, " ");
+    if (entityDecoder && text.includes("&")) {
+      entityDecoder.innerHTML = text;
+      text = entityDecoder.value;
+    }
+    return text.replace(/\s+/g, " ").trim();
   }
 
   let lastRows: SearchHit[] | null = null;
@@ -220,13 +225,12 @@
   }
 
   .search-group {
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    background: transparent;
   }
 
   .search-line {
     margin: 0;
-    padding: 12px 14px;
+    padding: 4px 12px 10px;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 8px;
@@ -236,6 +240,7 @@
   .panel.input-bottom .search-line {
     border-top: none;
     background: transparent;
+    padding-top: 10px;
     padding-bottom: 10px;
   }
 
@@ -264,17 +269,29 @@
   }
 
   .search-recent {
-    padding: 4px 14px 12px;
+    padding: 4px 12px 12px;
     border-top: none;
     background: transparent;
   }
 
+  /* Controls share the tab bar's metrics (38px tall, 10px radius) so the
+     sidebar reads as one aligned stack. Bottom-docked (mobile) keeps 44px touch targets. */
   :global(.search-submit) {
-    min-width: 64px;
-    min-height: 44px;
+    min-width: 60px;
+    height: 38px !important;
+    border-radius: 10px !important;
   }
 
   :global(.search-input input) {
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .panel.input-bottom :global(.search-submit) {
+    height: 44px !important;
+  }
+
+  .panel.input-bottom :global(.search-input input) {
     height: 44px;
   }
 
@@ -297,7 +314,7 @@
   }
 
   .recent-block {
-    padding: 10px 12px;
+    padding: 8px 14px;
   }
 
   .recent-title {
@@ -327,16 +344,19 @@
     background: var(--color-surface-hover);
   }
 
+  /* Inset pill rows (virtualized at 60px: 1px gutters + 58px row). */
   .result-row {
-    width: 100%;
-    height: 100%;
+    width: calc(100% - 16px);
+    height: calc(100% - 2px);
+    margin: 1px 8px;
     border: none;
-    border-bottom: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
     background: transparent;
     text-align: left;
-    padding: 9px 14px;
+    padding: 8px 10px;
     display: grid;
-    gap: 3px;
+    align-content: center;
+    gap: 2px;
     box-sizing: border-box;
     cursor: pointer;
     transition:
@@ -350,11 +370,11 @@
 
   .result-row.selected {
     background: var(--color-accent-soft);
-    box-shadow: inset 3px 0 0 var(--color-accent);
   }
 
   .result-row strong {
-    font-size: 15px;
+    font-family: var(--font-serif);
+    font-size: 16px;
     color: var(--color-text);
     font-weight: 600;
     line-height: 1.3;
@@ -369,7 +389,7 @@
 
   .result-row small {
     margin: 0;
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--color-text-subtle);
     line-height: 1.3;
     white-space: nowrap;
@@ -379,7 +399,7 @@
 
   .result-summary {
     margin: 0;
-    padding: 0 14px 10px;
+    padding: 0 18px 8px;
     color: var(--color-text-muted);
     font-size: 12px;
     line-height: 1.4;
