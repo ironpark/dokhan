@@ -150,7 +150,7 @@
           <strong>읽기 설정</strong>
           <p>글자와 본문 표시를 편하게 조정하세요.</p>
         </div>
-        <Button type="button" size="xs" variant="soft" onclick={resetReadingSettings}>
+        <Button type="button" size="sm" variant="soft" onclick={resetReadingSettings}>
           글자 설정 초기화
         </Button>
       </div>

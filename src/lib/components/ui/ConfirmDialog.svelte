@@ -27,8 +27,8 @@
   if (!next) onCancel();
 }}>
   {#snippet actions()}
-    <Button type="button" size="xs" variant="soft" onclick={onCancel}>{cancelLabel}</Button>
-    <Button type="button" size="xs" variant={danger ? "danger-soft" : "pill-active"} onclick={onConfirm}
+    <Button type="button" size="sm" variant="outline" onclick={onCancel}>{cancelLabel}</Button>
+    <Button type="button" size="sm" variant={danger ? "destructive" : "default"} onclick={onConfirm}
       >{confirmLabel}</Button
     >
   {/snippet}

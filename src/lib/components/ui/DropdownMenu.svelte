@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import { nextRovingIndex } from "$lib/utils/rovingFocus";
 
   let {
@@ -7,12 +7,15 @@
     ariaLabel = label,
     options,
     onSelect,
+    trigger,
     class: className = "",
   }: {
     label: string;
     ariaLabel?: string;
     options: Array<{ id: string; label: string; active?: boolean }>;
     onSelect: (id: string) => void;
+    /** Custom trigger content (e.g. an icon); `label` is then only the accessible fallback. */
+    trigger?: Snippet;
     class?: string;
   } = $props();
 
@@ -106,14 +109,14 @@
   <button
     bind:this={triggerEl}
     type="button"
-    class="inline-flex min-h-[32px] min-w-[52px] cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[length:var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]"
+    class={`inline-flex min-h-[32px] ${trigger ? "w-8 px-0 !border-transparent !bg-transparent hover:!bg-[var(--color-interactive-hover)]" : "min-w-[52px] px-2"} cursor-pointer items-center justify-center whitespace-nowrap rounded-[7px] border border-[var(--color-border)] bg-[var(--color-surface)] text-[length:var(--font-size-control-sm)] leading-[1.1] text-[var(--color-text-muted)] transition-[background-color,border-color,color] duration-150 hover:border-[var(--color-border-strong)] hover:bg-[var(--color-interactive-hover)] hover:text-[var(--color-text)] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus-ring)]`}
     aria-haspopup="menu"
     aria-expanded={open}
     aria-label={ariaLabel}
     onclick={toggle}
     onkeydown={handleTriggerKeydown}
   >
-    {label}
+    {#if trigger}{@render trigger()}{:else}{label}{/if}
   </button>
 
   {#if open}

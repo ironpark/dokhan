@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FolderInput from "@lucide/svelte/icons/folder-input";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
   import type { BookmarkFolder, FavoriteItem } from "$lib/types/dictionary";
@@ -31,12 +32,19 @@
     <span>{item.label}</span>
   </button>
   <div class="row-actions">
-    <DropdownMenu
-      label={currentFolderName}
-      ariaLabel={`책갈피 폴더 선택, 현재 ${currentFolderName}`}
-      options={menuOptions}
-      onSelect={(folderId) => onMove(item.key, folderId)}
-    />
+    <!-- The row already sits inside its folder card, so only offer moving when there is somewhere to go. -->
+    {#if folders.length > 1}
+      <DropdownMenu
+        label={currentFolderName}
+        ariaLabel={`다른 폴더로 이동, 현재 ${currentFolderName}`}
+        options={menuOptions}
+        onSelect={(folderId) => onMove(item.key, folderId)}
+      >
+        {#snippet trigger()}
+          <FolderInput size={14} aria-hidden="true" />
+        {/snippet}
+      </DropdownMenu>
+    {/if}
     <button
       type="button"
       class="remove-btn"
@@ -44,7 +52,7 @@
       onclick={() => onRemove(item.key)}
       title="삭제"
     >
-      <Trash2 size={13} />
+      <Trash2 size={14} />
     </button>
   </div>
 </li>

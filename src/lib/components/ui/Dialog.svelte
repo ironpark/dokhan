@@ -60,16 +60,16 @@
     onclick={onDialogClick}
     aria-label={ariaLabel}
   >
-    <div class="grid gap-2.5 p-3.5">
+    <div class="grid gap-3.5 p-5">
       {#if header}
         <div class="grid gap-1.5">{@render header()}</div>
       {:else if title}
         <div class="grid gap-1.5">
-          <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
+          <h4 class="m-0 inline-flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text)]">
             {title}
           </h4>
           {#if description}
-            <p class="m-0 text-[length:var(--font-size-control-sm)] text-[var(--color-text-muted)]">{description}</p>
+            <p class="m-0 text-[length:var(--font-size-control-md)] leading-[1.5] text-[var(--color-text-muted)]">{description}</p>
           {/if}
         </div>
       {/if}
@@ -77,7 +77,7 @@
         <div class="grid gap-2.5">{@render children()}</div>
       {/if}
       {#if actions}
-        <div class="inline-flex justify-end gap-2">{@render actions()}</div>
+        <div class="mt-1 inline-flex justify-end gap-2">{@render actions()}</div>
       {/if}
     </div>
   </dialog>

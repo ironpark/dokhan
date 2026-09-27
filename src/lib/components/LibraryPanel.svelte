@@ -171,7 +171,7 @@
     }}
   >
     {#snippet header()}
-      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
+      <h4 class="m-0 inline-flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text)]">
         <FolderPlus size={16} />
         <span>새 폴더 추가</span>
       </h4>
@@ -192,8 +192,8 @@
       />
     {/snippet}
     {#snippet actions()}
-      <Button type="button" size="xs" variant="soft" onclick={closeCreateFolderDialog}>취소</Button>
-      <Button type="button" size="xs" variant="pill-active" onclick={submitCreateFolder} disabled={!newFolderName.trim()}
+      <Button type="button" size="sm" variant="outline" onclick={closeCreateFolderDialog}>취소</Button>
+      <Button type="button" size="sm" onclick={submitCreateFolder} disabled={!newFolderName.trim()}
         >추가</Button
       >
     {/snippet}
@@ -217,7 +217,7 @@
     }}
   >
     {#snippet header()}
-      <h4 class="m-0 inline-flex items-center gap-2 text-[15px] text-[var(--color-text)]">
+      <h4 class="m-0 inline-flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text)]">
         <Pencil size={16} />
         <span>폴더 이름 변경</span>
       </h4>
@@ -238,11 +238,10 @@
       />
     {/snippet}
     {#snippet actions()}
-      <Button type="button" size="xs" variant="soft" onclick={closeRenameFolderDialog}>취소</Button>
+      <Button type="button" size="sm" variant="outline" onclick={closeRenameFolderDialog}>취소</Button>
       <Button
         type="button"
-        size="xs"
-        variant="pill-active"
+        size="sm"
         onclick={submitRenameFolder}
         disabled={!renamingFolderName.trim()}>저장</Button
       >

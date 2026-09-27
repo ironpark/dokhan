@@ -157,6 +157,9 @@ body {
   background-color: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
+  /* Break Korean between words (어절), not mid-syllable; long German compounds still wrap. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 button,

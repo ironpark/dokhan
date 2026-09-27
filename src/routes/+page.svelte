@@ -10,6 +10,7 @@
   import FileUp from "@lucide/svelte/icons/file-up";
   import X from "@lucide/svelte/icons/x";
   import LoadProgress from "$lib/components/LoadProgress.svelte";
+  import Button from "$lib/components/ui/Button.svelte";
   import MobileLayout from "$lib/layouts/MobileLayout.svelte";
   import DesktopLayout from "$lib/layouts/DesktopLayout.svelte";
   import { createDictionaryStore } from "$lib/stores/dictionaryStore.svelte";
@@ -137,17 +138,13 @@
       </div>
       <button type="button" class="error-dismiss" aria-label="오류 알림 닫기" onclick={() => dictionaryStore.clearError()}><X size={17} /></button>
       <div class="error-actions">
-        <button type="button" class="error-btn primary" onclick={onRetryClick}>
-          다시 시도
-        </button>
-        <button type="button" class="error-btn" onclick={onPickZipClick}>
-          ZIP 선택
-        </button>
+        <Button size="sm" onclick={onRetryClick}>다시 시도</Button>
+        <Button size="sm" variant="outline" onclick={onPickZipClick}>ZIP 선택</Button>
       </div>
       <details class="error-details">
         <summary>기술 오류 보기</summary>
         <pre>{dictionaryStore.error}</pre>
-        <button type="button" class="error-btn" onclick={copyErrorText}>오류 복사</button>
+        <Button size="xs" variant="soft" onclick={copyErrorText}>오류 복사</Button>
         {#if copyMessage}<small class="copy-message" role="status">{copyMessage}</small>{/if}
       </details>
     </div>
@@ -267,24 +264,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-  }
-
-  .error-btn {
-    border: 1px solid var(--color-border-strong);
-    background: var(--color-surface);
-    color: var(--color-text);
-    border-radius: 8px;
-    min-height: 34px;
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .error-btn.primary {
-    background: var(--color-text);
-    border-color: var(--color-text);
-    color: var(--color-surface);
   }
 
   .error-details {
@@ -448,7 +427,6 @@
   }
 
   .pick-btn:focus-visible,
-  .error-btn:focus-visible,
   .error-dismiss:focus-visible,
   .error-details summary:focus-visible {
     outline: 3px solid var(--color-focus-ring);
