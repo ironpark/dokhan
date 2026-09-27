@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import Dialog from "$lib/components/ui/Dialog.svelte";
   import Select from "$lib/components/ui/Select.svelte";
+  import Toast from "$lib/components/ui/Toast.svelte";
   import type {
     BookmarkFolder,
     ContentPage,
@@ -91,6 +93,13 @@
   let showReaderTools = $state(false);
   let showBookmarkFolderDialog = $state(false);
   let bookmarkTargetFolderId = $state("default");
+  let linkError = $state("");
+  let readerEl = $state<HTMLElement | null>(null);
+
+  $effect(() => {
+    const selected = mode === "entry" ? selectedEntry : selectedContent;
+    if (selected && readerEl) readerEl.scrollTop = 0;
+  });
 
   $effect(() => {
     if (!showBookmarkFolderDialog) {
@@ -216,12 +225,38 @@
   ) {
     let context = initial;
     const onClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      const anchor = target?.closest("a") as HTMLAnchorElement | null;
+      const target = event.target;
+      const anchor = target instanceof Element ? target.closest("a") : null;
       if (!anchor) return;
       const href = anchor.getAttribute("href")?.trim();
       if (!href) return;
       event.preventDefault();
+      if (href.startsWith("#")) {
+        let fragment = href.slice(1);
+        try {
+          fragment = decodeURIComponent(fragment);
+        } catch {
+          // Treat malformed percent escapes as a literal fragment.
+        }
+        const destination = fragment
+          ? Array.from(node.querySelectorAll<HTMLElement>("[id], a[name]")).find(
+              (element) => element.id === fragment || element.getAttribute("name") === fragment,
+            )
+          : node;
+        if (destination) {
+          destination.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          linkError = "본문에서 이동할 위치를 찾지 못했습니다.";
+        }
+        return;
+      }
+      if (/^(https?:|mailto:)/i.test(href)) {
+        linkError = "";
+        void openUrl(href).catch(() => {
+          linkError = "외부 링크를 열지 못했습니다.";
+        });
+        return;
+      }
       onOpenHref(href, context.sourcePath, context.local);
     };
 
@@ -244,6 +279,7 @@
     let revision = 0;
     let lastStructureSignature = "";
     let lastHighlightSignature = "";
+    let lastHtml = "";
     const activeObjectUrls = new Set<string>();
 
     async function hydrateImages(
@@ -253,11 +289,7 @@
       const images = Array.from(
         node.querySelectorAll("img[src]"),
       ) as HTMLImageElement[];
-      let processed = 0;
       for (const image of images) {
-        if (processed >= 24) {
-          return;
-        }
         if (currentRevision !== revision || !node.isConnected) {
           return;
         }
@@ -271,7 +303,6 @@
         ) {
           continue;
         }
-        processed += 1;
         const resolved = await onResolveImageHref(
           src,
           snapshot.sourcePath,
@@ -335,13 +366,14 @@
     }
 
     function scheduleDecorations() {
-      const currentRevision = ++revision;
       const snapshot = { ...context };
       const nextStructureSignature = computeStructureSignature(snapshot);
       const nextHighlightSignature = computeHighlightSignature(snapshot);
-      const needsStructureWork = nextStructureSignature !== lastStructureSignature;
-      const needsHighlightWork = nextHighlightSignature !== lastHighlightSignature;
+      const htmlChanged = snapshot.html !== lastHtml;
+      const needsStructureWork = htmlChanged || nextStructureSignature !== lastStructureSignature;
+      const needsHighlightWork = htmlChanged || nextHighlightSignature !== lastHighlightSignature;
       if (!needsStructureWork && !needsHighlightWork) return;
+      const currentRevision = ++revision;
       queueMicrotask(async () => {
         if (currentRevision !== revision || !node.isConnected) return;
         if (needsStructureWork) {
@@ -360,7 +392,7 @@
             }
           }
         }
-        if (needsHighlightWork) {
+        if (needsHighlightWork || needsStructureWork) {
           if (currentRevision !== revision || !node.isConnected) return;
           try {
             applyHighlights(node, snapshot.highlightQuery);
@@ -370,7 +402,8 @@
         }
         lastStructureSignature = nextStructureSignature;
         lastHighlightSignature = nextHighlightSignature;
-        if (needsStructureWork) {
+        lastHtml = snapshot.html;
+        if (needsStructureWork || needsHighlightWork) {
           void hydrateImages(currentRevision, snapshot).catch(() => {
             // Keep rendering stable even if media resolution fails.
           });
@@ -548,7 +581,7 @@
   }
 </script>
 
-<section class="reader" style={readerStyleVars}>
+<section class="reader" style={readerStyleVars} bind:this={readerEl}>
   {#if mode === "content" && selectedContent}
     <article class="body-content">
       <ReaderToolbar
@@ -669,6 +702,14 @@
     >
   {/snippet}
 </Dialog>
+<Toast
+  open={!!linkError}
+  message={linkError}
+  tone="error"
+  onOpenChange={(next) => {
+    if (!next) linkError = "";
+  }}
+/>
 
 <style>
   .reader {
@@ -789,6 +830,12 @@
     font-weight: 700;
     letter-spacing: 0;
     cursor: help;
+  }
+
+  .html-rendered :global(span.dict-marker:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
   :global(.marker-tooltip) {

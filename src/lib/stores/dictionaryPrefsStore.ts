@@ -10,6 +10,9 @@ import type {
 export const MAX_RECENT_SEARCHES = 10;
 export const MAX_RECENT_VIEWS = 20;
 export const MAX_FAVORITES = 100;
+// Keep several dictionaries in storage while limiting each dictionary's visible list.
+export const MAX_STORED_RECENT_VIEWS = 200;
+export const MAX_STORED_FAVORITES = 500;
 export const MAX_BOOKMARK_FOLDERS = 20;
 export const DEFAULT_BOOKMARK_FOLDER_ID = "default";
 
@@ -82,14 +85,17 @@ function isBookmarkFolder(value: unknown): value is BookmarkFolder {
   );
 }
 
-export function dedupeRecentViews(rows: RecentViewItem[]): RecentViewItem[] {
+export function dedupeRecentViews(
+  rows: RecentViewItem[],
+  limit = MAX_RECENT_VIEWS,
+): RecentViewItem[] {
   const seen = new Set<string>();
   const out: RecentViewItem[] = [];
   for (const row of rows) {
     if (seen.has(row.key)) continue;
     seen.add(row.key);
     out.push(row);
-    if (out.length >= MAX_RECENT_VIEWS) break;
+    if (out.length >= limit) break;
   }
   return out;
 }
@@ -101,14 +107,14 @@ function sanitizeRecentSearches(value: unknown): string[] {
 
 function sanitizeRecentViews(value: unknown): RecentViewItem[] {
   if (!Array.isArray(value)) return [];
-  return dedupeRecentViews(value.filter(isRecentViewItem));
+  return dedupeRecentViews(value.filter(isRecentViewItem), MAX_STORED_RECENT_VIEWS);
 }
 
 function sanitizeFavorites(value: unknown): FavoriteItem[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter(isFavoriteItem)
-    .slice(0, MAX_FAVORITES)
+    .slice(0, MAX_STORED_FAVORITES)
     .map((item) => ({
       ...item,
       folderId: item.folderId ?? DEFAULT_BOOKMARK_FOLDER_ID,

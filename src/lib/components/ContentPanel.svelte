@@ -45,7 +45,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="panel" class:without-header={!showTocHeader}>
   {#if showTocHeader}
     <SectionHeader title="목차" class="toc-title" />
   {/if}
@@ -92,10 +92,14 @@
     min-height: 0;
     height: 100%;
     display: grid;
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 0.8fr);
     gap: 10px;
     padding: 10px;
     box-sizing: border-box;
+  }
+
+  .panel.without-header {
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 0.8fr);
   }
 
   :global(.toc-title) {
@@ -118,7 +122,8 @@
 
   .entry-list {
     min-height: 0;
-    overflow: visible;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -155,7 +160,7 @@
 
   .recent-btn small {
     color: color-mix(in oklab, var(--color-text-subtle), var(--color-text-muted) 45%);
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.01em;
   }
 
@@ -173,7 +178,7 @@
 
   .recent-btn span {
     color: var(--color-text);
-    font-size: 11px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

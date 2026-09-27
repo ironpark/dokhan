@@ -45,8 +45,18 @@ export function createDetailState() {
       detailMode = 'entry';
     },
     beginEntrySelection(id: number) {
+      selectedEntry = null;
+      selectedContent = null;
       selectedEntryId = id;
       selectedContentLocal = '';
+      detailMode = 'none';
+    },
+    beginContentSelection(local: string) {
+      selectedEntry = null;
+      selectedContent = null;
+      selectedEntryId = null;
+      selectedContentLocal = local;
+      detailMode = 'none';
     }
   };
 }

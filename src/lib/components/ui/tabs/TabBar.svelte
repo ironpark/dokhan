@@ -9,6 +9,7 @@
     fullWidth = true,
     scrollable = false,
     animatedIndicator = true,
+    panelId = "dictionary-tab-panel",
     class: className = "",
   }: {
     items: Array<{ id: string; label: string }>;
@@ -18,11 +19,41 @@
     fullWidth?: boolean;
     scrollable?: boolean;
     animatedIndicator?: boolean;
+    panelId?: string;
     class?: string;
   } = $props();
 
   const activeIndex = $derived(Math.max(0, items.findIndex((item) => item.id === activeId)));
   const showIndicator = $derived(fullWidth && !scrollable);
+
+  function handleNavigate(event: KeyboardEvent, id: string) {
+    const index = items.findIndex((item) => item.id === id);
+    if (index < 0 || !items.length) return;
+
+    let nextIndex: number;
+    switch (event.key) {
+      case "ArrowRight":
+        nextIndex = (index + 1) % items.length;
+        break;
+      case "ArrowLeft":
+        nextIndex = (index - 1 + items.length) % items.length;
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = items.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const currentTab = event.currentTarget as HTMLButtonElement;
+    const tabs = currentTab.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']");
+    tabs?.[nextIndex]?.focus();
+    onChange(items[nextIndex].id);
+  }
 </script>
 
 <div
@@ -55,7 +86,9 @@
       label={item.label}
       active={activeId === item.id}
       size={size}
+      {panelId}
       onSelect={onChange}
+      onNavigate={handleNavigate}
     />
   {/each}
 </div>

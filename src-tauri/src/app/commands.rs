@@ -93,7 +93,7 @@ fn start_master_build(zip_path: Option<String>, app: tauri::AppHandle) -> Result
     start_master_build_impl(&app, zip_path)
 }
 
-/// Get current asynchronous build status for the given ZIP source.
+/// Get asynchronous build status by returned build key or ZIP source.
 ///
 /// # Errors
 ///
@@ -101,9 +101,10 @@ fn start_master_build(zip_path: Option<String>, app: tauri::AppHandle) -> Result
 #[tauri::command]
 fn get_master_build_status(
     zip_path: Option<String>,
+    build_key: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<BuildStatus, String> {
-    get_master_build_status_impl(&app, zip_path)
+    get_master_build_status_impl(&app, zip_path, build_key)
 }
 
 /// Return parsed content tree entries.

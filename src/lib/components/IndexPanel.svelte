@@ -32,15 +32,16 @@
     overscan: 5,
   });
 
-  let lastRowCount = $state(0);
+  let lastRows: DictionaryIndexEntry[] | null = null;
   let lastVirtualizerCount = $state(-1);
   let highlightCacheToken = $state("");
   const highlightSegmentCache = new Map<string, Segment[]>();
 
   $effect(() => {
     const nextCount = rows.length;
-    if (rows.length !== lastRowCount) {
-      lastRowCount = nextCount;
+    if (rows !== lastRows) {
+      lastRows = rows;
+      if (listEl) listEl.scrollTop = 0;
       $virtualizer.scrollToIndex(0);
     }
     if (nextCount !== lastVirtualizerCount) {
@@ -147,11 +148,17 @@
   <div class="search-line">
     <Input
       value={query}
+      aria-label="색인 검색어"
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
       onclear={() => onQueryChange("")}
       clearable={true}
       placeholder="색인 검색 (예: hnd, ab)"
     />
+    {#if !loading && !query.trim() && rows.length >= 500}
+      <p class="index-limit-notice" role="status">
+        최대 500개를 표시합니다. 단어를 입력하면 전체 색인에서 찾습니다.
+      </p>
+    {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>
     {#if loading}
@@ -211,6 +218,13 @@
     gap: 8px;
     align-items: center;
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .index-limit-notice {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-control-sm);
+    line-height: var(--line-height-normal);
   }
 
   .panel.input-bottom .search-line {

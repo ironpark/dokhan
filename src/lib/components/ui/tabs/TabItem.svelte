@@ -4,13 +4,17 @@
     label,
     active = false,
     size = "md",
+    panelId,
     onSelect,
+    onNavigate,
   }: {
     id: string;
     label: string;
     active?: boolean;
     size?: "sm" | "md";
+    panelId: string;
     onSelect: (id: string) => void;
+    onNavigate: (event: KeyboardEvent, id: string) => void;
   } = $props();
 
   const sizeClassMap = {
@@ -31,12 +35,15 @@
 </script>
 
 <button
+  id={`tab-${id}`}
   type="button"
   role="tab"
   class={`${baseClass} ${hoverClass} ${sizeClassMap[size]} ${active ? activeClass : ""}`}
   aria-selected={active}
-  aria-controls={`panel-${id}`}
+  aria-controls={panelId}
+  tabindex={active ? 0 : -1}
   onclick={() => onSelect(id)}
+  onkeydown={(event) => onNavigate(event, id)}
 >
   <span>{label}</span>
 </button>

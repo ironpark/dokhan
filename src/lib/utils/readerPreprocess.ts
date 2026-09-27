@@ -172,10 +172,12 @@ function applyTooltip(span: HTMLSpanElement, tooltip: string | null) {
   if (!tooltip) {
     delete span.dataset.tooltip;
     span.removeAttribute("aria-label");
+    span.removeAttribute("tabindex");
     return;
   }
   span.dataset.tooltip = tooltip;
   span.setAttribute("aria-label", tooltip);
+  span.tabIndex = 0;
 }
 
 function markerText(kind: MarkerKind, label: string): string {

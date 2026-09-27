@@ -49,10 +49,11 @@
       .trim();
   }
 
-  let lastRowCount = $state(0);
+  let lastRows: SearchHit[] | null = null;
   $effect(() => {
-    if (rows.length !== lastRowCount) {
-      lastRowCount = rows.length;
+    if (rows !== lastRows) {
+      lastRows = rows;
+      if (listEl) listEl.scrollTop = 0;
       $virtualizer.scrollToIndex(0);
     }
     $virtualizer.setOptions({
@@ -103,6 +104,7 @@
     >
     <Input
       value={query}
+      aria-label="사전 검색어"
       oninput={(e) => onQueryChange((e.target as HTMLInputElement).value)}
       onclear={() => onQueryChange("")}
       clearable={true}

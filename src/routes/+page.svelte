@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import { isTauri } from "@tauri-apps/api/core";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import LoadProgress from "$lib/components/LoadProgress.svelte";
@@ -25,21 +26,25 @@
   onMount(() => {
     let unlistenDragDrop: (() => void) | undefined;
     let unlistenCloseRequest: (() => void) | undefined;
+    let disposed = false;
 
     (async () => {
       dictionaryStore.setAutoOpenFirstContent(!platformStore.isMobile);
       await dictionaryStore.bootFromManagedCache();
+      if (disposed || !isTauri()) return;
 
       if (platformStore.isMobile) {
-        unlistenCloseRequest = await getCurrentWindow().onCloseRequested(
+        const unlisten = await getCurrentWindow().onCloseRequested(
           (event) => {
             if (dictionaryStore.handleMobileBackNavigation()) {
               event.preventDefault();
             }
           },
         );
+        if (disposed) unlisten();
+        else unlistenCloseRequest = unlisten;
       } else {
-        unlistenDragDrop = await getCurrentWebview().onDragDropEvent((event) => {
+        const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
           const payload = event.payload;
           if (payload.type === "over") {
             dictionaryStore.setDragOver(true);
@@ -53,11 +58,14 @@
           }
           dictionaryStore.setDragOver(false);
         });
+        if (disposed) unlisten();
+        else unlistenDragDrop = unlisten;
       }
 
     })();
 
     return () => {
+      disposed = true;
       dictionaryStore.dispose();
       if (copyMessageTimer) clearTimeout(copyMessageTimer);
       if (unlistenDragDrop) unlistenDragDrop();
@@ -98,7 +106,9 @@
   {#if dictionaryStore.error}
     <div class="error-box" role="alert" aria-live="assertive">
       <strong>작업 중 오류가 발생했습니다.</strong>
-      <p>다시 시도하거나 ZIP 파일을 다시 선택해 복구해 주세요.</p>
+      <p>{dictionaryStore.masterSummary
+        ? '이전 사전은 계속 사용할 수 있습니다. 다시 시도하거나 ZIP 파일을 다시 선택해 주세요.'
+        : '다시 시도하거나 ZIP 파일을 다시 선택해 복구해 주세요.'}</p>
       <div class="error-actions">
         <button type="button" class="error-btn primary" onclick={onRetryClick}>
           다시 시도
@@ -107,6 +117,7 @@
           ZIP 다시 선택
         </button>
         <button type="button" class="error-btn" onclick={copyErrorText}>오류 복사</button>
+        <button type="button" class="error-btn" onclick={() => dictionaryStore.clearError()}>닫기</button>
       </div>
       <details>
         <summary>기술 오류 보기</summary>
@@ -120,6 +131,7 @@
 
   <LoadProgress visible={dictionaryStore.showProgress} progress={dictionaryStore.progress} />
 
+  <div class="app-content" inert={dictionaryStore.showProgress}>
   {#if !dictionaryStore.masterSummary}
     {#if platformStore.isMobile}
       <section class="entry-shell mobile" aria-label="ZIP 선택">
@@ -154,6 +166,7 @@
   {:else}
     <DesktopLayout {dictionaryStore} />
   {/if}
+  </div>
 </main>
 
 <style>
@@ -187,6 +200,13 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+
+  .app-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Utility / Shared Styles */

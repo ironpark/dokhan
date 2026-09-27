@@ -12,6 +12,7 @@ describe("applyDictionaryPreprocess", () => {
     const markers = root.querySelectorAll(".dict-marker");
     expect(markers.length).toBe(3);
     expect(root.dataset.preprocessVersion).toBeTruthy();
+    expect(Array.from(markers).some((marker) => marker.getAttribute("tabindex") === "0")).toBe(true);
 
     const beforeHtml = root.innerHTML;
     applyDictionaryPreprocess(root, { markerTagging: true });

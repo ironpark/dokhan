@@ -1,7 +1,9 @@
 //! Persistent storage for managed ZIP files and runtime index caches.
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -10,6 +12,8 @@ use tauri::Manager;
 use crate::app::model::{ContentItem, EntryDetail, RuntimeSource};
 
 const MANAGED_ZIP_DIR: &str = "zips";
+const LAST_SUCCESSFUL_ZIP_FILE: &str = "last-successful-zip.txt";
+const FAILED_MANAGED_ZIPS_FILE: &str = "failed-managed-zips.txt";
 const RUNTIME_CACHE_DIR: &str = "runtime-cache";
 const SEARCH_INDEX_DIR: &str = "tantivy-v0.26";
 const RUNTIME_CACHE_VERSION: u32 = 1;
@@ -17,6 +21,7 @@ const CACHE_MANIFEST_FILE: &str = "manifest.bin";
 const CACHE_CONTENTS_FILE: &str = "contents.bin.zst";
 const CACHE_ENTRIES_FILE: &str = "entries.bin.zst";
 const ZSTD_LEVEL: i32 = 3;
+static MANAGED_ZIP_STATE_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct PersistedRuntime {
@@ -85,28 +90,70 @@ fn managed_zip_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Pick the newest managed ZIP from app cache, if available.
-///
-/// # Errors
-///
-/// Returns an error when managed ZIP directory cannot be resolved/read.
-pub(crate) fn latest_managed_zip(app: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
-    let dir = managed_zip_dir(app)?;
-    let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
+fn is_managed_zip_file(dir: &Path, path: &Path) -> bool {
+    if !path.is_file()
+        || !path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+    {
+        return false;
+    }
+    match (dir.canonicalize(), path.canonicalize()) {
+        (Ok(root), Ok(file)) => file.parent() == Some(root.as_path()),
+        _ => false,
+    }
+}
 
-    let iter = fs::read_dir(&dir).map_err(|e| format!("failed to read managed zip dir: {e}"))?;
+fn is_managed_zip_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && Path::new(name).file_name().and_then(|value| value.to_str()) == Some(name)
+        && Path::new(name)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+}
+
+fn failed_managed_zip_names(dir: &Path) -> BTreeSet<String> {
+    fs::read_to_string(dir.join(FAILED_MANAGED_ZIPS_FILE))
+        .unwrap_or_default()
+        .lines()
+        .filter(|name| is_managed_zip_name(name))
+        .map(str::to_string)
+        .collect()
+}
+
+fn save_failed_managed_zip_names(dir: &Path, names: &BTreeSet<String>) -> Result<(), String> {
+    let contents = names.iter().cloned().collect::<Vec<_>>().join("\n");
+    write_atomic(&dir.join(FAILED_MANAGED_ZIPS_FILE), contents.as_bytes())
+}
+
+fn remembered_managed_zip_in_dir(dir: &Path) -> Option<PathBuf> {
+    let name = fs::read_to_string(dir.join(LAST_SUCCESSFUL_ZIP_FILE)).ok()?;
+    let name = name.trim();
+    if !is_managed_zip_name(name) || failed_managed_zip_names(dir).contains(name) {
+        return None;
+    }
+    let path = dir.join(name);
+    is_managed_zip_file(dir, &path).then_some(path)
+}
+
+fn latest_managed_zip_in_dir(dir: &Path) -> Result<Option<PathBuf>, String> {
+    let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
+    let failed = failed_managed_zip_names(dir);
+
+    let iter = fs::read_dir(dir).map_err(|e| format!("failed to read managed zip dir: {e}"))?;
     for entry in iter {
         let entry = entry.map_err(|e| format!("failed to read managed zip entry: {e}"))?;
         let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let is_zip = path
-            .extension()
-            .and_then(|x| x.to_str())
-            .map(|x| x.eq_ignore_ascii_case("zip"))
-            .unwrap_or(false);
-        if !is_zip {
+        if !is_managed_zip_file(dir, &path)
+            || path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| failed.contains(name))
+        {
             continue;
         }
         let mtime = match entry.metadata().and_then(|m| m.modified()) {
@@ -120,6 +167,91 @@ pub(crate) fn latest_managed_zip(app: &tauri::AppHandle) -> Result<Option<PathBu
     }
 
     Ok(best.map(|(_, p)| p))
+}
+
+fn preferred_managed_zip_in_dir(dir: &Path) -> Result<Option<PathBuf>, String> {
+    if let Some(remembered) = remembered_managed_zip_in_dir(dir) {
+        return Ok(Some(remembered));
+    }
+    latest_managed_zip_in_dir(dir)
+}
+
+/// Pick the last successfully built ZIP, falling back to the newest managed ZIP.
+///
+/// # Errors
+///
+/// Returns an error when the managed ZIP directory cannot be resolved or read.
+pub(crate) fn preferred_managed_zip(app: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    let dir = managed_zip_dir(app)?;
+    preferred_managed_zip_in_dir(&dir)
+}
+
+/// Persist the ZIP selected by a successful runtime build.
+///
+/// # Errors
+///
+/// Returns an error when the source is outside the managed ZIP directory or the pointer cannot be written.
+pub(crate) fn remember_successful_managed_zip(
+    app: &tauri::AppHandle,
+    source: &RuntimeSource,
+) -> Result<(), String> {
+    let dir = managed_zip_dir(app)?;
+    let RuntimeSource::ZipPath(path) = source;
+    remember_successful_zip_in_dir(&dir, path)
+}
+
+fn remember_successful_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String> {
+    if !is_managed_zip_file(dir, path) {
+        return Err("successful ZIP is not in the managed ZIP directory".to_string());
+    }
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "managed ZIP filename is not valid UTF-8".to_string())?;
+    let lock = MANAGED_ZIP_STATE_WRITE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "managed ZIP state lock poisoned".to_string())?;
+    let mut failed = failed_managed_zip_names(dir);
+    if failed.remove(name) {
+        save_failed_managed_zip_names(dir, &failed)?;
+    }
+    write_atomic(&dir.join(LAST_SUCCESSFUL_ZIP_FILE), name.as_bytes())
+}
+
+/// Exclude a failed managed ZIP from future automatic selection.
+///
+/// The same ZIP can still be explicitly selected and retried.
+///
+/// # Errors
+///
+/// Returns an error when the source is outside the managed ZIP directory or the failure list cannot be written.
+pub(crate) fn remember_failed_managed_zip(
+    app: &tauri::AppHandle,
+    source: &RuntimeSource,
+) -> Result<(), String> {
+    let dir = managed_zip_dir(app)?;
+    let RuntimeSource::ZipPath(path) = source;
+    remember_failed_zip_in_dir(&dir, path)
+}
+
+fn remember_failed_zip_in_dir(dir: &Path, path: &Path) -> Result<(), String> {
+    if !is_managed_zip_file(dir, path) {
+        return Err("failed ZIP is not in the managed ZIP directory".to_string());
+    }
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "managed ZIP filename is not valid UTF-8".to_string())?;
+    let lock = MANAGED_ZIP_STATE_WRITE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock
+        .lock()
+        .map_err(|_| "managed ZIP state lock poisoned".to_string())?;
+    let mut failed = failed_managed_zip_names(dir);
+    if failed.insert(name.to_string()) {
+        save_failed_managed_zip_names(dir, &failed)?;
+    }
+    Ok(())
 }
 
 fn runtime_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -201,18 +333,11 @@ pub(crate) fn ensure_managed_zip_copy(
     app: &tauri::AppHandle,
     source_zip: &Path,
 ) -> Result<PathBuf, String> {
-    if source_zip.exists()
-        && source_zip
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .map(|n| n == MANAGED_ZIP_DIR)
-            .unwrap_or(false)
-    {
+    let dir = managed_zip_dir(app)?;
+    if is_managed_zip_file(&dir, source_zip) {
         return Ok(source_zip.to_path_buf());
     }
 
-    let dir = managed_zip_dir(app)?;
     let stem = source_zip
         .file_stem()
         .and_then(|s| s.to_str())
@@ -326,4 +451,98 @@ pub(crate) fn save_runtime_cache(
     let manifest_bytes = encode_bin(&manifest)?;
     write_atomic(&manifest_file, &manifest_bytes)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::{
+        failed_managed_zip_names, latest_managed_zip_in_dir, preferred_managed_zip_in_dir,
+        remember_failed_zip_in_dir, remember_successful_zip_in_dir, LAST_SUCCESSFUL_ZIP_FILE,
+    };
+
+    #[test]
+    fn successful_zip_is_preferred_over_a_later_failed_candidate() {
+        let dir = tempdir().expect("temporary directory");
+        let successful = dir.path().join("successful.zip");
+        let failed = dir.path().join("failed.zip");
+        fs::write(&successful, b"valid build marker").expect("successful candidate");
+        fs::write(&failed, b"failed build marker").expect("failed candidate");
+
+        remember_successful_zip_in_dir(dir.path(), &successful).expect("remember successful zip");
+
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("preferred zip"), Some(successful));
+    }
+
+    #[test]
+    fn missing_or_invalid_pointer_falls_back_to_existing_zip() {
+        let dir = tempdir().expect("temporary directory");
+        let candidate = dir.path().join("dictionary.zip");
+        fs::write(&candidate, b"zip candidate").expect("zip candidate");
+
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("fallback zip"), Some(candidate.clone()));
+        fs::write(dir.path().join(LAST_SUCCESSFUL_ZIP_FILE), "../outside.zip")
+            .expect("invalid pointer");
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("fallback zip"), Some(candidate.clone()));
+
+        fs::write(dir.path().join(LAST_SUCCESSFUL_ZIP_FILE), "missing.zip")
+            .expect("missing pointer target");
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("fallback zip"), Some(candidate));
+    }
+
+    #[test]
+    fn only_managed_zip_files_can_be_remembered() {
+        let dir = tempdir().expect("temporary directory");
+        let outside = tempdir().expect("outside directory");
+        let outside_zip = outside.path().join("other.zip");
+        fs::write(&outside_zip, b"outside").expect("outside zip");
+
+        assert!(remember_successful_zip_in_dir(dir.path(), &outside_zip).is_err());
+        assert!(latest_managed_zip_in_dir(dir.path()).expect("empty managed dir").is_none());
+    }
+
+    #[test]
+    fn failed_zip_is_skipped_automatically_but_can_succeed_on_retry() {
+        let dir = tempdir().expect("temporary directory");
+        let candidate = dir.path().join("candidate.zip");
+        fs::write(&candidate, b"candidate").expect("zip candidate");
+
+        remember_failed_zip_in_dir(dir.path(), &candidate).expect("mark failed zip");
+        assert!(preferred_managed_zip_in_dir(dir.path()).expect("preferred zip").is_none());
+        assert!(candidate.is_file(), "explicit retry must remain possible");
+
+        remember_successful_zip_in_dir(dir.path(), &candidate).expect("retry succeeds");
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("preferred zip"), Some(candidate));
+        assert!(failed_managed_zip_names(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn failed_zip_does_not_replace_prior_successful_selection() {
+        let dir = tempdir().expect("temporary directory");
+        let successful = dir.path().join("successful.zip");
+        let failed = dir.path().join("failed.zip");
+        fs::write(&successful, b"successful").expect("successful zip");
+        fs::write(&failed, b"failed").expect("failed zip");
+
+        remember_successful_zip_in_dir(dir.path(), &successful).expect("remember successful zip");
+        remember_failed_zip_in_dir(dir.path(), &failed).expect("remember failed zip");
+
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("preferred zip"), Some(successful));
+    }
+
+    #[test]
+    fn pointer_write_failure_does_not_leave_a_recovered_zip_excluded() {
+        let dir = tempdir().expect("temporary directory");
+        let candidate = dir.path().join("candidate.zip");
+        fs::write(&candidate, b"candidate").expect("zip candidate");
+        remember_failed_zip_in_dir(dir.path(), &candidate).expect("mark failed zip");
+        fs::create_dir(dir.path().join(LAST_SUCCESSFUL_ZIP_FILE)).expect("block pointer file");
+
+        assert!(remember_successful_zip_in_dir(dir.path(), &candidate).is_err());
+        assert!(failed_managed_zip_names(dir.path()).is_empty());
+        assert_eq!(preferred_managed_zip_in_dir(dir.path()).expect("fallback zip"), Some(candidate));
+    }
 }

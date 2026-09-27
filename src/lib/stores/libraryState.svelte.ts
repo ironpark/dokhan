@@ -3,6 +3,9 @@ import {
   MAX_BOOKMARK_FOLDERS,
   MAX_FAVORITES,
   MAX_RECENT_SEARCHES,
+  MAX_RECENT_VIEWS,
+  MAX_STORED_FAVORITES,
+  MAX_STORED_RECENT_VIEWS,
   dedupeRecentViews
 } from '$lib/stores/dictionaryPrefsStore';
 import type { BookmarkFolder, ContentPage, EntryDetail, FavoriteItem, RecentViewItem } from '$lib/types/dictionary';
@@ -19,6 +22,7 @@ export function createLibraryState(onChange: () => void) {
   let recentSearches = $state<string[]>([]);
   let recentViews = $state<RecentViewItem[]>([]);
   let favorites = $state<FavoriteItem[]>([]);
+  let sourceScope = $state<string | null>(null);
   let bookmarkFolders = $state<BookmarkFolder[]>([
     { id: DEFAULT_BOOKMARK_FOLDER_ID, name: '기본', createdAt: 0 }
   ]);
@@ -34,15 +38,45 @@ export function createLibraryState(onChange: () => void) {
     ];
   }
 
+  // A source path identifies a CHM inside a ZIP, so the managed ZIP path is
+  // required to distinguish entries whose numeric IDs overlap across ZIPs.
+  function activeKey(key: string): string | null {
+    return sourceScope ? `scope:${encodeURIComponent(sourceScope)}::${key}` : null;
+  }
+
+  function belongsToActiveSource(key: string): boolean {
+    return sourceScope !== null && key.startsWith(`scope:${encodeURIComponent(sourceScope)}::`);
+  }
+
+  function trimActiveFavorites(rows: FavoriteItem[]): FavoriteItem[] {
+    let activeCount = 0;
+    return rows
+      .filter((item) => !belongsToActiveSource(item.key) || ++activeCount <= MAX_FAVORITES)
+      .slice(0, MAX_STORED_FAVORITES);
+  }
+
+  function trimActiveRecentViews(rows: RecentViewItem[]): RecentViewItem[] {
+    let activeCount = 0;
+    return dedupeRecentViews(rows, MAX_STORED_RECENT_VIEWS).filter(
+      (item) => !belongsToActiveSource(item.key) || ++activeCount <= MAX_RECENT_VIEWS
+    );
+  }
+
   return {
+    setSourceScope(zipPath: string | null) {
+      sourceScope = zipPath?.trim() || null;
+    },
     get recentSearches() {
       return recentSearches;
     },
     get recentViews() {
-      return recentViews;
+      return recentViews.filter((item) => belongsToActiveSource(item.key));
     },
     get favorites() {
-      return favorites;
+      return favorites.filter((item) => belongsToActiveSource(item.key));
+    },
+    get legacyFavoriteCount() {
+      return favorites.filter((item) => !item.key.startsWith('scope:')).length;
     },
     get bookmarkFolders() {
       return bookmarkFolders;
@@ -51,7 +85,9 @@ export function createLibraryState(onChange: () => void) {
       return activeBookmarkFolderId;
     },
     get visibleFavorites() {
-      return favorites.filter((item) => item.folderId === activeBookmarkFolderId);
+      return favorites.filter(
+        (item) => belongsToActiveSource(item.key) && item.folderId === activeBookmarkFolderId
+      );
     },
     applySnapshot(snapshot: LibrarySnapshot) {
       recentSearches = snapshot.recentSearches;
@@ -86,19 +122,25 @@ export function createLibraryState(onChange: () => void) {
       onChange();
     },
     pushRecentView(item: RecentViewItem) {
-      const next = [item, ...recentViews.filter((row) => row.key !== item.key)];
-      recentViews = dedupeRecentViews(next);
+      const key = activeKey(item.key);
+      if (!key) return;
+      recentViews = trimActiveRecentViews([
+        { ...item, key },
+        ...recentViews.filter((row) => row.key !== key)
+      ]);
       onChange();
     },
     isFavoriteEntry(id: number): boolean {
-      return favorites.some((item) => item.kind === 'entry' && item.id === id);
+      const key = activeKey(`entry:${id}`);
+      return key !== null && favorites.some((item) => item.key === key);
     },
     isFavoriteContent(local: string, sourcePath: string | null): boolean {
-      const key = `content:${sourcePath ?? ''}:${local}`;
-      return favorites.some((item) => item.key === key);
+      const key = activeKey(`content:${sourcePath ?? ''}:${local}`);
+      return key !== null && favorites.some((item) => item.key === key);
     },
     toggleFavoriteEntry(entry: Pick<EntryDetail, 'id' | 'headword' | 'sourcePath'>) {
-      const key = `entry:${entry.id}`;
+      const key = activeKey(`entry:${entry.id}`);
+      if (!key) return;
       if (favorites.some((item) => item.key === key)) {
         favorites = favorites.filter((item) => item.key !== key);
         onChange();
@@ -113,11 +155,12 @@ export function createLibraryState(onChange: () => void) {
         sourcePath: entry.sourcePath,
         folderId: activeBookmarkFolderId
       };
-      favorites = [nextItem, ...favorites].slice(0, MAX_FAVORITES);
+      favorites = trimActiveFavorites([nextItem, ...favorites]);
       onChange();
     },
     addFavoriteEntry(entry: Pick<EntryDetail, 'id' | 'headword' | 'sourcePath'>, folderId: string) {
-      const key = `entry:${entry.id}`;
+      const key = activeKey(`entry:${entry.id}`);
+      if (!key) return;
       if (favorites.some((item) => item.key === key)) {
         favorites = favorites.map((item) => (
           item.key === key ? { ...item, folderId } : item
@@ -134,11 +177,12 @@ export function createLibraryState(onChange: () => void) {
         sourcePath: entry.sourcePath,
         folderId
       };
-      favorites = [nextItem, ...favorites].slice(0, MAX_FAVORITES);
+      favorites = trimActiveFavorites([nextItem, ...favorites]);
       onChange();
     },
     toggleFavoriteContent(content: Pick<ContentPage, 'local' | 'title' | 'sourcePath'>) {
-      const key = `content:${content.sourcePath ?? ''}:${content.local}`;
+      const key = activeKey(`content:${content.sourcePath ?? ''}:${content.local}`);
+      if (!key) return;
       if (favorites.some((item) => item.key === key)) {
         favorites = favorites.filter((item) => item.key !== key);
         onChange();
@@ -153,11 +197,12 @@ export function createLibraryState(onChange: () => void) {
         sourcePath: content.sourcePath,
         folderId: activeBookmarkFolderId
       };
-      favorites = [nextItem, ...favorites].slice(0, MAX_FAVORITES);
+      favorites = trimActiveFavorites([nextItem, ...favorites]);
       onChange();
     },
     addFavoriteContent(content: Pick<ContentPage, 'local' | 'title' | 'sourcePath'>, folderId: string) {
-      const key = `content:${content.sourcePath ?? ''}:${content.local}`;
+      const key = activeKey(`content:${content.sourcePath ?? ''}:${content.local}`);
+      if (!key) return;
       if (favorites.some((item) => item.key === key)) {
         favorites = favorites.map((item) => (
           item.key === key ? { ...item, folderId } : item
@@ -174,7 +219,7 @@ export function createLibraryState(onChange: () => void) {
         sourcePath: content.sourcePath,
         folderId
       };
-      favorites = [nextItem, ...favorites].slice(0, MAX_FAVORITES);
+      favorites = trimActiveFavorites([nextItem, ...favorites]);
       onChange();
     },
     setActiveBookmarkFolder(folderId: string) {

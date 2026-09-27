@@ -21,7 +21,7 @@ fn resolve_runtime_source(app: &AppHandle, input: Option<String>) -> Result<Runt
             Ok(RuntimeSource::ZipPath(managed))
         }
         None => {
-            if let Some(found) = runtime::storage::latest_managed_zip(app)? {
+            if let Some(found) = runtime::storage::preferred_managed_zip(app)? {
                 return Ok(RuntimeSource::ZipPath(found));
             }
             Err("zip path is required (no managed zip cache found)".to_string())

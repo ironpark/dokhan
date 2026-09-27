@@ -20,7 +20,7 @@
     <div class="title-block">
         <h1>{title}</h1>
         {#if subtitle}
-            <p>{subtitle}</p>
+            <p title={subtitle}>{subtitle}</p>
         {/if}
     </div>
 

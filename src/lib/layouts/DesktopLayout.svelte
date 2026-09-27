@@ -16,7 +16,7 @@
     <aside class="sidebar">
         <TitleToolbar
             title="독한 사전"
-            subtitle="Dokhan Dictionary"
+            subtitle={dictionaryStore.activeZipName}
             showZipAction={true}
             onPickZip={() => dictionaryStore.pickZipFile()}
         />
@@ -30,7 +30,13 @@
             />
         </div>
 
-        <div class="sidebar-content">
+        <div
+            class="sidebar-content"
+            id="dictionary-tab-panel"
+            role="tabpanel"
+            aria-labelledby={`tab-${dictionaryStore.activeTab}`}
+            tabindex="0"
+        >
             {#if dictionaryStore.activeTab === "content"}
                 <ContentPanel
                     items={dictionaryStore.contents}
@@ -67,6 +73,7 @@
                     <LibraryPanel
                         favorites={dictionaryStore.favorites}
                         allFavorites={dictionaryStore.allFavorites}
+                        legacyFavoriteCount={dictionaryStore.legacyFavoriteCount}
                         folders={dictionaryStore.bookmarkFolders}
                         activeFolderId={dictionaryStore.activeBookmarkFolderId}
                         onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
@@ -129,7 +136,10 @@
     .desktop-layout {
         display: grid;
         grid-template-columns: 280px 1fr;
-        height: 100vh;
+        flex: 1;
+        height: 100%;
+        min-height: 0;
+        width: 100%;
         overflow: hidden;
         background: var(--color-bg);
         font-family: var(--font-sans);

@@ -16,6 +16,7 @@
   let {
     favorites,
     allFavorites,
+    legacyFavoriteCount = 0,
     folders,
     activeFolderId,
     onOpenFavorite,
@@ -28,6 +29,7 @@
   }: {
     favorites: FavoriteItem[];
     allFavorites: FavoriteItem[];
+    legacyFavoriteCount?: number;
     folders: BookmarkFolder[];
     activeFolderId: string;
     onOpenFavorite: (item: FavoriteItem) => void;
@@ -128,22 +130,29 @@
 </script>
 
 <section class="panel">
-  <SectionHeader title="책갈피 폴더">
-    {#snippet actions()}
-      {#if !creatingFolder}
-        <Button
-          type="button"
-          size="xs"
-          variant="soft"
-          class="text-[var(--font-size-control-sm)] px-[9px] py-[5px] gap-1.5"
-          onclick={beginCreateFolder}
-        >
-          <FolderPlus size={14} />
-          <span>폴더</span>
-        </Button>
-      {/if}
-    {/snippet}
-  </SectionHeader>
+  <div class="library-intro">
+    <SectionHeader title="책갈피 폴더">
+      {#snippet actions()}
+        {#if !creatingFolder}
+          <Button
+            type="button"
+            size="xs"
+            variant="soft"
+            class="text-[var(--font-size-control-sm)] px-[9px] py-[5px] gap-1.5"
+            onclick={beginCreateFolder}
+          >
+            <FolderPlus size={14} />
+            <span>폴더</span>
+          </Button>
+        {/if}
+      {/snippet}
+    </SectionHeader>
+    {#if legacyFavoriteCount > 0}
+      <p class="legacy-notice" role="status">
+        이전 버전 책갈피 {legacyFavoriteCount}개는 사전을 식별할 수 없어 보관 중입니다.
+      </p>
+    {/if}
+  </div>
 
   <Dialog
     open={creatingFolder}
@@ -339,6 +348,22 @@
 </section>
 
 <style>
+  .library-intro {
+    display: grid;
+    gap: 8px;
+  }
+
+  .legacy-notice {
+    margin: 0;
+    padding: 9px 10px;
+    border: 1px solid color-mix(in oklab, var(--color-accent), white 72%);
+    border-radius: 8px;
+    background: color-mix(in oklab, var(--color-accent), white 94%);
+    color: var(--color-text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
   .panel {
     min-height: 0;
     height: 100%;

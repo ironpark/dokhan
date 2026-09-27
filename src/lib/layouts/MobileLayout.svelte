@@ -74,6 +74,9 @@
                     <span class="header-title">본문</span>
                 </header>
                 <div class="reader-content">
+                    {#if dictionaryStore.isOpeningDetail && !dictionaryStore.selectedEntry && !dictionaryStore.selectedContent}
+                        <div class="detail-loading" role="status">본문을 불러오는 중입니다.</div>
+                    {:else}
                     <ReaderPane
                         mode={dictionaryStore.detailMode}
                         selectedContent={dictionaryStore.selectedContent}
@@ -105,12 +108,13 @@
                         onReaderWidthChange={(value) =>
                             dictionaryStore.setReaderWidth(value)}
                     />
+                    {/if}
                 </div>
             </div>
         {:else}
             <TitleToolbar
                 title="독한 사전"
-                subtitle="Dokhan Dictionary"
+                subtitle={dictionaryStore.activeZipName}
                 compact={true}
                 showZipAction={true}
                 onPickZip={() => dictionaryStore.pickZipFile()}
@@ -120,7 +124,7 @@
                 <div class="home-view">
                     <div class="hero">
                         <h1>독한 사전</h1>
-                        <p>독일어-한국어 전자사전</p>
+                        <p>독일어-한국어 전자사전 · {dictionaryStore.activeZipName}</p>
                     </div>
                     <div class="search-box">
                         <button
@@ -193,6 +197,7 @@
                     <LibraryPanel
                         favorites={dictionaryStore.favorites}
                         allFavorites={dictionaryStore.allFavorites}
+                        legacyFavoriteCount={dictionaryStore.legacyFavoriteCount}
                         folders={dictionaryStore.bookmarkFolders}
                         activeFolderId={dictionaryStore.activeBookmarkFolderId}
                         onOpenFavorite={(item) => dictionaryStore.openFavorite(item)}
@@ -214,6 +219,7 @@
         <nav class="bottom-nav">
             <button
                 class:active={dictionaryStore.mobileTab === "home"}
+                aria-current={dictionaryStore.mobileTab === "home" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("home")}
             >
                 <div class="icon">
@@ -236,6 +242,7 @@
             </button>
             <button
                 class:active={dictionaryStore.mobileTab === "search"}
+                aria-current={dictionaryStore.mobileTab === "search" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("search")}
             >
                 <div class="icon">
@@ -260,6 +267,7 @@
             </button>
             <button
                 class:active={dictionaryStore.mobileTab === "index"}
+                aria-current={dictionaryStore.mobileTab === "index" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("index")}
             >
                 <div class="icon">
@@ -281,6 +289,7 @@
             </button>
             <button
                 class:active={dictionaryStore.mobileTab === "favorites"}
+                aria-current={dictionaryStore.mobileTab === "favorites" ? "page" : undefined}
                 onclick={() => dictionaryStore.setMobileTab("favorites")}
             >
                 <div class="icon">
@@ -308,8 +317,9 @@
     .mobile-layout {
         display: grid;
         grid-template-rows: 1fr auto;
-        height: 100dvh;
-        min-height: 100svh;
+        flex: 1;
+        height: 100%;
+        min-height: 0;
         padding-top: env(safe-area-inset-top);
         background: var(--color-bg);
         color: var(--color-text);
@@ -492,6 +502,14 @@
         position: relative;
     }
 
+    .detail-loading {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        color: var(--color-text-muted);
+        font-size: var(--font-size-control-md);
+    }
+
     .home-view {
         flex: 1;
         min-height: 0;
@@ -500,6 +518,11 @@
         flex-direction: column;
         gap: 24px;
         overflow-y: auto;
+    }
+
+    .content-list {
+        flex: 1;
+        min-height: 300px;
     }
 
     .hero {

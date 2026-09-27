@@ -10,7 +10,10 @@ use crate::app::model::{
 };
 use crate::resolve_runtime_source;
 use crate::runtime::search::{build_entry_search_keys, warm_search_index};
-use crate::runtime::storage::{load_runtime_cache, save_runtime_cache, PersistedRuntime};
+use crate::runtime::storage::{
+    load_runtime_cache, remember_failed_managed_zip, remember_successful_managed_zip,
+    save_runtime_cache, PersistedRuntime,
+};
 use crate::runtime::zip::{
     hydrate_zip_entry_detail, parse_runtime_from_zip_with_progress, read_content_page_from_zip,
 };
@@ -156,10 +159,15 @@ fn summary_from_runtime(source: &RuntimeSource, runtime: &RuntimeIndex) -> Maste
 ///
 /// Returns an error when status storage is unavailable.
 fn set_build_done_status(
+    app: &AppHandle,
+    source: &RuntimeSource,
     key: &str,
     summary: MasterFeatureSummary,
     message: &str,
 ) -> Result<(), String> {
+    if let Err(err) = remember_successful_managed_zip(app, source) {
+        eprintln!("failed to remember successful ZIP: {err}");
+    }
     set_build_status(
         key,
         BuildStatus {
@@ -256,13 +264,18 @@ fn spawn_build_worker(app: AppHandle, source: RuntimeSource, key: String) {
         let runtime = match get_or_build_runtime(&app, &source, &key) {
             Ok(runtime) => runtime,
             Err(err) => {
+                if let Err(mark_err) = remember_failed_managed_zip(&app, &source) {
+                    eprintln!("failed to remember failed ZIP: {mark_err}");
+                }
                 let _ = set_build_error_status(&key, "Failed parsing zip/chm", err);
                 return;
             }
         };
 
         let summary = summary_from_runtime(&source, &runtime);
-        let _ = set_build_done_status(&key, summary, "Build complete");
+        if let Err(err) = set_build_done_status(&app, &source, &key, summary, "Build complete") {
+            let _ = set_build_error_status(&key, "Failed finalizing build", err);
+        }
     });
 }
 
@@ -306,7 +319,7 @@ pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>)
 
     if let Some(runtime) = cache_get(&source)? {
         let summary = summary_from_runtime(&source, &runtime);
-        set_build_done_status(&key, summary, "Loaded from cache")?;
+        set_build_done_status(app, &source, &key, summary, "Loaded from cache")?;
         return Ok(key);
     }
 
@@ -323,7 +336,7 @@ pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>)
     };
     if let Some(runtime) = cached {
         let summary = summary_from_runtime(&source, &runtime);
-        set_build_done_status(&key, summary, "Loaded from cache")?;
+        set_build_done_status(app, &source, &key, summary, "Loaded from cache")?;
         return Ok(key);
     }
 
@@ -332,7 +345,7 @@ pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>)
     Ok(key)
 }
 
-/// Get current build status, returning idle if not started.
+/// Get current build status by key or source, returning idle if not started.
 ///
 /// # Errors
 ///
@@ -340,9 +353,13 @@ pub(crate) fn start_master_build_impl(app: &AppHandle, zip_path: Option<String>)
 pub(crate) fn get_master_build_status_impl(
     app: &AppHandle,
     zip_path: Option<String>,
+    build_key: Option<String>,
 ) -> Result<BuildStatus, String> {
-    let source = resolve_runtime_source(app, zip_path)?;
-    let key = source.cache_key();
+    let key = if let Some(key) = build_key.filter(|key| !key.is_empty()) {
+        key
+    } else {
+        resolve_runtime_source(app, zip_path)?.cache_key()
+    };
     if let Some(st) = get_build_status_internal(&key)? {
         return Ok(st);
     }

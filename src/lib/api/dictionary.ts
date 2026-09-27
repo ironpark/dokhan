@@ -17,8 +17,8 @@ export function startMasterBuild(zipPath: string | null = null): Promise<string>
   return invoke<string>('start_master_build', { zipPath });
 }
 
-export function getMasterBuildStatus(zipPath: string | null = null): Promise<BuildStatus> {
-  return invoke<BuildStatus>('get_master_build_status', { zipPath });
+export function getMasterBuildStatus(zipPath: string | null = null, buildKey?: string): Promise<BuildStatus> {
+  return invoke<BuildStatus>('get_master_build_status', { zipPath, buildKey });
 }
 
 export function getMasterContents(zipPath: string | null = null): Promise<ContentItem[]> {

@@ -39,9 +39,16 @@ import type {
 
 const BUILD_POLL_MS = 80;
 const INDEX_DEBOUNCE_MS = 120;
+const INDEX_PAGE_LIMIT = 500;
 
 function toErrorMessage(errorValue: unknown): string {
   return typeof errorValue === 'string' ? errorValue : String(errorValue);
+}
+
+function zipDisplayName(path: string | null): string {
+  if (!path) return '';
+  const filename = path.split(/[\\/]/).pop() ?? path;
+  return filename.replace(/-[0-9a-f]{16}(?=\.zip$)/i, '');
 }
 
 export interface DictionaryStore {
@@ -52,6 +59,7 @@ export interface DictionaryStore {
   readonly autoOpenFirstContent: boolean;
   readonly error: string;
   readonly zipPath: string | null;
+  readonly activeZipName: string;
   readonly activeTab: Tab;
   readonly mobileTab: 'home' | 'search' | 'index' | 'favorites';
   readonly masterSummary: MasterFeatureSummary | null;
@@ -63,6 +71,7 @@ export interface DictionaryStore {
   readonly recentViews: RecentViewItem[];
   readonly favorites: FavoriteItem[];
   readonly allFavorites: FavoriteItem[];
+  readonly legacyFavoriteCount: number;
   readonly bookmarkFolders: BookmarkFolder[];
   readonly activeBookmarkFolderId: string;
   readonly preprocessEnabled: boolean;
@@ -83,6 +92,7 @@ export interface DictionaryStore {
   readonly selectedEntryId: number | null;
 
   dispose(): void;
+  clearError(): void;
   retryLastOperation(): Promise<void>;
   closeDetail(): void;
   handleMobileBackNavigation(): boolean;
@@ -146,9 +156,12 @@ export function createDictionaryStore(): DictionaryStore {
   let indexRequestSeq = 0;
   let detailRequestSeq = 0;
   let searchRequestSeq = 0;
+  let bootRequestSeq = 0;
   let bootBusyCount = 0;
   let searchBusyCount = 0;
   let detailBusyCount = 0;
+  let searchBusyGeneration = 0;
+  let detailBusyGeneration = 0;
   let lastRetryAction: (() => Promise<void>) | null = null;
 
   const libraryState: LibraryState = createLibraryState(() => persistPrefs());
@@ -180,13 +193,17 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   function beginBusy(kind: 'boot' | 'search' | 'detail') {
+    const generation = kind === 'search' ? searchBusyGeneration : detailBusyGeneration;
     if (kind === 'boot') bootBusyCount += 1;
     if (kind === 'search') searchBusyCount += 1;
     if (kind === 'detail') detailBusyCount += 1;
     syncLoadingState();
+    return generation;
   }
 
-  function endBusy(kind: 'boot' | 'search' | 'detail') {
+  function endBusy(kind: 'boot' | 'search' | 'detail', generation = 0) {
+    if (kind === 'search' && generation !== searchBusyGeneration) return;
+    if (kind === 'detail' && generation !== detailBusyGeneration) return;
     if (kind === 'boot') bootBusyCount = Math.max(0, bootBusyCount - 1);
     if (kind === 'search') searchBusyCount = Math.max(0, searchBusyCount - 1);
     if (kind === 'detail') detailBusyCount = Math.max(0, detailBusyCount - 1);
@@ -208,16 +225,20 @@ export function createDictionaryStore(): DictionaryStore {
     detailState.clearSelection();
   }
 
-  async function withBusy<T>(kind: 'search' | 'detail', task: () => Promise<T>): Promise<T | undefined> {
-    beginBusy(kind);
+  async function withBusy<T>(
+    kind: 'search' | 'detail',
+    task: () => Promise<T>,
+    isCurrent: () => boolean = () => true
+  ): Promise<T | undefined> {
+    const generation = beginBusy(kind);
     error = '';
     try {
       return await task();
     } catch (e) {
-      error = toErrorMessage(e);
+      if (isCurrent()) error = toErrorMessage(e);
       return undefined;
     } finally {
-      endBusy(kind);
+      endBusy(kind, generation);
     }
   }
 
@@ -251,6 +272,31 @@ export function createDictionaryStore(): DictionaryStore {
     libraryState.pushRecentView(item);
   }
 
+  function invalidateSourceRequests() {
+    indexRequestSeq += 1;
+    invalidateSearchRequests();
+    invalidateDetailRequests();
+    if (indexDebounceTimer) {
+      clearTimeout(indexDebounceTimer);
+      indexDebounceTimer = null;
+    }
+    searchIndexState.setIndexLoading(false);
+  }
+
+  function invalidateSearchRequests() {
+    searchRequestSeq += 1;
+    searchBusyGeneration += 1;
+    searchBusyCount = 0;
+    syncLoadingState();
+  }
+
+  function invalidateDetailRequests() {
+    detailRequestSeq += 1;
+    detailBusyGeneration += 1;
+    detailBusyCount = 0;
+    syncLoadingState();
+  }
+
   async function loadIndexByPrefix(prefix: string) {
     if (!masterSummary) return;
     const trimmed = prefix.trim();
@@ -258,14 +304,15 @@ export function createDictionaryStore(): DictionaryStore {
       await loadIndexByPrefix(trimmed);
     });
     const requestId = ++indexRequestSeq;
+    const activeZipPath = zipPath;
     searchIndexState.setIndexLoading(true);
     try {
-      const rows = await getIndexEntries(zipPath, trimmed, trimmed ? 500 : null);
+      const rows = await getIndexEntries(activeZipPath, trimmed, INDEX_PAGE_LIMIT);
       if (requestId === indexRequestSeq && searchIndexState.indexPrefix.trim() === trimmed) {
         searchIndexState.setIndexRows(rows);
       }
     } catch (e) {
-      error = toErrorMessage(e);
+      if (requestId === indexRequestSeq) error = toErrorMessage(e);
     } finally {
       if (requestId === indexRequestSeq) searchIndexState.setIndexLoading(false);
     }
@@ -274,16 +321,24 @@ export function createDictionaryStore(): DictionaryStore {
   async function runSearch(rawQuery: string, recordRecent: boolean) {
     const searchTerm = rawQuery.trim();
     if (!searchTerm) {
+      invalidateSearchRequests();
       searchIndexState.clearSearch();
       return;
     }
+    invalidateSearchRequests();
     searchIndexState.setCommittedSearchQuery(searchTerm);
-    const requestId = ++searchRequestSeq;
+    searchIndexState.setSearchRows([]);
+    const requestId = searchRequestSeq;
+    const activeZipPath = zipPath;
     setRetryAction(async () => {
       searchIndexState.setSearchQuery(searchTerm);
       await runSearch(searchTerm, false);
     });
-    const rows = await withBusy('search', () => searchEntries(zipPath, searchTerm, 200));
+    const rows = await withBusy(
+      'search',
+      () => searchEntries(activeZipPath, searchTerm, 200),
+      () => requestId === searchRequestSeq
+    );
     if (rows && requestId === searchRequestSeq) {
       searchIndexState.setSearchRows(rows);
       if (recordRecent && rows.length > 0) {
@@ -293,6 +348,8 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   async function bootMasterFeaturesWithPath(nextZipPath: string | null, silentNoCache = false) {
+    const requestId = ++bootRequestSeq;
+    invalidateSourceRequests();
     setRetryAction(async () => {
       await bootMasterFeaturesWithPath(nextZipPath, false);
     });
@@ -301,9 +358,10 @@ export function createDictionaryStore(): DictionaryStore {
     showProgress = true;
     progress = { phase: 'start', current: 0, total: 1, message: '초기화 중' };
     try {
-      await startMasterBuild(nextZipPath);
-      while (true) {
-        const status = await getMasterBuildStatus(nextZipPath);
+      const buildKey = await startMasterBuild(nextZipPath);
+      while (requestId === bootRequestSeq) {
+        const status = await getMasterBuildStatus(nextZipPath, buildKey);
+        if (requestId !== bootRequestSeq) return;
         progress = {
           phase: status.phase,
           current: status.current,
@@ -315,27 +373,35 @@ export function createDictionaryStore(): DictionaryStore {
           if (!status.success) {
             throw new Error(status.error ?? '빌드 실패');
           }
-          masterSummary = status.summary;
-          zipPath = status.summary?.zipPath ?? nextZipPath;
+          if (!status.summary) throw new Error('사전 구축 결과가 비어 있습니다.');
+          const nextSummary = status.summary;
+          const resolvedPath = nextSummary.zipPath;
+          const [nextContents, nextIndex] = await Promise.all([
+            getMasterContents(resolvedPath),
+            getIndexEntries(resolvedPath, '', INDEX_PAGE_LIMIT)
+          ]);
+          if (requestId !== bootRequestSeq) return;
+
+          invalidateSourceRequests();
+          zipPath = resolvedPath;
+          masterSummary = nextSummary;
+          contents = nextContents;
+          libraryState.setSourceScope(resolvedPath);
+          searchIndexState.setIndexPrefix('');
+          searchIndexState.setIndexRows(nextIndex);
+          searchIndexState.setSearchQuery('');
+          searchIndexState.clearSearch();
+          clearSelection();
+
+          if (autoOpenFirstContent && nextContents.length) {
+            await openContent(nextContents[0].local);
+          }
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, BUILD_POLL_MS));
       }
-
-      const [nextContents, nextIndex] = await Promise.all([
-        getMasterContents(zipPath),
-        getIndexEntries(zipPath, '', null)
-      ]);
-
-      contents = nextContents;
-      searchIndexState.setIndexRows(nextIndex);
-      searchIndexState.setSearchRows([]);
-      clearSelection();
-
-      if (autoOpenFirstContent && contents.length) {
-        await openContent(contents[0].local);
-      }
     } catch (e) {
+      if (requestId !== bootRequestSeq) return;
       const message = toErrorMessage(e);
       if (silentNoCache && message.includes('no managed zip cache found')) {
         error = '';
@@ -343,7 +409,7 @@ export function createDictionaryStore(): DictionaryStore {
         error = message;
       }
     } finally {
-      showProgress = false;
+      if (requestId === bootRequestSeq) showProgress = false;
       endBusy('boot');
     }
   }
@@ -367,7 +433,12 @@ export function createDictionaryStore(): DictionaryStore {
     }
   }
 
+  function clearError() {
+    error = '';
+  }
+
   function closeDetail() {
+    invalidateDetailRequests();
     clearSelection();
   }
 
@@ -433,7 +504,10 @@ export function createDictionaryStore(): DictionaryStore {
       error = 'ZIP 경로가 비어 있습니다.';
       return;
     }
-    zipPath = nextPath;
+    if (!/\.zip$/i.test(nextPath)) {
+      error = 'ZIP 파일만 선택할 수 있습니다.';
+      return;
+    }
     setRetryAction(async () => {
       await useZipPath(nextPath);
     });
@@ -464,9 +538,20 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openContent(local, sourcePath);
     });
-    const requestId = ++detailRequestSeq;
-    const page = await withBusy('detail', () => getContentPage(zipPath, local, sourcePath));
-    if (!page || requestId !== detailRequestSeq) return;
+    invalidateDetailRequests();
+    const requestId = detailRequestSeq;
+    const activeZipPath = zipPath;
+    detailState.beginContentSelection(local);
+    const page = await withBusy(
+      'detail',
+      () => getContentPage(activeZipPath, local, sourcePath),
+      () => requestId === detailRequestSeq
+    );
+    if (requestId !== detailRequestSeq) return;
+    if (!page) {
+      clearSelection();
+      return;
+    }
     detailState.setContent(page, local);
     pushRecentView({
       key: `content:${page.sourcePath}:${local}`,
@@ -483,10 +568,20 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openEntry(id);
     });
-    const requestId = ++detailRequestSeq;
+    invalidateDetailRequests();
+    const requestId = detailRequestSeq;
+    const activeZipPath = zipPath;
     detailState.beginEntrySelection(id);
-    const entry = await withBusy('detail', () => getEntryDetail(zipPath, id));
-    if (!entry || requestId !== detailRequestSeq) return;
+    const entry = await withBusy(
+      'detail',
+      () => getEntryDetail(activeZipPath, id),
+      () => requestId === detailRequestSeq
+    );
+    if (requestId !== detailRequestSeq) return;
+    if (!entry) {
+      clearSelection();
+      return;
+    }
     detailState.setEntry(entry, id);
     pushRecentView({
       key: `entry:${id}`,
@@ -508,8 +603,10 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   function setSearchQuery(value: string) {
+    const changed = value !== searchIndexState.searchQuery;
     searchIndexState.setSearchQuery(value);
-    if (!value.trim()) {
+    if (changed) {
+      invalidateSearchRequests();
       searchIndexState.clearSearch();
     }
   }
@@ -622,10 +719,14 @@ export function createDictionaryStore(): DictionaryStore {
     setRetryAction(async () => {
       await openInlineHref(href, currentSourcePath, currentLocal);
     });
+    invalidateDetailRequests();
+    const requestId = detailRequestSeq;
+    const activeZipPath = zipPath;
     const target = await withBusy('detail', () =>
-      resolveLinkTarget(zipPath, href, currentSourcePath, currentLocal)
+      resolveLinkTarget(activeZipPath, href, currentSourcePath, currentLocal),
+      () => requestId === detailRequestSeq
     );
-    if (!target) return;
+    if (!target || requestId !== detailRequestSeq) return;
     if (target.kind === 'content') {
       await openContent(target.local, target.sourcePath);
       return;
@@ -655,6 +756,7 @@ export function createDictionaryStore(): DictionaryStore {
     get autoOpenFirstContent() { return autoOpenFirstContent; },
     get error() { return error; },
     get zipPath() { return zipPath; },
+    get activeZipName() { return zipDisplayName(zipPath); },
     get activeTab() { return activeTab; },
     get mobileTab() { return mobileTab; },
     get masterSummary() { return masterSummary; },
@@ -666,6 +768,7 @@ export function createDictionaryStore(): DictionaryStore {
     get recentViews() { return libraryState.recentViews; },
     get favorites() { return libraryState.visibleFavorites; },
     get allFavorites() { return libraryState.favorites; },
+    get legacyFavoriteCount() { return libraryState.legacyFavoriteCount; },
     get bookmarkFolders() { return libraryState.bookmarkFolders; },
     get activeBookmarkFolderId() { return libraryState.activeBookmarkFolderId; },
     get preprocessEnabled() { return readerPrefsState.preprocessEnabled; },
@@ -685,6 +788,7 @@ export function createDictionaryStore(): DictionaryStore {
     get selectedContentLocal() { return detailState.selectedContentLocal; },
     get selectedEntryId() { return detailState.selectedEntryId; },
     dispose,
+    clearError,
     retryLastOperation,
     closeDetail,
     handleMobileBackNavigation,
