@@ -1,13 +1,15 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { cubicOut } from "svelte/easing";
-  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import BookmarkCheck from "@lucide/svelte/icons/bookmark-check";
   import Check from "@lucide/svelte/icons/check";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Folder from "@lucide/svelte/icons/folder";
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
+  import List from "@lucide/svelte/icons/list";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
@@ -45,6 +47,10 @@
     onToggleReaderTools = () => {},
     onReturnToTop = () => {},
     onBack = null,
+    canGoBack = false,
+    canGoForward = false,
+    onHistoryBack = null,
+    onHistoryForward = null,
     onReaderFontSizeChange = () => {},
     onReaderLineHeightChange = () => {},
     onReaderWidthChange = () => {},
@@ -73,10 +79,22 @@
     onReturnToTop?: () => void;
     /** Mobile: puts the back button in this sticky bar instead of a separate one. */
     onBack?: (() => void) | null;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    onHistoryBack?: (() => void) | null;
+    onHistoryForward?: (() => void) | null;
     onReaderFontSizeChange?: (value: ReaderFontSize) => void;
     onReaderLineHeightChange?: (value: ReaderLineHeight) => void;
     onReaderWidthChange?: (value: ReaderWidth) => void;
   } = $props();
+
+  // Shown once there is somewhere to go, so a first lookup keeps a clean toolbar.
+  const showHistory = $derived(
+    !!onHistoryBack && !!onHistoryForward && (canGoBack || canGoForward),
+  );
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+  const backShortcut = isMac ? "⌘[" : "Alt+←";
+  const forwardShortcut = isMac ? "⌘]" : "Alt+→";
 
   const FONT_MIN = 80;
   const FONT_MAX = 130;
@@ -261,19 +279,60 @@
   }
 </script>
 
-<div class="doc-sticky-shell" class:compact={isScrolled} class:has-back={!!onBack}>
+{#snippet historyNav()}
+  {#if showHistory}
+    <div class="history-nav" role="group" aria-label="열람 기록">
+      <Button
+        type="button"
+        size="icon-sm"
+        class="toolbar-action history-btn"
+        variant="toolbar-pill"
+        aria-label="뒤로"
+        title={onBack ? "뒤로" : `뒤로 (${backShortcut})`}
+        disabled={!canGoBack}
+        onclick={() => onHistoryBack?.()}
+      >
+        <ChevronLeft size={18} aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        class="toolbar-action history-btn"
+        variant="toolbar-pill"
+        aria-label="앞으로"
+        title={onBack ? "앞으로" : `앞으로 (${forwardShortcut})`}
+        disabled={!canGoForward}
+        onclick={() => onHistoryForward?.()}
+      >
+        <ChevronRight size={18} aria-hidden="true" />
+      </Button>
+    </div>
+  {/if}
+{/snippet}
+
+<div
+  class="doc-sticky-shell"
+  class:compact={isScrolled}
+  class:has-back={!!onBack}
+  class:has-history={showHistory}
+>
   <header class="doc-header">
     {#if onBack}
-      <button type="button" class="doc-back" aria-label="목록으로 돌아가기" onclick={onBack}>
-        <ArrowLeft size={20} aria-hidden="true" />
-        <span>목록</span>
-      </button>
+      <div class="doc-nav">
+        <!-- A list icon, not an arrow, so it doesn't read as history "back". -->
+        <button type="button" class="doc-back" aria-label="목록으로 돌아가기" onclick={onBack}>
+          <List size={19} aria-hidden="true" />
+          <span>목록</span>
+        </button>
+        {@render historyNav()}
+      </div>
     {/if}
     <div class="title-block">
       <span class="doc-kind">{kind}</span>
       <h2 class="doc-title" class:headword={kind === "표제어"} title={title}>{title}</h2>
     </div>
     <div class="doc-actions">
+      {#if !onBack}{@render historyNav()}{/if}
       <span class="popover-anchor" bind:this={bookmarkButtonEl}>
         <Button
           type="button"
@@ -1075,10 +1134,10 @@
   .doc-back {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
     min-height: 40px;
     margin-left: -6px;
-    padding: 0 8px 0 4px;
+    padding: 0 8px 0 6px;
     border: 0;
     border-radius: var(--radius-md);
     background: transparent;
@@ -1110,7 +1169,24 @@
     padding: 6px 0 12px;
   }
 
-  .has-back .doc-back { grid-area: back; justify-self: start; }
+  .history-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .doc-sticky-shell :global(.history-btn:disabled) {
+    opacity: 0.4;
+  }
+
+  .doc-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .has-back .doc-nav { grid-area: back; justify-self: start; }
   .has-back .title-block { grid-area: title; }
   .has-back .doc-actions { grid-area: actions; justify-content: flex-end; }
 
@@ -1133,6 +1209,14 @@
   }
 
   .has-back.compact .doc-back span { display: none; }
+
+  /* Narrow phones: with history buttons in the top row, the actions go icon-only. */
+  @media (max-width: 420px) {
+    .has-back.has-history .doc-actions :global(.favorite-btn span),
+    .has-back.has-history .doc-actions :global(.settings-button span) {
+      display: none;
+    }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .reading-progress span { transition: none; }

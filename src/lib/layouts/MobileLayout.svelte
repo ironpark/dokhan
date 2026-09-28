@@ -189,6 +189,12 @@
                         onReaderWidthChange={(value) =>
                             dictionaryStore.setReaderWidth(value)}
                         onBack={handleBack}
+                        canGoBack={dictionaryStore.canGoBack}
+                        canGoForward={dictionaryStore.canGoForward}
+                        onHistoryBack={() => dictionaryStore.goBack()}
+                        onHistoryForward={() => dictionaryStore.goForward()}
+                        scrollRestore={dictionaryStore.readerScrollRestore}
+                        onScrollPositionChange={(top) => dictionaryStore.recordReaderScroll(top)}
                     />
                     {/if}
                 </div>

@@ -19,6 +19,11 @@ import { createLibraryState, type LibraryState } from '$lib/stores/libraryState.
 import { createReaderPrefsState, type ReaderPrefsState } from '$lib/stores/readerPrefsState.svelte';
 import { createSearchIndexState, type SearchIndexState } from '$lib/stores/searchIndexState.svelte';
 import { createDetailState, type DetailState } from '$lib/stores/detailState.svelte';
+import {
+  createReadingHistory,
+  readingLocationKey,
+  type ReadingLocation
+} from '$lib/stores/readingHistory.svelte';
 import type {
   BookmarkFolder,
   BuildProgress,
@@ -93,6 +98,9 @@ export interface DictionaryStore {
   readonly detailMode: DetailMode;
   readonly selectedContentLocal: string;
   readonly selectedEntryId: number | null;
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  readonly readerScrollRestore: number | null;
 
   dispose(): void;
   clearError(): void;
@@ -114,6 +122,10 @@ export interface DictionaryStore {
   pickZipFile(): Promise<void>;
   openContent(local: string, sourcePath?: string | null): Promise<void>;
   openEntry(id: number): Promise<void>;
+  goBack(): Promise<void>;
+  goForward(): Promise<void>;
+  /** Remember the reader's scroll offset for the open entry or page. */
+  recordReaderScroll(scrollTop: number): void;
   setIndexPrefix(value: string): void;
   loadMoreIndex(): Promise<void>;
   setSearchQuery(value: string): void;
@@ -173,6 +185,9 @@ export function createDictionaryStore(): DictionaryStore {
   const readerPrefsState: ReaderPrefsState = createReaderPrefsState(() => persistPrefs());
   const searchIndexState: SearchIndexState = createSearchIndexState();
   const detailState: DetailState = createDetailState();
+  const readingHistory = createReadingHistory();
+  // Scroll offset for the page being opened by back/forward; null starts at the top.
+  let readerScrollRestore = $state<number | null>(null);
 
   const prefs = loadDictionaryPrefs();
   libraryState.applySnapshot({
@@ -438,6 +453,7 @@ export function createDictionaryStore(): DictionaryStore {
           searchIndexState.setSearchQuery('');
           searchIndexState.clearSearch();
           clearSelection();
+          readingHistory.clear();
 
           if (autoOpenFirstContent && nextContents.length) {
             await openContent(nextContents[0].local);
@@ -483,14 +499,17 @@ export function createDictionaryStore(): DictionaryStore {
     error = '';
   }
 
+  /** Leaves the reader (mobile); its history is a single session, so it ends here. */
   function closeDetail() {
     invalidateDetailRequests();
     clearSelection();
+    readingHistory.clear();
   }
 
   function handleMobileBackNavigation(): boolean {
     if (detailState.selectedEntryId !== null || detailState.selectedContentLocal) {
-      closeDetail();
+      if (readingHistory.canGoBack) void goBack();
+      else closeDetail();
       return true;
     }
     if (mobileTab !== 'home') {
@@ -581,8 +600,57 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   async function openContent(local: string, sourcePath: string | null = null) {
+    readerScrollRestore = null;
+    await loadContent(local, sourcePath);
+  }
+
+  async function openEntry(id: number) {
+    readerScrollRestore = null;
+    await loadEntry(id);
+  }
+
+  async function stepHistory(delta: -1 | 1) {
+    const target = readingHistory.step(delta);
+    if (!target) return;
+    readerScrollRestore = target.scrollTop;
+    await openLocation(target.location);
+  }
+
+  async function goBack() {
+    await stepHistory(-1);
+  }
+
+  async function goForward() {
+    await stepHistory(1);
+  }
+
+  async function openLocation(location: ReadingLocation) {
+    if (location.kind === 'entry') await loadEntry(location.id);
+    else await loadContent(location.local, location.sourcePath);
+  }
+
+  function currentReadingKey(): string | null {
+    if (detailState.detailMode === 'entry' && detailState.selectedEntry) {
+      return readingLocationKey({ kind: 'entry', id: detailState.selectedEntry.id });
+    }
+    if (detailState.detailMode === 'content' && detailState.selectedContent) {
+      return readingLocationKey({
+        kind: 'content',
+        local: detailState.selectedContentLocal,
+        sourcePath: detailState.selectedContent.sourcePath
+      });
+    }
+    return null;
+  }
+
+  function recordReaderScroll(scrollTop: number) {
+    const key = currentReadingKey();
+    if (key) readingHistory.recordScroll(key, scrollTop);
+  }
+
+  async function loadContent(local: string, sourcePath: string | null) {
     setRetryAction(async () => {
-      await openContent(local, sourcePath);
+      await loadContent(local, sourcePath);
     });
     const requestId = startRequest('detail');
     const activeZipPath = zipPath;
@@ -599,6 +667,7 @@ export function createDictionaryStore(): DictionaryStore {
     const tocTitle = contents.find((item) => item.local === local)?.title;
     const resolvedPage = page.title === page.local && tocTitle ? { ...page, title: tocTitle } : page;
     detailState.setContent(resolvedPage, local);
+    readingHistory.visit({ kind: 'content', local, sourcePath: page.sourcePath });
     pushRecentView({
       key: `content:${page.sourcePath}:${local}`,
       kind: 'content',
@@ -610,9 +679,9 @@ export function createDictionaryStore(): DictionaryStore {
     });
   }
 
-  async function openEntry(id: number) {
+  async function loadEntry(id: number) {
     setRetryAction(async () => {
-      await openEntry(id);
+      await loadEntry(id);
     });
     const requestId = startRequest('detail');
     const activeZipPath = zipPath;
@@ -624,6 +693,7 @@ export function createDictionaryStore(): DictionaryStore {
       return;
     }
     detailState.setEntry(entry, id);
+    readingHistory.visit({ kind: 'entry', id });
     pushRecentView({
       key: `entry:${id}`,
       kind: 'entry',
@@ -841,6 +911,9 @@ export function createDictionaryStore(): DictionaryStore {
     get detailMode() { return detailState.detailMode; },
     get selectedContentLocal() { return detailState.selectedContentLocal; },
     get selectedEntryId() { return detailState.selectedEntryId; },
+    get canGoBack() { return readingHistory.canGoBack; },
+    get canGoForward() { return readingHistory.canGoForward; },
+    get readerScrollRestore() { return readerScrollRestore; },
     dispose,
     clearError,
     retryLastOperation,
@@ -861,6 +934,9 @@ export function createDictionaryStore(): DictionaryStore {
     pickZipFile,
     openContent,
     openEntry,
+    goBack,
+    goForward,
+    recordReaderScroll,
     setIndexPrefix,
     loadMoreIndex,
     setSearchQuery,

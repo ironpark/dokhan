@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import ReaderToolbar from "$lib/components/ReaderToolbar.svelte";
   import Toast from "$lib/components/ui/Toast.svelte";
@@ -38,6 +39,12 @@
     onReaderLineHeightChange = () => {},
     onReaderWidthChange = () => {},
     onBack = null,
+    canGoBack = false,
+    canGoForward = false,
+    onHistoryBack = null,
+    onHistoryForward = null,
+    scrollRestore = null,
+    onScrollPositionChange = () => {},
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
@@ -72,6 +79,14 @@
     onReaderLineHeightChange?: (value: ReaderLineHeight) => void;
     onReaderWidthChange?: (value: ReaderWidth) => void;
     onBack?: (() => void) | null;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    /** Reading history; the buttons are hidden while these are null. */
+    onHistoryBack?: (() => void) | null;
+    onHistoryForward?: (() => void) | null;
+    /** Offset to restore for the entry being shown (back/forward); null starts at the top. */
+    scrollRestore?: number | null;
+    onScrollPositionChange?: (scrollTop: number) => void;
   } = $props();
 
   type RenderContext = {
@@ -123,9 +138,25 @@
 
   $effect(() => {
     const selected = mode === "entry" ? selectedEntry : selectedContent;
-    if (selected && readerEl) readerEl.scrollTop = 0;
     readingProgress = 0;
     isScrolled = false;
+    if (!selected || !readerEl) return;
+    const el = readerEl;
+    const target = untrack(() => scrollRestore) ?? 0;
+    el.scrollTop = 0;
+    if (target <= 0) return;
+    // Wait for the dictionary preprocessing pass to settle the layout before restoring.
+    // Landing past the fold compacts the sticky toolbar, and scroll anchoring then
+    // pulls the offset up by the height it lost, so set it once more after that.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        el.scrollTop = target;
+        frame = requestAnimationFrame(() => {
+          if (Math.abs(el.scrollTop - target) > 1) el.scrollTop = target;
+        });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
   });
 
   function normalizeFontScale(value: ReaderFontSize): number {
@@ -151,6 +182,7 @@
       ? Math.min(100, Math.max(0, Math.round((target.scrollTop / scrollableHeight) * 100)))
       : 0;
     isScrolled = target.scrollTop > 160;
+    onScrollPositionChange(target.scrollTop);
   }
 
   function scrollBehavior(): ScrollBehavior {
@@ -636,6 +668,10 @@
         {isScrolled}
         onReturnToTop={returnToTop}
         {onBack}
+        {canGoBack}
+        {canGoForward}
+        {onHistoryBack}
+        {onHistoryForward}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
@@ -691,6 +727,10 @@
         {isScrolled}
         onReturnToTop={returnToTop}
         {onBack}
+        {canGoBack}
+        {canGoForward}
+        {onHistoryBack}
+        {onHistoryForward}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}

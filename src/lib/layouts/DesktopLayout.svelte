@@ -11,7 +11,44 @@
     import EmptyState from "$lib/components/ui/EmptyState.svelte";
 
     let { dictionaryStore }: { dictionaryStore: DictionaryStore } = $props();
+
+    function isTextField(element: Element | null): boolean {
+        if (!(element instanceof HTMLElement)) return false;
+        return (
+            element.isContentEditable ||
+            element instanceof HTMLTextAreaElement ||
+            element instanceof HTMLInputElement
+        );
+    }
+
+    // Browser-style reading history: ⌘[ / ⌘], Alt+←/→ and the mouse's side buttons.
+    // Alt+arrows move by word inside text fields, so those are left alone there.
+    function onKeydown(event: KeyboardEvent) {
+        if (event.defaultPrevented) return;
+        let delta = 0;
+        if (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey) {
+            if (event.key === "[") delta = -1;
+            else if (event.key === "]") delta = 1;
+        } else if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+            if (isTextField(document.activeElement)) return;
+            if (event.key === "ArrowLeft") delta = -1;
+            else if (event.key === "ArrowRight") delta = 1;
+        }
+        if (!delta) return;
+        event.preventDefault();
+        if (delta < 0) void dictionaryStore.goBack();
+        else void dictionaryStore.goForward();
+    }
+
+    function onMouseUp(event: MouseEvent) {
+        if (event.button !== 3 && event.button !== 4) return;
+        event.preventDefault();
+        if (event.button === 3) void dictionaryStore.goBack();
+        else void dictionaryStore.goForward();
+    }
 </script>
+
+<svelte:window onkeydown={onKeydown} onmouseup={onMouseUp} />
 
 <div class="desktop-layout">
     <aside class="sidebar">
@@ -135,6 +172,12 @@
                 onReaderLineHeightChange={(value) =>
                     dictionaryStore.setReaderLineHeight(value)}
                 onReaderWidthChange={(value) => dictionaryStore.setReaderWidth(value)}
+                canGoBack={dictionaryStore.canGoBack}
+                canGoForward={dictionaryStore.canGoForward}
+                onHistoryBack={() => dictionaryStore.goBack()}
+                onHistoryForward={() => dictionaryStore.goForward()}
+                scrollRestore={dictionaryStore.readerScrollRestore}
+                onScrollPositionChange={(top) => dictionaryStore.recordReaderScroll(top)}
             />
         {/if}
     </main>
