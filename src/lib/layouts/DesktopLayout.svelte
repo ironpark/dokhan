@@ -51,6 +51,9 @@
                     query={dictionaryStore.indexPrefix}
                     rows={dictionaryStore.indexRows}
                     loading={dictionaryStore.indexLoading}
+                    hasMore={dictionaryStore.indexHasMore}
+                    loadingMore={dictionaryStore.indexLoadingMore}
+                    onLoadMore={() => dictionaryStore.loadMoreIndex()}
                     selectedId={dictionaryStore.selectedEntryId}
                     onQueryChange={(value) => dictionaryStore.setIndexPrefix(value)}
                     onOpen={(id) => dictionaryStore.openEntry(id)}

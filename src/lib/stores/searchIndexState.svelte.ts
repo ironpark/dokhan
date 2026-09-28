@@ -4,6 +4,9 @@ export function createSearchIndexState() {
   let indexPrefix = $state('');
   let indexRows = $state<DictionaryIndexEntry[]>([]);
   let indexLoading = $state(false);
+  // Pages beyond the first are fetched as the list nears its end.
+  let indexHasMore = $state(false);
+  let indexLoadingMore = $state(false);
 
   let searchQuery = $state('');
   let committedSearchQuery = $state('');
@@ -18,6 +21,12 @@ export function createSearchIndexState() {
     },
     get indexLoading() {
       return indexLoading;
+    },
+    get indexHasMore() {
+      return indexHasMore;
+    },
+    get indexLoadingMore() {
+      return indexLoadingMore;
     },
     get searchQuery() {
       return searchQuery;
@@ -34,8 +43,16 @@ export function createSearchIndexState() {
     setIndexLoading(value: boolean) {
       indexLoading = value;
     },
-    setIndexRows(rows: DictionaryIndexEntry[]) {
+    setIndexRows(rows: DictionaryIndexEntry[], hasMore = false) {
       indexRows = rows;
+      indexHasMore = hasMore;
+    },
+    appendIndexRows(rows: DictionaryIndexEntry[], hasMore: boolean) {
+      if (rows.length) indexRows = [...indexRows, ...rows];
+      indexHasMore = hasMore;
+    },
+    setIndexLoadingMore(value: boolean) {
+      indexLoadingMore = value;
     },
     setSearchQuery(value: string) {
       searchQuery = value;

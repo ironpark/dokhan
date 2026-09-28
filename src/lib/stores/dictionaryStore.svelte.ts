@@ -83,6 +83,8 @@ export interface DictionaryStore {
   readonly indexPrefix: string;
   readonly indexRows: DictionaryIndexEntry[];
   readonly indexLoading: boolean;
+  readonly indexHasMore: boolean;
+  readonly indexLoadingMore: boolean;
   readonly searchQuery: string;
   readonly committedSearchQuery: string;
   readonly searchRows: SearchHit[];
@@ -113,6 +115,7 @@ export interface DictionaryStore {
   openContent(local: string, sourcePath?: string | null): Promise<void>;
   openEntry(id: number): Promise<void>;
   setIndexPrefix(value: string): void;
+  loadMoreIndex(): Promise<void>;
   setSearchQuery(value: string): void;
   submitSearch(): Promise<void>;
   useRecentSearch(query: string): void;
@@ -157,6 +160,7 @@ export function createDictionaryStore(): DictionaryStore {
 
   let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let indexRequestSeq = 0;
+  let indexRowsPrefix = '';
   let detailRequestSeq = 0;
   let searchRequestSeq = 0;
   let bootRequestSeq = 0;
@@ -292,6 +296,7 @@ export function createDictionaryStore(): DictionaryStore {
       indexDebounceTimer = null;
     }
     searchIndexState.setIndexLoading(false);
+    searchIndexState.setIndexLoadingMore(false);
   }
 
   function invalidateSearchRequests() {
@@ -315,15 +320,50 @@ export function createDictionaryStore(): DictionaryStore {
     const requestId = ++indexRequestSeq;
     const activeZipPath = zipPath;
     searchIndexState.setIndexLoading(true);
+    searchIndexState.setIndexLoadingMore(false);
     try {
       const rows = await getIndexEntries(activeZipPath, trimmed, INDEX_PAGE_LIMIT);
       if (requestId === indexRequestSeq && searchIndexState.indexPrefix.trim() === trimmed) {
-        searchIndexState.setIndexRows(rows);
+        indexRowsPrefix = trimmed;
+        searchIndexState.setIndexRows(rows, rows.length === INDEX_PAGE_LIMIT);
       }
     } catch (e) {
       if (requestId === indexRequestSeq) error = toErrorMessage(e);
     } finally {
       if (requestId === indexRequestSeq) searchIndexState.setIndexLoading(false);
+    }
+  }
+
+  async function loadMoreIndex() {
+    if (
+      !masterSummary ||
+      !searchIndexState.indexHasMore ||
+      searchIndexState.indexLoading ||
+      searchIndexState.indexLoadingMore
+    ) {
+      return;
+    }
+    // A new prefix or source bumps the sequence, which discards this page.
+    const requestId = indexRequestSeq;
+    const activeZipPath = zipPath;
+    const prefix = indexRowsPrefix;
+    // The typed prefix is ahead of the rows while its debounce is pending.
+    if (searchIndexState.indexPrefix.trim() !== prefix) return;
+    const offset = searchIndexState.indexRows.length;
+    searchIndexState.setIndexLoadingMore(true);
+    try {
+      const rows = await getIndexEntries(activeZipPath, prefix, INDEX_PAGE_LIMIT, offset);
+      if (
+        requestId === indexRequestSeq &&
+        searchIndexState.indexPrefix.trim() === prefix &&
+        searchIndexState.indexRows.length === offset
+      ) {
+        searchIndexState.appendIndexRows(rows, rows.length === INDEX_PAGE_LIMIT);
+      }
+    } catch (e) {
+      if (requestId === indexRequestSeq) error = toErrorMessage(e);
+    } finally {
+      if (requestId === indexRequestSeq) searchIndexState.setIndexLoadingMore(false);
     }
   }
 
@@ -393,7 +433,8 @@ export function createDictionaryStore(): DictionaryStore {
           contents = nextContents;
           libraryState.setSourceScope(resolvedPath);
           searchIndexState.setIndexPrefix('');
-          searchIndexState.setIndexRows(nextIndex);
+          indexRowsPrefix = '';
+          searchIndexState.setIndexRows(nextIndex, nextIndex.length === INDEX_PAGE_LIMIT);
           searchIndexState.setSearchQuery('');
           searchIndexState.clearSearch();
           clearSelection();
@@ -790,6 +831,8 @@ export function createDictionaryStore(): DictionaryStore {
     get indexPrefix() { return searchIndexState.indexPrefix; },
     get indexRows() { return searchIndexState.indexRows; },
     get indexLoading() { return searchIndexState.indexLoading; },
+    get indexHasMore() { return searchIndexState.indexHasMore; },
+    get indexLoadingMore() { return searchIndexState.indexLoadingMore; },
     get searchQuery() { return searchIndexState.searchQuery; },
     get committedSearchQuery() { return searchIndexState.committedSearchQuery; },
     get searchRows() { return searchIndexState.searchRows; },
@@ -819,6 +862,7 @@ export function createDictionaryStore(): DictionaryStore {
     openContent,
     openEntry,
     setIndexPrefix,
+    loadMoreIndex,
     setSearchQuery,
     submitSearch,
     useRecentSearch,

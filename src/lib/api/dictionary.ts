@@ -28,9 +28,10 @@ export function getMasterContents(zipPath: string | null = null): Promise<Conten
 export function getIndexEntries(
   zipPath: string | null,
   prefix: string,
-  limit: number | null = null
+  limit: number | null = null,
+  offset = 0
 ): Promise<DictionaryIndexEntry[]> {
-  return invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix, limit, zipPath });
+  return invoke<DictionaryIndexEntry[]>('get_index_entries', { prefix, limit, offset, zipPath });
 }
 
 export function searchEntries(
