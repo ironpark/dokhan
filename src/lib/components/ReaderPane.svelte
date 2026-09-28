@@ -37,6 +37,7 @@
     onReaderFontSizeChange = () => {},
     onReaderLineHeightChange = () => {},
     onReaderWidthChange = () => {},
+    onBack = null,
   }: {
     mode: DetailMode;
     selectedContent: ContentPage | null;
@@ -70,6 +71,7 @@
     onReaderFontSizeChange?: (value: ReaderFontSize) => void;
     onReaderLineHeightChange?: (value: ReaderLineHeight) => void;
     onReaderWidthChange?: (value: ReaderWidth) => void;
+    onBack?: (() => void) | null;
   } = $props();
 
   type RenderContext = {
@@ -633,6 +635,7 @@
         {readingProgress}
         {isScrolled}
         onReturnToTop={returnToTop}
+        {onBack}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
@@ -687,6 +690,7 @@
         {readingProgress}
         {isScrolled}
         onReturnToTop={returnToTop}
+        {onBack}
         {preprocessEnabled}
         {markerPreprocessEnabled}
         {isFavorite}
@@ -1094,7 +1098,7 @@
 
   @media (max-width: 768px) {
     .reader {
-      padding: 0 var(--space-4) var(--space-5);
+      padding: 0 var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
     }
 
     .html-rendered :global(ol.dict-sense-list) {

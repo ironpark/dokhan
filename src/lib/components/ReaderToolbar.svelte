@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { cubicOut } from "svelte/easing";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Bookmark from "@lucide/svelte/icons/bookmark";
   import BookmarkCheck from "@lucide/svelte/icons/bookmark-check";
@@ -43,6 +44,7 @@
     onToggleFavorite = () => {},
     onToggleReaderTools = () => {},
     onReturnToTop = () => {},
+    onBack = null,
     onReaderFontSizeChange = () => {},
     onReaderLineHeightChange = () => {},
     onReaderWidthChange = () => {},
@@ -69,6 +71,8 @@
     onToggleFavorite?: () => void;
     onToggleReaderTools?: () => void;
     onReturnToTop?: () => void;
+    /** Mobile: puts the back button in this sticky bar instead of a separate one. */
+    onBack?: (() => void) | null;
     onReaderFontSizeChange?: (value: ReaderFontSize) => void;
     onReaderLineHeightChange?: (value: ReaderLineHeight) => void;
     onReaderWidthChange?: (value: ReaderWidth) => void;
@@ -257,8 +261,14 @@
   }
 </script>
 
-<div class="doc-sticky-shell" class:compact={isScrolled}>
+<div class="doc-sticky-shell" class:compact={isScrolled} class:has-back={!!onBack}>
   <header class="doc-header">
+    {#if onBack}
+      <button type="button" class="doc-back" aria-label="목록으로 돌아가기" onclick={onBack}>
+        <ArrowLeft size={20} aria-hidden="true" />
+        <span>목록</span>
+      </button>
+    {/if}
     <div class="title-block">
       <span class="doc-kind">{kind}</span>
       <h2 class="doc-title" class:headword={kind === "표제어"} title={title}>{title}</h2>
@@ -1059,6 +1069,70 @@
       transform-origin: top right;
     }
   }
+
+  /* Mobile reader: the back button shares the sticky bar with the actions,
+     and the large title sits below it until the body scrolls. */
+  .doc-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-height: 40px;
+    margin-left: -6px;
+    padding: 0 8px 0 4px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-accent);
+    font-size: 14px;
+    font-weight: 650;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .doc-back:active {
+    background: var(--color-accent-soft);
+  }
+
+  .doc-back:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+
+  .has-back .doc-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "back actions"
+      "title title";
+    column-gap: 8px;
+    row-gap: 6px;
+    min-height: 0;
+    padding: 6px 0 12px;
+  }
+
+  .has-back .doc-back { grid-area: back; justify-self: start; }
+  .has-back .title-block { grid-area: title; }
+  .has-back .doc-actions { grid-area: actions; justify-content: flex-end; }
+
+  .has-back .reader-popover {
+    left: auto;
+    right: 0;
+    transform-origin: top right;
+  }
+
+  .has-back.compact .doc-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "back title actions";
+    padding: 6px 0;
+  }
+
+  .has-back.compact .doc-back {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .has-back.compact .doc-back span { display: none; }
 
   @media (prefers-reduced-motion: reduce) {
     .reading-progress span { transition: none; }

@@ -29,6 +29,11 @@
         dictionaryStore.selectedContent?.title ??
         "본문을 불러오는 중",
     );
+    // ReaderPane carries its own back button once a document is on screen.
+    let readerHasDocument = $derived(
+        (dictionaryStore.detailMode === "entry" && !!dictionaryStore.selectedEntry) ||
+        (dictionaryStore.detailMode === "content" && !!dictionaryStore.selectedContent),
+    );
     let readerHistoryArmed = false;
 
     function handleBack() {
@@ -41,6 +46,15 @@
         dictionaryStore.setMobileTab("search");
         await tick();
         searchPanelHost?.querySelector<HTMLInputElement>("input")?.focus();
+    }
+
+    /** Raise the keyboard for a fresh search, but keep earlier results readable on return. */
+    function selectSearchTab() {
+        if (dictionaryStore.mobileTab === "search" || !dictionaryStore.searchQuery.trim()) {
+            void openSearch();
+            return;
+        }
+        dictionaryStore.setMobileTab("search");
     }
 
     onMount(() => {
@@ -76,6 +90,7 @@
     <div class="content-area">
         {#if showReader}
             <div class="reader-overlay">
+                {#if !readerHasDocument}
                 <header class="reader-header">
                     <button
                         type="button"
@@ -97,6 +112,7 @@
                     </button>
                     <span class="header-title" title={readerTitle}>{readerTitle}</span>
                 </header>
+                {/if}
                 <div class="reader-content">
                     {#if dictionaryStore.isOpeningDetail && !dictionaryStore.selectedEntry && !dictionaryStore.selectedContent}
                         <div class="detail-loading" role="status">본문을 불러오는 중입니다.</div>
@@ -132,18 +148,21 @@
                             dictionaryStore.setReaderLineHeight(value)}
                         onReaderWidthChange={(value) =>
                             dictionaryStore.setReaderWidth(value)}
+                        onBack={handleBack}
                     />
                     {/if}
                 </div>
             </div>
         {:else}
-            <TitleToolbar
-                title="독한 사전"
-                subtitle={dictionaryStore.activeZipName}
-                compact={true}
-                showZipAction={true}
-                onPickZip={() => dictionaryStore.pickZipFile()}
-            />
+            <div class="title-bar" class:secondary={dictionaryStore.mobileTab !== "home"}>
+                <TitleToolbar
+                    title="독한 사전"
+                    subtitle={dictionaryStore.activeZipName}
+                    compact={true}
+                    showZipAction={true}
+                    onPickZip={() => dictionaryStore.pickZipFile()}
+                />
+            </div>
 
             {#if dictionaryStore.mobileTab === "home"}
                 <div class="home-view">
@@ -283,7 +302,7 @@
             <button
                 class:active={dictionaryStore.mobileTab === "search"}
                 aria-current={dictionaryStore.mobileTab === "search" ? "page" : undefined}
-                onclick={() => dictionaryStore.setMobileTab("search")}
+                onclick={selectSearchTab}
             >
                 <div class="icon" aria-hidden="true">
                     <svg
@@ -494,8 +513,8 @@
         inset: 0;
         background: var(--color-surface);
         z-index: 100;
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         animation: slideUp 220ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
@@ -560,6 +579,7 @@
     }
 
     .reader-content {
+        flex: 1;
         overflow: hidden;
         position: relative;
         min-height: 0;
@@ -760,6 +780,30 @@
         .home-view { gap: 14px; padding-top: 14px; }
         .hero { padding-top: 0; }
         .hero h2 { font-size: 22px; }
+    }
+
+    /* Landscape phones: the tab bar already says where you are, so list tabs
+       drop the brand header and the tab bar lays out in one row. */
+    @media (max-height: 500px) {
+        .title-bar.secondary { display: none; }
+
+        .bottom-nav {
+            min-height: 0;
+            padding-top: 3px;
+            padding-bottom: calc(3px + env(safe-area-inset-bottom));
+        }
+
+        .bottom-nav button {
+            flex-direction: row;
+            gap: 6px;
+            min-height: 44px;
+            font-size: 12px;
+        }
+
+        .bottom-nav .icon svg {
+            width: 20px;
+            height: 20px;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {

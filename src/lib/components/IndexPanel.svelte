@@ -29,7 +29,8 @@
   const virtualizer = createVirtualizer({
     count: 0,
     getScrollElement: () => listEl,
-    estimateSize: () => 38,
+    // Mobile (input docked at the bottom) gets finger-sized rows.
+    estimateSize: () => (inputAtBottom ? 46 : 38),
     overscan: 5,
   });
 
@@ -276,6 +277,18 @@
 
   .panel.input-bottom .entry-list {
     order: 1;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item) {
+    min-height: 46px;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item button) {
+    min-height: 44px;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item button:active) {
+    background: var(--color-surface-hover);
   }
 
 </style>
