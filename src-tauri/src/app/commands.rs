@@ -129,10 +129,11 @@ fn get_master_contents(
 fn get_index_entries(
     prefix: Option<String>,
     limit: Option<usize>,
+    offset: Option<usize>,
     zip_path: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<Vec<DictionaryIndexEntry>, String> {
-    get_index_entries_impl(&app, prefix, limit, zip_path)
+    get_index_entries_impl(&app, prefix, limit, offset, zip_path)
 }
 
 /// Run full-text search against in-memory runtime index.

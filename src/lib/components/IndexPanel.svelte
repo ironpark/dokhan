@@ -4,7 +4,6 @@
   import Input from "$lib/components/ui/Input.svelte";
   import ListItem from "$lib/components/ui/ListItem.svelte";
   import EmptyState from "$lib/components/ui/EmptyState.svelte";
-  import { INDEX_PAGE_LIMIT } from "$lib/stores/dictionaryStore.svelte";
 
   let {
     query,
@@ -12,8 +11,11 @@
     loading = false,
     inputAtBottom = false,
     selectedId = null,
+    hasMore = false,
+    loadingMore = false,
     onQueryChange,
     onOpen,
+    onLoadMore = () => {},
   }: {
     query: string;
     rows: DictionaryIndexEntry[];
@@ -22,14 +24,22 @@
     selectedId?: number | null;
     onQueryChange: (value: string) => void;
     onOpen: (id: number) => void;
+    /** More rows exist past the end; `onLoadMore` fetches the next page. */
+    hasMore?: boolean;
+    loadingMore?: boolean;
+    onLoadMore?: () => void;
   } = $props();
+
+  // Start the next page while this many rows are still below the viewport.
+  const LOAD_MORE_THRESHOLD = 40;
 
   let listEl = $state<HTMLElement | null>(null);
 
   const virtualizer = createVirtualizer({
     count: 0,
     getScrollElement: () => listEl,
-    estimateSize: () => 38,
+    // Mobile (input docked at the bottom) gets finger-sized rows.
+    estimateSize: () => (inputAtBottom ? 46 : 38),
     overscan: 5,
   });
 
@@ -41,9 +51,14 @@
   $effect(() => {
     const nextCount = rows.length;
     if (rows !== lastRows) {
+      // An appended page keeps the scroll position; a new result set starts at the top.
+      const appended =
+        !!lastRows?.length && rows.length >= lastRows.length && rows[0] === lastRows[0];
       lastRows = rows;
-      if (listEl) listEl.scrollTop = 0;
-      $virtualizer.scrollToIndex(0);
+      if (!appended) {
+        if (listEl) listEl.scrollTop = 0;
+        $virtualizer.scrollToIndex(0);
+      }
     }
     if (nextCount !== lastVirtualizerCount) {
       lastVirtualizerCount = nextCount;
@@ -76,6 +91,12 @@
 
   const virtualRows = $derived($virtualizer.getVirtualItems());
   const totalSize = $derived($virtualizer.getTotalSize());
+
+  $effect(() => {
+    const last = virtualRows[virtualRows.length - 1];
+    if (!last || !hasMore || loadingMore || loading) return;
+    if (last.index >= rows.length - LOAD_MORE_THRESHOLD) onLoadMore();
+  });
 
   type Segment = { text: string; hit: boolean };
 
@@ -156,13 +177,8 @@
       clearable={true}
       placeholder="색인 검색 (예: hnd, ab)"
     />
-    {#if !loading && !query.trim() && rows.length >= INDEX_PAGE_LIMIT}
-      <p class="index-limit-notice" role="status">
-        최대 {INDEX_PAGE_LIMIT}개를 표시합니다. 단어를 입력하면 전체 색인에서 찾습니다.
-      </p>
-    {/if}
     {#if !loading && query.trim() && rows.length > 0}
-      <p class="index-result-summary" role="status">{rows.length >= INDEX_PAGE_LIMIT ? `상위 ${INDEX_PAGE_LIMIT}개 색인 항목` : `색인 항목 ${rows.length}개`}</p>
+      <p class="index-result-summary" role="status">{hasMore ? `색인 항목 ${rows.length}개 이상` : `색인 항목 ${rows.length}개`}</p>
     {/if}
   </div>
   <div class="entry-list" bind:this={listEl}>
@@ -199,6 +215,9 @@
           </div>
         {/each}
       </div>
+      {#if loadingMore}
+        <p class="load-more-status" role="status">색인을 더 불러오는 중…</p>
+      {/if}
     {/if}
   </div>
 </section>
@@ -245,7 +264,6 @@
     height: 44px;
   }
 
-  .index-limit-notice,
   .index-result-summary {
     margin: 0;
     padding: 0 6px;
@@ -276,6 +294,26 @@
 
   .panel.input-bottom .entry-list {
     order: 1;
+  }
+
+  .load-more-status {
+    margin: 0;
+    padding: 10px 18px 12px;
+    color: var(--color-text-subtle);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item) {
+    min-height: 46px;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item button) {
+    min-height: 44px;
+  }
+
+  .panel.input-bottom .entry-list :global(.list-item button:active) {
+    background: var(--color-surface-hover);
   }
 
 </style>

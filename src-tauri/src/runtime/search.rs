@@ -503,22 +503,34 @@ pub(crate) fn get_index_entries_impl(
     app: &AppHandle,
     prefix: Option<String>,
     limit: Option<usize>,
+    offset: Option<usize>,
     zip_path: Option<String>,
 ) -> Result<Vec<DictionaryIndexEntry>, String> {
     let source = resolve_runtime_source(app, zip_path)?;
     let runtime = get_runtime(app, &source)?;
+    Ok(index_entries_page(&runtime.entries, &runtime.entry_keys, prefix, limit, offset.unwrap_or(0)))
+}
+
+/// One page of the index: headword order without a prefix, best fuzzy match first with one.
+fn index_entries_page(
+    entries: &[EntryDetail],
+    keys: &[EntrySearchKey],
+    prefix: Option<String>,
+    limit: Option<usize>,
+    offset: usize,
+) -> Vec<DictionaryIndexEntry> {
     let p = prefix.unwrap_or_default();
     let p_key = normalize_search_key(&p);
     let p_loose = normalize_search_key_loose(&p);
     let limit = if p.is_empty() {
-        limit.unwrap_or(runtime.entries.len()).clamp(1, runtime.entries.len().max(1))
+        limit.unwrap_or(entries.len()).clamp(1, entries.len().max(1))
     } else {
         limit.unwrap_or(200).clamp(1, 5_000)
     };
 
     if p.is_empty() {
         let mut out = Vec::new();
-        for e in runtime.entries.iter().take(limit) {
+        for e in entries.iter().skip(offset).take(limit) {
             out.push(DictionaryIndexEntry {
                 id: e.id,
                 headword: e.headword.clone(),
@@ -527,11 +539,11 @@ pub(crate) fn get_index_entries_impl(
                 source_path: e.source_path.clone(),
             });
         }
-        return Ok(out);
+        return out;
     }
 
     let mut scored = Vec::<(usize, usize, usize)>::new();
-    for (idx, (e, k)) in runtime.entries.iter().zip(runtime.entry_keys.iter()).enumerate() {
+    for (idx, (e, k)) in entries.iter().zip(keys.iter()).enumerate() {
         let mut best = fuzzy_match_score(&k.headword, &k.headword_loose, &p_key, &p_loose);
         for (alias, alias_loose) in k.aliases.iter().zip(k.aliases_loose.iter()) {
             if let Some(alias_score) = fuzzy_match_score(alias, alias_loose, &p_key, &p_loose) {
@@ -549,9 +561,9 @@ pub(crate) fn get_index_entries_impl(
             .then(a_len.cmp(b_len))
             .then(a_idx.cmp(b_idx))
     });
-    let mut out = Vec::with_capacity(limit.min(scored.len()));
-    for (_, _, idx) in scored.into_iter().take(limit) {
-        let e = &runtime.entries[idx];
+    let mut out = Vec::with_capacity(limit.min(scored.len().saturating_sub(offset)));
+    for (_, _, idx) in scored.into_iter().skip(offset).take(limit) {
+        let e = &entries[idx];
         out.push(DictionaryIndexEntry {
             id: e.id,
             headword: e.headword.clone(),
@@ -560,7 +572,7 @@ pub(crate) fn get_index_entries_impl(
             source_path: e.source_path.clone(),
         });
     }
-    Ok(out)
+    out
 }
 
 fn search_entries_linear(query: &str, limit: usize, entries: &[EntryDetail], keys: &[EntrySearchKey]) -> Vec<SearchHit> {
@@ -737,7 +749,8 @@ pub(crate) fn search_entries_impl(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_entry_search_keys, get_ready_tantivy_index, load_search_index, normalize_search_key,
+        build_entry_search_keys, get_ready_tantivy_index, index_entries_page, load_search_index,
+        normalize_search_key,
         normalize_search_key_loose, query_search_index, rebuild_search_index,
         rebuild_search_index_with_config, search_entries_linear,
         search_entries_with_ready_index, search_query_requires_tantivy, tantivy_schema,
@@ -782,6 +795,40 @@ mod tests {
             assert_eq!(strict, &normalize_search_key(alias));
             assert_eq!(loose, &normalize_search_key_loose(alias));
         }
+    }
+
+    #[test]
+    fn index_pages_continue_where_the_previous_page_ended() {
+        let entries = ["Abend", "aber", "Abfahrt", "Haus", "Hausarzt", "Abgas"]
+            .iter()
+            .enumerate()
+            .map(|(id, headword)| EntryDetail {
+                id,
+                headword: headword.to_string(),
+                aliases: Vec::new(),
+                source_path: "merge01.chm".to_string(),
+                target_local: String::new(),
+                definition_text: String::new(),
+                definition_html: String::new(),
+            })
+            .collect::<Vec<_>>();
+        let keys = build_entry_search_keys(&entries);
+        let ids = |prefix: Option<&str>, limit, offset| {
+            index_entries_page(&entries, &keys, prefix.map(str::to_string), Some(limit), offset)
+                .into_iter()
+                .map(|row| row.id)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(ids(None, 4, 0), vec![0, 1, 2, 3]);
+        assert_eq!(ids(None, 4, 4), vec![4, 5]);
+        assert!(ids(None, 4, 8).is_empty());
+
+        let all = ids(Some("ab"), 10, 0);
+        assert!(all.len() > 2);
+        let mut paged = ids(Some("ab"), 2, 0);
+        paged.extend(ids(Some("ab"), 10, 2));
+        assert_eq!(paged, all);
     }
 
     #[test]

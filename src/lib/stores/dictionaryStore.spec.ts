@@ -160,4 +160,39 @@ describe("dictionary source changes", () => {
     expect(store.selectedEntry).toBeNull();
     store.dispose();
   });
+
+  it("walks reading history and steps back before leaving the reader on mobile", async () => {
+    api.getEntryDetail.mockImplementation(async (_zip: string, id: number) => ({
+      id,
+      headword: `Wort${id}`,
+      aliases: [],
+      sourcePath: "merge01.chm",
+      definitionText: "",
+      definitionHtml: "",
+    }));
+    const store = createDictionaryStore();
+    store.setAutoOpenFirstContent(false);
+    await store.useZipPath("/first.zip");
+
+    await store.openEntry(1);
+    await store.openEntry(2);
+    store.recordReaderScroll(300);
+    expect(store.canGoBack).toBe(true);
+
+    await store.goBack();
+    expect(store.selectedEntry?.id).toBe(1);
+    expect(store.readerScrollRestore).toBe(0);
+    expect(store.canGoForward).toBe(true);
+
+    await store.goForward();
+    expect(store.selectedEntry?.id).toBe(2);
+    expect(store.readerScrollRestore).toBe(300);
+
+    expect(store.handleMobileBackNavigation()).toBe(true);
+    await vi.waitFor(() => expect(store.selectedEntry?.id).toBe(1));
+    expect(store.handleMobileBackNavigation()).toBe(true);
+    expect(store.selectedEntryId).toBeNull();
+    expect(store.canGoForward).toBe(false);
+    store.dispose();
+  });
 });

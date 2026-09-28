@@ -19,6 +19,11 @@ import { createLibraryState, type LibraryState } from '$lib/stores/libraryState.
 import { createReaderPrefsState, type ReaderPrefsState } from '$lib/stores/readerPrefsState.svelte';
 import { createSearchIndexState, type SearchIndexState } from '$lib/stores/searchIndexState.svelte';
 import { createDetailState, type DetailState } from '$lib/stores/detailState.svelte';
+import {
+  createReadingHistory,
+  readingLocationKey,
+  type ReadingLocation
+} from '$lib/stores/readingHistory.svelte';
 import type {
   BookmarkFolder,
   BuildProgress,
@@ -83,6 +88,8 @@ export interface DictionaryStore {
   readonly indexPrefix: string;
   readonly indexRows: DictionaryIndexEntry[];
   readonly indexLoading: boolean;
+  readonly indexHasMore: boolean;
+  readonly indexLoadingMore: boolean;
   readonly searchQuery: string;
   readonly committedSearchQuery: string;
   readonly searchRows: SearchHit[];
@@ -91,6 +98,9 @@ export interface DictionaryStore {
   readonly detailMode: DetailMode;
   readonly selectedContentLocal: string;
   readonly selectedEntryId: number | null;
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  readonly readerScrollRestore: number | null;
 
   dispose(): void;
   clearError(): void;
@@ -112,7 +122,12 @@ export interface DictionaryStore {
   pickZipFile(): Promise<void>;
   openContent(local: string, sourcePath?: string | null): Promise<void>;
   openEntry(id: number): Promise<void>;
+  goBack(): Promise<void>;
+  goForward(): Promise<void>;
+  /** Remember the reader's scroll offset for the open entry or page. */
+  recordReaderScroll(scrollTop: number): void;
   setIndexPrefix(value: string): void;
+  loadMoreIndex(): Promise<void>;
   setSearchQuery(value: string): void;
   submitSearch(): Promise<void>;
   useRecentSearch(query: string): void;
@@ -157,6 +172,7 @@ export function createDictionaryStore(): DictionaryStore {
 
   let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let indexRequestSeq = 0;
+  let indexRowsPrefix = '';
   let detailRequestSeq = 0;
   let searchRequestSeq = 0;
   let bootRequestSeq = 0;
@@ -169,6 +185,9 @@ export function createDictionaryStore(): DictionaryStore {
   const readerPrefsState: ReaderPrefsState = createReaderPrefsState(() => persistPrefs());
   const searchIndexState: SearchIndexState = createSearchIndexState();
   const detailState: DetailState = createDetailState();
+  const readingHistory = createReadingHistory();
+  // Scroll offset for the page being opened by back/forward; null starts at the top.
+  let readerScrollRestore = $state<number | null>(null);
 
   const prefs = loadDictionaryPrefs();
   libraryState.applySnapshot({
@@ -292,6 +311,7 @@ export function createDictionaryStore(): DictionaryStore {
       indexDebounceTimer = null;
     }
     searchIndexState.setIndexLoading(false);
+    searchIndexState.setIndexLoadingMore(false);
   }
 
   function invalidateSearchRequests() {
@@ -315,15 +335,50 @@ export function createDictionaryStore(): DictionaryStore {
     const requestId = ++indexRequestSeq;
     const activeZipPath = zipPath;
     searchIndexState.setIndexLoading(true);
+    searchIndexState.setIndexLoadingMore(false);
     try {
       const rows = await getIndexEntries(activeZipPath, trimmed, INDEX_PAGE_LIMIT);
       if (requestId === indexRequestSeq && searchIndexState.indexPrefix.trim() === trimmed) {
-        searchIndexState.setIndexRows(rows);
+        indexRowsPrefix = trimmed;
+        searchIndexState.setIndexRows(rows, rows.length === INDEX_PAGE_LIMIT);
       }
     } catch (e) {
       if (requestId === indexRequestSeq) error = toErrorMessage(e);
     } finally {
       if (requestId === indexRequestSeq) searchIndexState.setIndexLoading(false);
+    }
+  }
+
+  async function loadMoreIndex() {
+    if (
+      !masterSummary ||
+      !searchIndexState.indexHasMore ||
+      searchIndexState.indexLoading ||
+      searchIndexState.indexLoadingMore
+    ) {
+      return;
+    }
+    // A new prefix or source bumps the sequence, which discards this page.
+    const requestId = indexRequestSeq;
+    const activeZipPath = zipPath;
+    const prefix = indexRowsPrefix;
+    // The typed prefix is ahead of the rows while its debounce is pending.
+    if (searchIndexState.indexPrefix.trim() !== prefix) return;
+    const offset = searchIndexState.indexRows.length;
+    searchIndexState.setIndexLoadingMore(true);
+    try {
+      const rows = await getIndexEntries(activeZipPath, prefix, INDEX_PAGE_LIMIT, offset);
+      if (
+        requestId === indexRequestSeq &&
+        searchIndexState.indexPrefix.trim() === prefix &&
+        searchIndexState.indexRows.length === offset
+      ) {
+        searchIndexState.appendIndexRows(rows, rows.length === INDEX_PAGE_LIMIT);
+      }
+    } catch (e) {
+      if (requestId === indexRequestSeq) error = toErrorMessage(e);
+    } finally {
+      if (requestId === indexRequestSeq) searchIndexState.setIndexLoadingMore(false);
     }
   }
 
@@ -393,10 +448,12 @@ export function createDictionaryStore(): DictionaryStore {
           contents = nextContents;
           libraryState.setSourceScope(resolvedPath);
           searchIndexState.setIndexPrefix('');
-          searchIndexState.setIndexRows(nextIndex);
+          indexRowsPrefix = '';
+          searchIndexState.setIndexRows(nextIndex, nextIndex.length === INDEX_PAGE_LIMIT);
           searchIndexState.setSearchQuery('');
           searchIndexState.clearSearch();
           clearSelection();
+          readingHistory.clear();
 
           if (autoOpenFirstContent && nextContents.length) {
             await openContent(nextContents[0].local);
@@ -442,14 +499,17 @@ export function createDictionaryStore(): DictionaryStore {
     error = '';
   }
 
+  /** Leaves the reader (mobile); its history is a single session, so it ends here. */
   function closeDetail() {
     invalidateDetailRequests();
     clearSelection();
+    readingHistory.clear();
   }
 
   function handleMobileBackNavigation(): boolean {
     if (detailState.selectedEntryId !== null || detailState.selectedContentLocal) {
-      closeDetail();
+      if (readingHistory.canGoBack) void goBack();
+      else closeDetail();
       return true;
     }
     if (mobileTab !== 'home') {
@@ -540,8 +600,57 @@ export function createDictionaryStore(): DictionaryStore {
   }
 
   async function openContent(local: string, sourcePath: string | null = null) {
+    readerScrollRestore = null;
+    await loadContent(local, sourcePath);
+  }
+
+  async function openEntry(id: number) {
+    readerScrollRestore = null;
+    await loadEntry(id);
+  }
+
+  async function stepHistory(delta: -1 | 1) {
+    const target = readingHistory.step(delta);
+    if (!target) return;
+    readerScrollRestore = target.scrollTop;
+    await openLocation(target.location);
+  }
+
+  async function goBack() {
+    await stepHistory(-1);
+  }
+
+  async function goForward() {
+    await stepHistory(1);
+  }
+
+  async function openLocation(location: ReadingLocation) {
+    if (location.kind === 'entry') await loadEntry(location.id);
+    else await loadContent(location.local, location.sourcePath);
+  }
+
+  function currentReadingKey(): string | null {
+    if (detailState.detailMode === 'entry' && detailState.selectedEntry) {
+      return readingLocationKey({ kind: 'entry', id: detailState.selectedEntry.id });
+    }
+    if (detailState.detailMode === 'content' && detailState.selectedContent) {
+      return readingLocationKey({
+        kind: 'content',
+        local: detailState.selectedContentLocal,
+        sourcePath: detailState.selectedContent.sourcePath
+      });
+    }
+    return null;
+  }
+
+  function recordReaderScroll(scrollTop: number) {
+    const key = currentReadingKey();
+    if (key) readingHistory.recordScroll(key, scrollTop);
+  }
+
+  async function loadContent(local: string, sourcePath: string | null) {
     setRetryAction(async () => {
-      await openContent(local, sourcePath);
+      await loadContent(local, sourcePath);
     });
     const requestId = startRequest('detail');
     const activeZipPath = zipPath;
@@ -558,6 +667,7 @@ export function createDictionaryStore(): DictionaryStore {
     const tocTitle = contents.find((item) => item.local === local)?.title;
     const resolvedPage = page.title === page.local && tocTitle ? { ...page, title: tocTitle } : page;
     detailState.setContent(resolvedPage, local);
+    readingHistory.visit({ kind: 'content', local, sourcePath: page.sourcePath });
     pushRecentView({
       key: `content:${page.sourcePath}:${local}`,
       kind: 'content',
@@ -569,9 +679,9 @@ export function createDictionaryStore(): DictionaryStore {
     });
   }
 
-  async function openEntry(id: number) {
+  async function loadEntry(id: number) {
     setRetryAction(async () => {
-      await openEntry(id);
+      await loadEntry(id);
     });
     const requestId = startRequest('detail');
     const activeZipPath = zipPath;
@@ -583,6 +693,7 @@ export function createDictionaryStore(): DictionaryStore {
       return;
     }
     detailState.setEntry(entry, id);
+    readingHistory.visit({ kind: 'entry', id });
     pushRecentView({
       key: `entry:${id}`,
       kind: 'entry',
@@ -790,6 +901,8 @@ export function createDictionaryStore(): DictionaryStore {
     get indexPrefix() { return searchIndexState.indexPrefix; },
     get indexRows() { return searchIndexState.indexRows; },
     get indexLoading() { return searchIndexState.indexLoading; },
+    get indexHasMore() { return searchIndexState.indexHasMore; },
+    get indexLoadingMore() { return searchIndexState.indexLoadingMore; },
     get searchQuery() { return searchIndexState.searchQuery; },
     get committedSearchQuery() { return searchIndexState.committedSearchQuery; },
     get searchRows() { return searchIndexState.searchRows; },
@@ -798,6 +911,9 @@ export function createDictionaryStore(): DictionaryStore {
     get detailMode() { return detailState.detailMode; },
     get selectedContentLocal() { return detailState.selectedContentLocal; },
     get selectedEntryId() { return detailState.selectedEntryId; },
+    get canGoBack() { return readingHistory.canGoBack; },
+    get canGoForward() { return readingHistory.canGoForward; },
+    get readerScrollRestore() { return readerScrollRestore; },
     dispose,
     clearError,
     retryLastOperation,
@@ -818,7 +934,11 @@ export function createDictionaryStore(): DictionaryStore {
     pickZipFile,
     openContent,
     openEntry,
+    goBack,
+    goForward,
+    recordReaderScroll,
     setIndexPrefix,
+    loadMoreIndex,
     setSearchQuery,
     submitSearch,
     useRecentSearch,
