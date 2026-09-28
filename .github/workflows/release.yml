@@ -13,9 +13,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify release version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The updater compares versions, so the tag must match what the app reports.
+      - name: Tag matches app version
+        run: |
+          APP_VERSION="$(jq -r .version src-tauri/tauri.conf.json)"
+          if [ "v$APP_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match tauri.conf.json version $APP_VERSION."
+            exit 1
+          fi
+
   desktop:
     name: Desktop Release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: verify
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,8 +63,17 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
+      - name: Check updater signing key
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Missing TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) secrets."
+            exit 1
+          fi
+
+      # Also emits the signed update bundles (.app.tar.gz / installer + .sig).
       - name: Build desktop bundles
-        run: pnpm tauri build
+        run: pnpm tauri build --config src-tauri/tauri.updater.conf.json
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -56,6 +85,7 @@ jobs:
   android:
     name: Android Release (APK)
     runs-on: ubuntu-latest
+    needs: verify
 
     env:
       JAVA_VERSION: "17"
@@ -167,9 +197,43 @@ jobs:
             -name "*.AppImage" -o \
             -name "*.deb" -o \
             -name "*.rpm" -o \
-            -name "*.zip" \
+            -name "*.zip" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.sig" \
           \) ! -name "*unsigned*" -exec cp -f {} release-upload-assets/ \;
           ls -al release-upload-assets
+
+      # Read by the desktop updater at releases/latest/download/latest.json.
+      - name: Write updater manifest
+        run: |
+          python3 - <<'PY'
+          import datetime, glob, json, os
+
+          assets = "release-upload-assets"
+          tag = os.environ["GITHUB_REF_NAME"]
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/"
+
+          def platform(pattern):
+              matches = glob.glob(os.path.join(assets, pattern))
+              if len(matches) != 1:
+                  raise SystemExit(f"Expected one {pattern}, found {matches}")
+              path = matches[0]
+              with open(path + ".sig") as sig:
+                  return {"signature": sig.read().strip(), "url": base + os.path.basename(path)}
+
+          manifest = {
+              "version": tag.removeprefix("v"),
+              "notes": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{tag}",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "darwin-aarch64": platform("*.app.tar.gz"),
+                  "windows-x86_64": platform("*-setup.exe"),
+              },
+          }
+          with open(os.path.join(assets, "latest.json"), "w") as out:
+              json.dump(manifest, out, indent=2)
+          print(json.dumps(manifest, indent=2))
+          PY
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

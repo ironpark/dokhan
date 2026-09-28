@@ -227,12 +227,18 @@ fn resolve_media_data_url(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Start the Tauri application and register all frontend-invokable commands.
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    // Self-update is desktop-only; Android links to the release APK instead.
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    builder
         .invoke_handler(tauri::generate_handler![
             prepare_zip_source,
             start_master_build,

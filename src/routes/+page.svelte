@@ -10,13 +10,19 @@
   import FileUp from "@lucide/svelte/icons/file-up";
   import X from "@lucide/svelte/icons/x";
   import LoadProgress from "$lib/components/LoadProgress.svelte";
+  import UpdateBanner from "$lib/components/UpdateBanner.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import MobileLayout from "$lib/layouts/MobileLayout.svelte";
   import DesktopLayout from "$lib/layouts/DesktopLayout.svelte";
   import { createDictionaryStore } from "$lib/stores/dictionaryStore.svelte";
   import { platformStore } from "$lib/stores/platform.svelte";
+  import { createUpdateState } from "$lib/stores/updateState.svelte";
+
+  // Let the dictionary finish loading before touching the network.
+  const UPDATE_CHECK_DELAY_MS = 4000;
 
   const dictionaryStore = createDictionaryStore();
+  const updateState = createUpdateState();
   let copyMessage = $state("");
   let copyMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -33,6 +39,7 @@
     let unlistenDragDrop: (() => void) | undefined;
     let unlistenCloseRequest: (() => void) | undefined;
     let backButtonListener: Awaited<ReturnType<typeof onBackButtonPress>> | undefined;
+    let updateCheckTimer: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
 
     (async () => {
@@ -55,6 +62,12 @@
 
       await dictionaryStore.bootFromManagedCache();
       if (disposed || !tauri) return;
+
+      // iOS isn't distributed, so only Android takes the link-to-APK path.
+      const updateMode = platformStore.platformName === "android" ? "android" : platformStore.isMobile ? null : "desktop";
+      if (updateMode) {
+        updateCheckTimer = setTimeout(() => void updateState.checkForUpdate(updateMode), UPDATE_CHECK_DELAY_MS);
+      }
 
       if (platformStore.isMobile) {
         const unlisten = await getCurrentWindow().onCloseRequested(
@@ -91,6 +104,7 @@
       disposed = true;
       dictionaryStore.dispose();
       if (copyMessageTimer) clearTimeout(copyMessageTimer);
+      if (updateCheckTimer) clearTimeout(updateCheckTimer);
       if (unlistenDragDrop) unlistenDragDrop();
       if (unlistenCloseRequest) unlistenCloseRequest();
       if (backButtonListener) void backButtonListener.unregister();
@@ -149,6 +163,8 @@
       </details>
     </div>
   {/if}
+
+  <UpdateBanner {updateState} />
 
   <LoadProgress visible={dictionaryStore.showProgress} progress={dictionaryStore.progress} />
 

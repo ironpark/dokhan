@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/capabilities.json",
+  "identifier": "desktop",
+  "description": "Self-update on desktop; the updater plugin is not built for mobile",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart"
+  ]
+}
