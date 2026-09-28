@@ -39,7 +39,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # Explicit targets, so the macOS build stays Apple Silicon (aarch64)
+        # whatever architecture the runner image defaults to.
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -54,6 +60,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -73,13 +81,13 @@ jobs:
 
       # Also emits the signed update bundles (.app.tar.gz / installer + .sig).
       - name: Build desktop bundles
-        run: pnpm tauri build --config src-tauri/tauri.updater.conf.json
+        run: pnpm tauri build --config src-tauri/tauri.updater.conf.json --target ${{ matrix.target }}
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-desktop-${{ matrix.os }}
-          path: src-tauri/target/release/bundle/**
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
           if-no-files-found: error
 
   android:
