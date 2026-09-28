@@ -35,6 +35,7 @@
         (dictionaryStore.detailMode === "content" && !!dictionaryStore.selectedContent),
     );
     let readerHistoryArmed = false;
+    let keyboardOpen = $state(false);
 
     function handleBack() {
         if (!showReader) return;
@@ -56,6 +57,45 @@
         }
         dictionaryStore.setMobileTab("search");
     }
+
+    function isTextField(element: Element | null): boolean {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.isContentEditable || element instanceof HTMLTextAreaElement) return true;
+        return (
+            element instanceof HTMLInputElement &&
+            !["button", "checkbox", "radio", "range", "submit", "reset"].includes(element.type)
+        );
+    }
+
+    // The native side shrinks the WebView for the keyboard, so a focused field
+    // plus a shorter window means it is up. Focus alone is not enough: Android's
+    // back gesture hides the keyboard but leaves the field focused.
+    onMount(() => {
+        let fullHeight = window.innerHeight;
+        let frame = 0;
+        const update = () => {
+            const height = window.innerHeight;
+            if (!isTextField(document.activeElement)) {
+                fullHeight = height;
+                keyboardOpen = false;
+                return;
+            }
+            keyboardOpen = height < fullHeight - 120;
+        };
+        const schedule = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(update);
+        };
+        window.addEventListener("resize", schedule);
+        document.addEventListener("focusin", schedule);
+        document.addEventListener("focusout", schedule);
+        return () => {
+            cancelAnimationFrame(frame);
+            window.removeEventListener("resize", schedule);
+            document.removeEventListener("focusin", schedule);
+            document.removeEventListener("focusout", schedule);
+        };
+    });
 
     onMount(() => {
         if (inTauri) return;
@@ -154,7 +194,11 @@
                 </div>
             </div>
         {:else}
-            <div class="title-bar" class:secondary={dictionaryStore.mobileTab !== "home"}>
+            <div
+                class="title-bar"
+                class:secondary={dictionaryStore.mobileTab !== "home"}
+                class:hidden={keyboardOpen}
+            >
                 <TitleToolbar
                     title="독한 사전"
                     subtitle={dictionaryStore.activeZipName}
@@ -277,7 +321,7 @@
         {/if}
     </div>
 
-    {#if !showReader}
+    {#if !showReader && !keyboardOpen}
         <nav class="bottom-nav" aria-label="주요 메뉴">
             <button
                 class:active={dictionaryStore.mobileTab === "home"}
@@ -397,6 +441,11 @@
         flex-direction: column;
         min-height: 0;
         min-width: 0;
+    }
+
+    /* While typing, the keyboard needs the room more than the header does. */
+    .title-bar.hidden {
+        display: none;
     }
 
     .panel-container {
