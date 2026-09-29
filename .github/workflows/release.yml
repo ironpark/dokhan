@@ -39,13 +39,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Explicit targets, so the macOS build stays Apple Silicon (aarch64)
-        # whatever architecture the runner image defaults to.
+        # The macOS build is a universal binary, so one .dmg runs on both
+        # Apple Silicon and Intel Macs; it needs both Rust targets installed.
         include:
           - os: macos-latest
-            target: aarch64-apple-darwin
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            rust-targets: x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -61,7 +63,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.rust-targets }}
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -78,6 +80,38 @@ jobs:
             echo "Missing TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) secrets."
             exit 1
           fi
+
+      # The certificate is self-signed: Gatekeeper still warns on first launch,
+      # but every release carries the same code identity, so macOS keeps the
+      # app's permissions across updates. Tauri's APPLE_CERTIFICATE import only
+      # accepts trusted certificates, so it goes into a keychain here and Tauri
+      # just gets the identity to sign with.
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE" ] || [ -z "$MACOS_CERTIFICATE_PASSWORD" ]; then
+            echo "Missing MACOS_CERTIFICATE (and MACOS_CERTIFICATE_PASSWORD) secrets."
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/signing.p12" -k "$KEYCHAIN" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY="$(security find-identity -p codesigning "$KEYCHAIN" | awk '/^ *1\)/ { print $2; exit }')"
+          if [ -z "$IDENTITY" ]; then
+            echo "No code signing identity found in MACOS_CERTIFICATE."
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       # Also emits the signed update bundles (.app.tar.gz / installer + .sig).
       - name: Build desktop bundles
@@ -234,7 +268,9 @@ jobs:
               "notes": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{tag}",
               "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "platforms": {
+                  # One universal bundle serves both Mac architectures.
                   "darwin-aarch64": platform("*.app.tar.gz"),
+                  "darwin-x86_64": platform("*.app.tar.gz"),
                   "windows-x86_64": platform("*-setup.exe"),
               },
           }
