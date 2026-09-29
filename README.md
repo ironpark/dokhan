@@ -159,6 +159,7 @@ DOKHAN_TEST_ZIP=/path/to/dictionary8.zip \
 1. `src-tauri/tauri.conf.json`, `package.json`, `src-tauri/Cargo.toml`의 버전을 함께 올립니다.
 2. `vX.Y.Z` 태그를 푸시하면 `release.yml`이 앱을 빌드하고 GitHub 릴리스를 생성합니다. 태그의 버전이 앱 버전과 다르면 빌드가 실패합니다.
 3. 데스크톱 업데이트 파일은 GitHub Actions Secrets에 등록한 `TAURI_SIGNING_PRIVATE_KEY`와 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`를 사용해 서명합니다. 앱은 최신 릴리스의 `latest.json`으로 업데이트를 확인합니다.
+4. macOS 앱은 `MACOS_CERTIFICATE`(자체 서명 코드 서명 인증서 `.p12`를 base64로 인코딩한 값)와 `MACOS_CERTIFICATE_PASSWORD` Secrets로 서명합니다. 자체 서명이라 Gatekeeper 경고는 그대로지만, 모든 릴리스가 같은 서명 신원을 가지므로 업데이트한 뒤에도 macOS가 같은 앱으로 인식합니다. 인증서를 바꾸면 이 신원도 바뀌므로 개인 키를 안전하게 보관해야 합니다.
 
 `main` 브랜치에 푸시하면 `build-targets.yml`이 nightly 프리릴리스를 생성합니다. nightly 버전은 업데이트 알림에 포함되지 않습니다.
 
