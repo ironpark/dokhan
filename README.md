@@ -6,7 +6,7 @@
 
 **찾고, 읽고, 기억하는 독-한 / 한-독 전자사전**
 
-[german.kr](https://german.kr/) 전자사전 ZIP 파일을 그대로 열어<br>
+이정준 교수의 [german.kr](https://german.kr/) 전자사전 ZIP 파일을 그대로 열어<br>
 목차 · 색인 · 전문 검색 · 책갈피를 제공하는 데스크톱 · Android 앱입니다.
 
 [![Release](https://img.shields.io/github/v/release/ironpark/dokhan?label=%EC%B5%9C%EC%8B%A0%20%EB%B2%84%EC%A0%84&color=205b80)](https://github.com/ironpark/dokhan/releases/latest)
@@ -14,7 +14,7 @@
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Android-205b80)](#설치)
 [![License](https://img.shields.io/badge/license-MPL--2.0-e3b64f)](LICENSE)
 
-[**다운로드**](https://github.com/ironpark/dokhan/releases/latest) · [사전 파일 받기](#1-사전-파일-받기) · [개발](#개발)
+[**다운로드**](https://github.com/ironpark/dokhan/releases/latest) · [사전 파일 받기](#1-사전-파일-받기) · [사전에 대하여](#사전에-대하여) · [개발](#개발)
 
 </div>
 
@@ -31,7 +31,7 @@
 > [!IMPORTANT]
 > 독한 사전에는 사전 데이터가 들어 있지 않습니다.
 > **[german.kr](https://german.kr/)** 상단 메뉴의 **전자사전 → 다운로드**에서 전자사전 ZIP 파일(예: v8.0 `dictionary8.zip`)을 받아 주세요.
-> 사전 내용의 저작권은 german.kr에 있습니다.
+> 사전 내용의 저작권은 저자(이정준, german.kr)에게 있습니다.
 
 ### 2. 앱 설치
 
@@ -70,6 +70,25 @@
 | 앞으로 | `⌘` `]` · 마우스 앞으로 버튼 | `Alt` `→` · 마우스 앞으로 버튼 |
 
 </details>
+
+## 사전에 대하여
+
+독한/한독 전자사전은 **이정준**(李廷俊) 성균관대학교 독어독문학과 교수(2020년 정년퇴임)가 만든 사전입니다.
+독어독문학계에 쌓인 학문적 성과를 바탕으로, 풍부한 단어와 해설을 갖춘 독한/한독 전자사전을 빠르게 선보이는 것을 목표로 시작되었습니다.
+버전 4.0까지는 성균관대학교 학생들의 도움으로 기본 단어 대부분을 입력했고, 그 뒤로도 저자가 오류를 바로잡으며 계속 다듬고 있습니다.
+
+> 저의 전자사전이 여러분들께 도움이 된다면 그것으로 저는 기쁘겠습니다.
+> 부탁드리건대, 프로그램만 내려받고 떠나지 마시고, 게시판(말씀터)에 글도 남겨주시고, 그곳의 글도 읽고 가세요.
+>
+> — 이정준
+
+독한 사전은 이 사전 파일을 더 편하게 읽기 위한 뷰어이며, 사전 내용을 만들거나 고치지 않습니다.
+
+- 사전 내용에 대한 의견이나 오류는 [german.kr](https://german.kr/) 게시판(**말씀터**)에 남겨 주세요.
+- 앱 자체의 버그나 제안은 [이 저장소의 이슈](https://github.com/ironpark/dokhan/issues)로 알려 주세요.
+
+> [!TIP]
+> 저자는 전자사전이 편리함에서는 종이사전보다 낫지만 완전함에서는 종이사전을 따라가지 못한다며, 곁에 종이사전을 하나쯤 두기를 권합니다.
 
 ## 개발
 
@@ -137,4 +156,4 @@ DOKHAN_TEST_ZIP=/path/to/dictionary8.zip \
 
 ## 라이선스
 
-앱 소스 코드는 [MPL-2.0](LICENSE)을 따릅니다. 사전 데이터는 이 저장소에 포함되어 있지 않으며, 저작권은 [german.kr](https://german.kr/)에 있습니다.
+앱 소스 코드는 [MPL-2.0](LICENSE)을 따릅니다. 사전 데이터는 이 저장소에 포함되어 있지 않으며, 저작권은 저자 이정준([german.kr](https://german.kr/))에게 있습니다.
