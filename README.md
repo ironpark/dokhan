@@ -41,7 +41,7 @@ ZIP 파일을 그대로 열어 목차와 색인을 둘러보고, 단어를 검�
 
 | 플랫폼 | 파일 | 참고 |
 | --- | --- | --- |
-| **macOS** (Apple Silicon) | `Dokhan_x.y.z_aarch64.dmg` | 처음 실행할 때 “확인되지 않은 개발자” 경고가 나타나면 **시스템 설정 → 개인정보 보호 및 보안**에서 **그래도 열기**를 눌러 주세요. |
+| **macOS** (Apple Silicon · Intel) | `Dokhan_x.y.z_universal.dmg` | 앱을 한 번 실행해 경고 창이 뜨면 **완료**를 누른 뒤, **시스템 설정 → 개인정보 보호 및 보안** 아래쪽의 **그래도 열기**를 눌러 주세요. |
 | **Windows** (x64) | `Dokhan_x.y.z_x64-setup.exe` | SmartScreen 경고가 나타나면 **추가 정보 → 실행**을 눌러 주세요. MSI 설치 파일도 제공합니다. |
 | **Android** | `app-universal-universal-release.apk` | 브라우저의 **출처를 알 수 없는 앱 설치**를 허용한 뒤 설치해 주세요. |
 
@@ -90,7 +90,7 @@ ZIP 파일을 그대로 열어 목차와 색인을 둘러보고, 단어를 검�
 >
 > — 이정준
 
-**독한 사전(Dokhan)**은 이 사전 파일을 편하게 읽을 수 있도록 만든 뷰어입니다. 사전 내용의 집필과 수정은 원저자가 맡고 있습니다.
+**독한 사전**(Dokhan)은 이 사전 파일을 편하게 읽을 수 있도록 만든 뷰어입니다. 사전 내용의 집필과 수정은 원저자가 맡고 있습니다.
 
 - 사전 내용에 관한 의견이나 오류 제보는 [german.kr](https://german.kr/) 게시판(**말씀터**)에 남겨 주세요.
 - 앱 사용 중 발견한 버그나 개선 제안은 [이 저장소의 이슈](https://github.com/ironpark/dokhan/issues)로 알려 주세요.
@@ -161,6 +161,13 @@ DOKHAN_TEST_ZIP=/path/to/dictionary8.zip \
 3. 데스크톱 업데이트 파일은 GitHub Actions Secrets에 등록한 `TAURI_SIGNING_PRIVATE_KEY`와 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`를 사용해 서명합니다. 앱은 최신 릴리스의 `latest.json`으로 업데이트를 확인합니다.
 
 `main` 브랜치에 푸시하면 `build-targets.yml`이 nightly 프리릴리스를 생성합니다. nightly 버전은 업데이트 알림에 포함되지 않습니다.
+
+macOS 배포본은 Apple Silicon과 Intel Mac에서 모두 실행되는 유니버설 바이너리입니다. 로컬에서 같은 빌드를 만들려면 두 Rust 타깃이 모두 필요합니다.
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+pnpm tauri build --target universal-apple-darwin
+```
 
 앱 아이콘의 원본은 `src-tauri/icons/dokhan-icon.svg`입니다. `pnpm tauri icon src-tauri/icons/icon-manifest.json` 명령으로 플랫폼별 아이콘을 다시 생성할 수 있습니다.
 
