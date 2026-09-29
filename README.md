@@ -18,6 +18,10 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/demo.gif" width="800" alt="독한 사전 사용 예시: 검색, 읽기 설정, 책갈피">
+</p>
+
 ---
 
 ## 시작하기
